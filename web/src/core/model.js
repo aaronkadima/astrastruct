@@ -16,6 +16,11 @@ export const SECTIONS = [
 
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
 function defaultAlpha(type) { return type === 'steel' || type === 'rebar' ? 12e-6 : 10e-6; }
+function normalizeRotationalSpring(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const k = Number(value);
+  return Number.isFinite(k) ? Math.max(0, k) : null;
+}
 
 export function sectionDepth(section) {
   if (!section) return 0;
@@ -28,14 +33,14 @@ export function sectionDepth(section) {
 
 export function emptyProject() {
   return {
-    id: uid('project'), name: 'Novo projeto', version: 8, units: 'kN-m-MPa',
+    id: uid('project'), name: 'Novo projeto', version: 9, units: 'kN-m-MPa',
     nodes: [], elements: [], materials: clone(MATERIALS), sections: clone(SECTIONS), supports: [],
     loads: [], elementLoads: [], settlements: [], nodeSprings: [],
     loadCases: [{ id: 'LC1', name: 'Caso 1', type: 'user' }],
     loadCombinations: [{ id: 'COMB1', name: 'Combinação customizada 1', type: 'custom', terms: [{ caseId: 'LC1', factor: 1.0 }] }],
     connections: [], results: null,
     settings: { grid: 0.25, snap: true, deformationScale: 1, activeLoadCaseId: 'LC1', analysisScenarioId: 'LC1' },
-    meta: { solverVersion: '0.8.0', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+    meta: { solverVersion: '0.9.0', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
   };
 }
 
@@ -54,8 +59,8 @@ export function normalizeProject(input) {
   p.loadCombinations = Array.isArray(p.loadCombinations) ? p.loadCombinations : clone(base.loadCombinations);
   p.connections = Array.isArray(p.connections) ? p.connections : [];
   p.settings = { ...base.settings, ...(p.settings || {}) };
-  p.meta = { ...base.meta, ...(p.meta || {}), solverVersion: '0.8.0' };
-  p.version = 8;
+  p.meta = { ...base.meta, ...(p.meta || {}), solverVersion: '0.9.0' };
+  p.version = 9;
 
   const firstCaseId = p.loadCases[0]?.id || 'LC1';
   p.loads = p.loads.map(l => ({ ...l, caseId: l.caseId || firstCaseId }));
@@ -63,7 +68,16 @@ export function normalizeProject(input) {
   p.settlements = p.settlements.map(s => ({ ...s, caseId: s.caseId || firstCaseId, ux: Number(s.ux)||0, uy: Number(s.uy)||0, rz: Number(s.rz)||0 }));
   p.nodeSprings = p.nodeSprings.map(s => ({ ...s, id: s.id || uid('SPR'), kx: Math.max(0, Number(s.kx)||0), ky: Math.max(0, Number(s.ky)||0), kr: Math.max(0, Number(s.kr)||0) }));
   p.materials = p.materials.map(m => ({ ...m, alpha: Number.isFinite(Number(m.alpha)) ? Number(m.alpha) : defaultAlpha(m.type) }));
-  p.elements = p.elements.map(e => ({ ...e, releases: { rz1: false, rz2: false, ...(e.releases || {}) } }));
+  p.elements = p.elements.map(e => {
+    const releases = { rz1: false, rz2: false, ...(e.releases || {}) };
+    const rotationalSprings = {
+      rz1: normalizeRotationalSpring(e.rotationalSprings?.rz1),
+      rz2: normalizeRotationalSpring(e.rotationalSprings?.rz2)
+    };
+    if (releases.rz1) rotationalSprings.rz1 = 0;
+    if (releases.rz2) rotationalSprings.rz2 = 0;
+    return { ...e, releases, rotationalSprings };
+  });
   p.supports = p.supports.map(s => ({
     ...s,
     baseUxValue: Number(s.baseUxValue) || 0,
@@ -89,12 +103,12 @@ export function normalizeProject(input) {
 
 export function makeFrameElement({ id = uid('E'), n1, n2, materialId = 'concrete30', sectionId = 'rc_30x50', label = 'Pórtico 2D', A, I } = {}) {
   const section = SECTIONS.find(s => s.id === sectionId) || SECTIONS[0];
-  return { id, type: 'frame2d', n1, n2, materialId, sectionId, A: A ?? section.A, I: I ?? section.I, releases: { rz1: false, rz2: false }, label };
+  return { id, type: 'frame2d', n1, n2, materialId, sectionId, A: A ?? section.A, I: I ?? section.I, releases: { rz1: false, rz2: false }, rotationalSprings: { rz1: null, rz2: null }, label };
 }
 
 export function makeTrussElement({ id = uid('E'), n1, n2, materialId = 'steel355', sectionId = 'truss_generic', label = 'Treliça 2D', A } = {}) {
   const section = SECTIONS.find(s => s.id === sectionId) || SECTIONS.find(s => s.id === 'truss_generic');
-  return { id, type: 'truss2d', n1, n2, materialId, sectionId, A: A ?? section.A, I: 0, releases: { rz1: true, rz2: true }, label };
+  return { id, type: 'truss2d', n1, n2, materialId, sectionId, A: A ?? section.A, I: 0, releases: { rz1: true, rz2: true }, rotationalSprings: { rz1: 0, rz2: 0 }, label };
 }
 
 export function demoFrame() {

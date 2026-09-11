@@ -2,7 +2,7 @@
 
 AstraStruct é uma plataforma web **assembly-first** para modelagem, análise, dimensionamento e futura verificação/detalhamento de estruturas de concreto armado e aço.
 
-> **Estado atual — v0.13 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
+> **Estado atual — v0.13.1 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
 
 ## Executar online
 
@@ -17,6 +17,7 @@ A interface React/Vite é construída, testada e publicada automaticamente em `d
 - apoios `Ux`, `Uy`, `Rz`, deslocamentos impostos e releases rotacionais;
 - ligações de extremidade rígidas, semirrígidas e rotuladas, com `kθ` explícito;
 - cargas nodais, distribuídas, pontuais em barra, peso próprio, recalques e ações térmicas no solver linear/P‑Delta;
+- **carga uniforme e peso próprio como dead loads da configuração de referência no solver co‑rotacional v0.13.1**;
 - molas nodais `kx`, `ky`, `kr` no solver linear/P‑Delta;
 - casos de ação e combinações lineares customizadas;
 - **análise Linear, P‑Delta ou Geometricamente Não Linear co‑rotacional selecionável**;
@@ -79,7 +80,7 @@ A formulação inclui:
 
 O P‑Delta não é análise materialmente não linear, não substitui verificação normativa de estabilidade e não escolhe automaticamente imperfeições prescritas por norma.
 
-## Geometricamente não linear — v0.13 experimental
+## Geometricamente não linear — v0.13.1 experimental
 
 O terceiro modo do painel **Tipo de análise** usa uma formulação **co‑rotacional 2D Euler–Bernoulli** com grandes rotações e equilíbrio incremental-iterativo por Newton–Raphson.
 
@@ -104,6 +105,22 @@ com atualização iterativa até o critério de resíduo ser satisfeito. O usuá
 - tolerância;
 - uso ou não de line search.
 
+### Carga uniforme e peso próprio de referência
+
+A v0.13.1 aceita `uniform` e `selfWeight` como **dead loads referenciadas na geometria inicial**.
+
+Para uma carga uniforme local inicial `qx0,qy0`, o vetor consistente é calculado com `L0` e `α0` e permanece congelado durante Newton:
+
+`p0 = [qx0 L0/2, qy0 L0/2, qy0 L0²/12, qx0 L0/2, qy0 L0/2, −qy0 L0²/12]`.
+
+No peso próprio:
+
+`w = γ A f`.
+
+A ação gravitacional global é projetada nos eixos locais da **configuração inicial**, convertida em vetor nodal equivalente e mantida fixa. Portanto, essas ações **não são cargas seguidoras** e não incluem tangente externa de follower load.
+
+Na recuperação física dos esforços de extremidade, o solver separa a contribuição constitutiva do vetor nodal equivalente. O pós-processamento registra ainda um resíduo de equilíbrio para `N/V/M`.
+
 ### Geometria corrente e pós-processamento
 
 A deformada do modo co‑rotacional é exibida por padrão em **escala física ×1**; o amplificador automático usado em análises de pequenas deformações é ocultado.
@@ -113,11 +130,12 @@ Cada elemento é reconstruído em 41 estações no sistema co‑rotante e transf
 - coordenadas correntes `xd, yd`;
 - `N(x)`, `V(x)`, `M(x)`;
 - deslocamentos globais e locais;
-- tensões elásticas `N/A ± Mc/I` quando a profundidade da seção é conhecida.
+- tensões elásticas `N/A ± Mc/I` quando a profundidade da seção é conhecida;
+- `qx0`, `qy0`, peso próprio e resíduo de recuperação quando existe carga de referência.
 
 Diagramas, sonda e mapa de tensões acompanham a **configuração corrente**. O painel de pós-processamento co‑rotacional trabalha somente com o cenário resolvido; **envelopes não lineares permanecem desabilitados** até existir uma definição consistente para combinar caminhos de equilíbrio distintos.
 
-### Escopo estrito da v0.13
+### Escopo estrito da v0.13.1
 
 Aceito atualmente:
 
@@ -125,6 +143,8 @@ Aceito atualmente:
 - material elástico linear;
 - extremidades rígidas;
 - cargas nodais;
+- carga uniforme `uniform` como dead load da referência;
+- peso próprio `selfWeight` como dead load vertical global da referência;
 - apoios clássicos sem deslocamento prescrito;
 - até 240 graus de liberdade livres no navegador.
 
@@ -132,7 +152,9 @@ O kernel recusa explicitamente, em vez de ignorar:
 
 - `truss2d` e modelos mistos;
 - releases e ligações semirrígidas;
-- cargas de barra, peso próprio automático e ações térmicas;
+- carga pontual em barra;
+- ações térmicas;
+- cargas seguidoras/follower loads;
 - molas nodais;
 - recalques/deslocamentos impostos;
 - imperfeição geométrica modal inicial;
@@ -150,7 +172,9 @@ A suíte automática inclui verificações independentes de:
 - **grande rotação:** arco circular de `θ = 1 rad`;
 - **convergência de malha:** erro de ponta `10,006 mm → 2,498 mm → 0,624 mm` para `4 → 8 → 16` elementos;
 - **pós-processamento:** erro do momento puro ao longo da malha de aproximadamente `2,25 × 10⁻9 kN·m`;
-- **proteção de escopo:** recalques, deslocamentos prescritos e imperfeição modal ativa geram erro explícito.
+- **UDL de referência:** `RA ≈ RB ≈ 60 kN`, `uy,meio = −3,599997 mm`, `Mmax = 89,999936 kN·m` e resíduo de recuperação `2,84 × 10⁻14` para `q = 20 kN/m` em viga de `6 m`;
+- **peso próprio de referência:** `w = 3,75 kN/m`, `RA = RB = 11,25 kN` e `Mmax = 16,875 kN·m`;
+- **proteção de escopo:** recalques, deslocamentos prescritos, imperfeição modal ativa e carga pontual em barra geram erro explícito.
 
 Esses benchmarks validam propriedades específicas da implementação; não constituem certificação normativa ou validação universal do solver.
 
@@ -285,7 +309,7 @@ Molas nodais lineares são inseridas diretamente na matriz global e a força res
 
 `Fspring = −k u`.
 
-Esses recursos pertencem atualmente aos solvers Linear/P‑Delta, não ao kernel co‑rotacional v0.13.
+Esses recursos pertencem atualmente aos solvers Linear/P‑Delta; o co‑rotacional v0.13.1 aceita somente cargas nodais e `uniform/selfWeight` dentro do modelo de dead load de referência descrito acima.
 
 ## Tensões elásticas de seção
 
@@ -299,7 +323,7 @@ Para concreto armado, essas tensões correspondem à seção bruta linear elást
 
 ## Casos, combinações e envelopes
 
-O **Scenario Engine** resolve casos e combinações customizadas. Nos modos Linear/P‑Delta, o módulo de Diagramas pode formar envelopes mínimo/máximo. No modo co‑rotacional v0.13, cada cenário é resolvido e pós-processado isoladamente e o envelope permanece bloqueado.
+O **Scenario Engine** resolve casos e combinações customizadas. Nos modos Linear/P‑Delta, o módulo de Diagramas pode formar envelopes mínimo/máximo. No modo co‑rotacional v0.13.1, cada cenário é resolvido e pós-processado isoladamente e o envelope permanece bloqueado.
 
 > Os fatores atuais são **Custom/User-defined**. Não representam combinações oficiais da ABNT NBR, ACI, Eurocodes ou fib Model Code.
 
@@ -308,7 +332,7 @@ O **Scenario Engine** resolve casos e combinações customizadas. Nos modos Line
 - **Tipo de análise** — Linear, P‑Delta ou Geom. não linear; parâmetros de convergência próprios;
 - **Estabilidade** — `λcr`, modos críticos, forma modal e definição de `e0` para o P‑Delta;
 - **Ligações** — rígida, semirrígida ou rótula por extremidade nos solvers compatíveis;
-- **Cargas+** — carga pontual em barra, peso próprio e recalques;
+- **Cargas+** — carga pontual em barra, peso próprio e recalques, respeitando o escopo de cada solver;
 - **Molas/Térmica** — `ΔT`, gradiente térmico, `α`, `kx`, `ky`, `kr`;
 - **Tensões** — `N/A ± Mc/I`;
 - **Diagramas** — respostas por cenário; envelopes apenas nos modos compatíveis;
@@ -340,7 +364,8 @@ Casos atuais incluem:
 - coluna de Euler por autovalores;
 - amplificação de imperfeição modal contra solução fechada;
 - objetividade, tangente consistente, limite linear, grande rotação e convergência de malha do solver co‑rotacional;
-- fluxo de interface co‑rotacional em Playwright desktop, Android e tablet, incluindo configuração, solução, geometria física ×1, pós-processamento e relatório.
+- UDL e peso próprio co‑rotacionais como dead loads de referência, com reações, flechas, momentos e resíduo de recuperação verificados;
+- fluxo de interface co‑rotacional em Playwright desktop, Android e tablet, incluindo configuração, solução, geometria física ×1, pós-processamento, relatório e cargas de referência.
 
 ## Executar localmente
 
@@ -374,7 +399,8 @@ Pipeline não linear:
 
 ## Próximas etapas prioritárias
 
-- cargas distribuídas/na barra e peso próprio no co‑rotacional;
+- carga pontual em barra e ações térmicas no co‑rotacional;
+- cargas seguidoras/follower loads com tangente externa consistente;
 - releases, ligações semirrígidas e offsets no co‑rotacional;
 - imperfeição inicial diretamente na configuração co‑rotacional;
 - estratégia arc-length/path-following para proximidade de pontos limites;

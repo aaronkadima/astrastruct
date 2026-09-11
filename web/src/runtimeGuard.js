@@ -1,50 +1,33 @@
 (() => {
   'use strict';
 
-  // Guard legacy UI observers without subclassing the native DOM constructor.
-  // Some mobile Chromium/WebView builds do not behave reliably when MutationObserver
-  // is subclassed. This wrapper composes the native observer, filters mutations that
-  // are known to be self-generated, and coalesces callbacks to one animation frame.
+  // AstraStruct legacy UI modules observe #app so they can re-inject controls after
+  // the main renderer replaces the application shell. Observing the full subtree,
+  // however, makes those modules observe the DOM changes they create themselves.
+  // On mobile Chromium/WebView this can starve the main thread and leave a black page.
+  //
+  // Keep the existing module API, but force every observer to watch ONLY direct
+  // child replacement of #app. The main renderer changes #app directly; button,
+  // overlay, label and mobile-dock mutations happen deeper in the tree and therefore
+  // cannot feed the observers back into themselves.
   const NativeMutationObserver = window.MutationObserver;
-  if (NativeMutationObserver && !window.__ASTRA_MUTATION_GUARD__) {
-    class AstraMutationObserver {
+  if (NativeMutationObserver && !window.__ASTRA_SHALLOW_OBSERVER__) {
+    class AstraShallowObserver {
       constructor(callback) {
         this.callback = callback;
-        this.pending = [];
-        this.frame = 0;
         this.native = new NativeMutationObserver((records) => {
-          const meaningful = records.filter((record) => {
-            const target = record.target?.nodeType === 1
-              ? record.target
-              : record.target?.parentElement;
-            if (!target) return true;
-            if (target.closest?.('.brand small, .mode-pill')) return false;
-            if (target.closest?.('#advanced-load-overlay, #connection-overlay')) return false;
-            if (target.closest?.('#mobile-dock, #mobile-command-sheet')) return false;
-            return true;
-          });
-          if (!meaningful.length) return;
-          this.pending.push(...meaningful);
-          if (this.frame) return;
-          this.frame = requestAnimationFrame(() => {
-            this.frame = 0;
-            const batch = this.pending.splice(0);
-            try { this.callback(batch, this); }
-            catch (err) { setTimeout(() => { throw err; }, 0); }
-          });
+          try { this.callback(records, this); }
+          catch (err) { setTimeout(() => { throw err; }, 0); }
         });
       }
-      observe(target, options) { this.native.observe(target, options); }
-      disconnect() {
-        this.native.disconnect();
-        this.pending.length = 0;
-        if (this.frame) cancelAnimationFrame(this.frame);
-        this.frame = 0;
+      observe(target) {
+        this.native.observe(target, { childList: true, subtree: false });
       }
+      disconnect() { this.native.disconnect(); }
       takeRecords() { return this.native.takeRecords(); }
     }
-    window.MutationObserver = AstraMutationObserver;
-    window.__ASTRA_MUTATION_GUARD__ = true;
+    window.MutationObserver = AstraShallowObserver;
+    window.__ASTRA_SHALLOW_OBSERVER__ = true;
   }
 
   let lastError = '';
@@ -88,7 +71,8 @@
 
   const showRecovery = () => {
     const host = document.getElementById('app');
-    if (!host) return;
+    if (!host || host.querySelector('[data-astra-recovery]')) return;
+
     const app = document.querySelector('.app');
     const top = document.querySelector('.topbar');
     const workspace = document.querySelector('.workspace');
@@ -106,12 +90,12 @@
       detail ||= `Layout inválido: topbar=${Math.round(tr?.width||0)}×${Math.round(tr?.height||0)}, workspace=${Math.round(wr?.width||0)}×${Math.round(wr?.height||0)}, canvas=${Math.round(sr?.width||0)}×${Math.round(sr?.height||0)}.`;
     }
 
-    host.insertAdjacentHTML('beforeend', recoveryMarkup(detail || 'Falha desconhecida de inicialização.'));
-    wireRecovery(host);
+    const box = document.createElement('div');
+    box.dataset.astraRecovery = '1';
+    box.innerHTML = recoveryMarkup(detail || 'Falha desconhecida de inicialização.');
+    host.appendChild(box);
+    wireRecovery(box);
   };
 
-  // If the application renders correctly this does nothing. If the shell exists but
-  // collapses to a zero-size layout, it now shows a visible diagnostic instead of a
-  // seemingly endless black screen.
   window.setTimeout(showRecovery, 4500);
 })();

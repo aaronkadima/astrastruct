@@ -72,7 +72,34 @@ function circularArc(ne){
   console.log('Co-rotacional — convergência/pós-processamento OK','erros [m]=',a4.error,a8.error,a16.error,'tip16=',a16.x,a16.y,'erro M=',momentError);
 }
 
-// 5) Estados iniciais ainda fora do escopo devem ser recusados, nunca ignorados.
+// 5) UDL morta na configuração de referência: limite de pequenas rotações deve
+// recuperar a viga biapoiada clássica L=6 m, q=20 kN/m.
+{
+  const p=emptyProject();p.name='Co-rotacional — UDL de referência';
+  p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:3,y:0},{id:'N3',x:6,y:0}];
+  p.elements=[makeFrameElement({id:'E1',n1:'N1',n2:'N2'}),makeFrameElement({id:'E2',n1:'N2',n2:'N3'})];
+  p.supports=[{nodeId:'N1',ux:true,uy:true,rz:false},{nodeId:'N3',ux:false,uy:true,rz:false}];
+  p.elementLoads=[{id:'Q1',caseId:'LC1',elementId:'E1',kind:'uniform',qx:0,qy:-20},{id:'Q2',caseId:'LC1',elementId:'E2',kind:'uniform',qx:0,qy:-20}];
+  const r=solveFrameCorotational2D(p,'LC1',{steps:8,maxIterations:40,tolerance:1e-10}),ra=r.reactions.find(x=>x.nodeId==='N1'),rb=r.reactions.find(x=>x.nodeId==='N3'),mid=r.displacements.find(x=>x.nodeId==='N2'),moments=r.elementResponses.flatMap(e=>e.stations.map(s=>s.M)),mmax=Math.max(...moments),recovery=Math.max(...r.elementResponses.map(e=>e.loadRecovery.equilibriumResidualAbs));
+  near(ra.fy,60,2e-5,'Co-rotacional UDL: RA');near(rb.fy,60,2e-5,'Co-rotacional UDL: RB');near(ra.fy+rb.fy,120,2e-5,'Co-rotacional UDL: equilíbrio vertical');
+  near(Math.abs(mid.uy),.0036,3e-5,'Co-rotacional UDL: flecha do meio');near(mmax,90,.08,'Co-rotacional UDL: Mmax');
+  assert(recovery<.15,`Co-rotacional UDL: resíduo de recuperação excessivo (${recovery})`);
+  assert(r.elementResponses.every(e=>e.loadModel==='reference-dead'),'Co-rotacional UDL: metadado de carga morta ausente');
+  console.log(p.name,'OK','R=',ra.fy,rb.fy,'uy meio [mm]=',mid.uy*1000,'Mmax=',mmax,'resíduo=',recovery);
+}
+
+// 6) Peso próprio: gamma=25 kN/m3 e A=0.15 m2 -> w=3.75 kN/m.
+{
+  const p=emptyProject();p.name='Co-rotacional — peso próprio de referência';
+  p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:6,y:0}];p.elements=[makeFrameElement({id:'E1',n1:'N1',n2:'N2'})];
+  p.supports=[{nodeId:'N1',ux:true,uy:true,rz:false},{nodeId:'N2',ux:false,uy:true,rz:false}];p.elementLoads=[{id:'SW1',caseId:'LC1',elementId:'E1',kind:'selfWeight'}];
+  const r=solveFrameCorotational2D(p,'LC1',{steps:6,tolerance:1e-10}),ra=r.reactions.find(x=>x.nodeId==='N1'),rb=r.reactions.find(x=>x.nodeId==='N2'),resp=r.elementResponses[0],mmax=Math.max(...resp.stations.map(s=>s.M));
+  near(ra.fy,11.25,2e-6,'Co-rotacional peso próprio: RA');near(rb.fy,11.25,2e-6,'Co-rotacional peso próprio: RB');near(ra.fy+rb.fy,22.5,2e-6,'Co-rotacional peso próprio: equilíbrio');near(mmax,16.875,.02,'Co-rotacional peso próprio: Mmax');
+  near(resp.referenceLoad.selfWeight,3.75,1e-12,'Co-rotacional peso próprio: intensidade');
+  console.log(p.name,'OK','R=',ra.fy,rb.fy,'Mmax=',mmax,'w=',resp.referenceLoad.selfWeight);
+}
+
+// 7) Estados ainda fora do escopo devem ser recusados, nunca ignorados.
 {
   const settlement=simpleCantilever();settlement.settlements=[{id:'SET1',caseId:'LC1',nodeId:'N1',ux:0,uy:.001,rz:0}];
   mustThrow(()=>solveFrameCorotational2D(settlement,'LC1'),/deslocamentos impostos|recalques/i,'Co-rotacional: recalque deve ser recusado');
@@ -80,7 +107,9 @@ function circularArc(ne){
   mustThrow(()=>solveFrameCorotational2D(imperfect,'LC1'),/imperfei/i,'Co-rotacional: imperfeição modal deve ser recusada');
   const prescribed=simpleCantilever();prescribed.supports[0].baseUxValue=.001;
   mustThrow(()=>solveFrameCorotational2D(prescribed,'LC1'),/deslocamentos impostos/i,'Co-rotacional: deslocamento base deve ser recusado');
-  console.log('Co-rotacional — escopo protegido OK: recalques, imperfeição e deslocamento base recusados');
+  const point=simpleCantilever();point.elementLoads=[{id:'Pbar',caseId:'LC1',elementId:'E1',kind:'point',xi:.5,px:0,py:-10}];
+  mustThrow(()=>solveFrameCorotational2D(point,'LC1'),/point|tipo/i,'Co-rotacional: carga pontual em barra deve ser recusada');
+  console.log('Co-rotacional — escopo protegido OK: recalques, imperfeição, deslocamento base e carga pontual recusados');
 }
 
-console.log('Todos os smoke tests co-rotacionais experimentais do AstraStruct v0.13 passaram.');
+console.log('Todos os smoke tests co-rotacionais experimentais do AstraStruct v0.13.1 passaram.');

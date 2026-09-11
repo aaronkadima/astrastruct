@@ -48,11 +48,21 @@ test('co-rotational mode can be configured, solved and visualized in current geo
   await expect(visualAmplifier).toBeHidden();
 
   await openCommand(page,'Diagramas/envelopes');
-  await expect(page.getByTestId('panel-nonlinear-postprocess')).toBeVisible();
+  const post=page.getByTestId('panel-nonlinear-postprocess');
+  await expect(post).toBeVisible();
   await expect(page.getByTestId('nonlinear-envelope-note')).toContainText('Envelope não linear desabilitado');
-  await expect(page.getByTestId('panel-nonlinear-postprocess')).toContainText('Comprimento corrente');
-  await expect(page.getByTestId('panel-nonlinear-postprocess')).toContainText('σ superior(x)');
-  await expect(page.getByTestId('panel-nonlinear-postprocess').locator('.segmented')).toHaveCount(0);
+  await expect(post).toContainText('Comprimento corrente');
+  await expect(post).toContainText('σ superior(x)');
+  await expect(post.locator('.segmented')).toHaveCount(0);
+  await post.locator('button[aria-label="Fechar"]').click();
+
+  await openCommand(page,'Relatório técnico');
+  const report=page.getByTestId('panel-nonlinear-report');
+  await expect(report).toBeVisible();
+  await expect(report).toContainText('Newton–Raphson');
+  await expect(report).toContainText('Extremos por elemento na configuração corrente');
+  await expect(page.getByTestId('nonlinear-report-limitations')).toContainText('experimental e não normativa');
+  await expect(page.getByTestId('nonlinear-report-limitations')).toContainText('envelopes não lineares');
 });
 
 test('co-rotational mode refuses a model with a rotational release',async({page})=>{

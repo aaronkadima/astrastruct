@@ -46,6 +46,13 @@ test('co-rotational mode can be configured, solved and visualized in current geo
   await expect(page.locator('.deformed-curve.nonlinear').first()).toBeVisible();
   const visualAmplifier=page.locator('.canvas-result-scales label[title="Escala gráfica da deformada"]');
   await expect(visualAmplifier).toBeHidden();
+
+  await openCommand(page,'Diagramas/envelopes');
+  await expect(page.getByTestId('panel-nonlinear-postprocess')).toBeVisible();
+  await expect(page.getByTestId('nonlinear-envelope-note')).toContainText('Envelope não linear desabilitado');
+  await expect(page.getByTestId('panel-nonlinear-postprocess')).toContainText('Comprimento corrente');
+  await expect(page.getByTestId('panel-nonlinear-postprocess')).toContainText('σ superior(x)');
+  await expect(page.getByTestId('panel-nonlinear-postprocess').locator('.segmented')).toHaveCount(0);
 });
 
 test('co-rotational mode refuses a model with a rotational release',async({page})=>{

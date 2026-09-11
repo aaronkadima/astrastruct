@@ -75,8 +75,12 @@ test('AstraStruct mounts and analyzes demo model', async ({ page }) => {
   await page.goto('./');
   await expect(page.getByTestId('astra-app')).toBeVisible();
   await expect(page.getByTestId('model-canvas')).toBeVisible();
+  await expect(page.getByTestId('nodal-loads')).toBeVisible();
+  await expect(page.getByTestId('reactions-overlay')).toHaveCount(0);
   await page.getByTestId('analyze-button').click();
   await expect(page.getByText('Desl. máx.')).toBeVisible();
+  await expect(page.getByTestId('reactions-overlay')).toBeVisible();
+  expect(await page.locator('.reaction-vector').count()).toBeGreaterThan(0);
 });
 
 test('no bootstrap black screen', async ({ page }) => {
@@ -163,4 +167,16 @@ test('canvas navigation supports zoom, fit, pan and persistent node drag', async
   const cx0=Number(await canvas.getAttribute('data-camera-cx')),px=box!.x+box!.width*.5,py=box!.y+box!.height*.94;
   await page.mouse.move(px,py);await page.mouse.down();await page.mouse.move(px+60,py-24,{steps:5});await page.mouse.up();
   await expect.poll(async()=>Math.abs(Number(await canvas.getAttribute('data-camera-cx'))-cx0)).toBeGreaterThan(.02);
+});
+
+test('canvas renders distributed element actions from persisted model', async ({ page }) => {
+  await page.goto('./');
+  await page.evaluate(()=>{
+    const raw=localStorage.getItem('astrastruct.project');if(!raw)throw new Error('Projeto não persistido');
+    const p=JSON.parse(raw);p.elementLoads=[{id:'E2E_UDL',caseId:'LC1',elementId:'E2',kind:'uniform',qx:0,qy:-8}];localStorage.setItem('astrastruct.project',JSON.stringify(p));
+  });
+  await page.reload();
+  await expect(page.getByTestId('element-loads')).toBeVisible();
+  expect(await page.locator('.element-load .load-vector.distributed').count()).toBeGreaterThan(0);
+  await expect(page.locator('.element-load .load-label').filter({hasText:'qy'}).first()).toBeVisible();
 });

@@ -2,13 +2,13 @@
 
 AstraStruct é uma plataforma web **assembly-first** para modelagem, análise, dimensionamento e futura verificação/detalhamento de estruturas de concreto armado e aço.
 
-> **Estado atual — v0.10:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
+> **Estado atual — v0.12:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
 
 ## Executar online
 
 **Aplicativo:** https://aaronkadima.github.io/astrastruct/
 
-A pasta `web/` é publicada automaticamente por GitHub Actions após cada atualização da branch `main`.
+A interface React/Vite é construída, testada e publicada automaticamente em `dist/` pelo GitHub Actions após cada atualização da branch `main`.
 
 ## O que já é executável
 
@@ -20,20 +20,24 @@ A pasta `web/` é publicada automaticamente por GitHub Actions após cada atuali
 - molas nodais `kx`, `ky`, `kr`;
 - casos de ação e combinações lineares customizadas;
 - **análise linear ou P‑Delta selecionável**;
+- **flambagem linear por autovalores para pórticos 2D**;
+- **imperfeição geométrica inicial baseada em modo de flambagem**, aplicada ao P‑Delta por carga geométrica equivalente;
 - pós-processamento `N(x)`, `V(x)`, `M(x)`, deformada, tensões elásticas e envelopes;
+- sonda interativa de seção com esforços, deslocamentos e tensões;
+- mapa contínuo de `|σ|max` elástico em MPa;
 - biblioteca paramétrica de materiais e seções;
 - relatório técnico A4 reproduzível;
 - importação/exportação JSON, SVG, autosave, undo/redo e command palette;
 - VNL — **Visual Nonlinear Language**, com contratos preparados para extensões não lineares.
 
-## P‑Delta — v0.10
+## P‑Delta — v0.12
 
-O botão **Análise** permite escolher entre:
+O painel **Análise** permite escolher entre:
 
 - **Linear:** `K u = F`;
 - **P‑Delta:** `[Ke + Kg(N)] u = F`.
 
-A análise P‑Delta atual usa uma **matriz geométrica consistente de viga-coluna 2D**. O esforço normal é recuperado após cada solução global e usado para reconstruir a rigidez geométrica até a convergência dos deslocamentos.
+A análise P‑Delta usa uma **matriz geométrica consistente de viga-coluna 2D**. O esforço normal é recuperado após cada solução global e usado para reconstruir a rigidez geométrica até a convergência dos deslocamentos.
 
 Convenção do AstraStruct:
 
@@ -65,7 +69,7 @@ O painel permite configurar:
 
 ### Escopo atual do P‑Delta
 
-A v0.10 habilita P‑Delta apenas para modelos formados exclusivamente por elementos `frame2d`. Modelos mistos e treliças permanecem no solver linear.
+A v0.12 habilita P‑Delta apenas para modelos formados exclusivamente por elementos `frame2d`. Modelos mistos e treliças permanecem no solver linear.
 
 A formulação inclui:
 
@@ -75,16 +79,88 @@ A formulação inclui:
 - temperatura;
 - recalques;
 - molas nodais;
-- ligações rígidas, rotuladas e semirrígidas no processo de condensação.
+- ligações rígidas, rotuladas e semirrígidas no processo P‑Delta sem imperfeição modal;
+- imperfeição geométrica modal para modelos com extremidades rígidas.
 
 A formulação **não** é, ainda:
 
-- análise de flambagem por autovalores;
 - análise co-rotacional de grandes rotações;
 - análise de grandes deformações;
 - análise materialmente não linear;
-- substituto de imperfeições geométricas/normativas;
-- verificação normativa de estabilidade global.
+- verificação normativa automática de estabilidade global;
+- substituto de imperfeições prescritas por norma sem definição explícita do usuário.
+
+## Flambagem linear — v0.11+
+
+O painel **Estabilidade** resolve o problema generalizado de autovalores:
+
+`K φ = λcr (−Kg,ref) φ`
+
+onde `Kg,ref` é construído a partir dos esforços axiais do cenário linear de referência.
+
+O resultado fornece:
+
+- fatores críticos `λcr` ordenados;
+- primeiros modos próprios de flambagem;
+- visualização da forma modal diretamente no canvas;
+- esforços axiais de referência usados em `Kg`;
+- seleção do cenário de referência;
+- até 12 modos por análise.
+
+Interpretação:
+
+`λcr` é o multiplicador do **padrão de cargas de referência** necessário para atingir a bifurcação linear idealizada. Não é fator de segurança, coeficiente normativo nem resistência de projeto.
+
+### Escopo atual da flambagem
+
+A v0.11/v0.12 aceita:
+
+- modelos exclusivamente `frame2d`;
+- extremidades rígidas dos elementos;
+- apoios nodais usuais;
+- molas nodais lineares;
+- até 240 graus de liberdade livres no navegador.
+
+Releases e ligações semirrígidas na análise de autovalores permanecem desabilitados até validação específica da formulação condensada.
+
+## Imperfeição geométrica modal — v0.12
+
+Um modo de flambagem calculado pode ser usado como forma inicial do P‑Delta.
+
+O modo é normalizado para que a maior translação tenha amplitude definida pelo usuário:
+
+`u0 = e0 · φ / max|φtrans|`
+
+A amplitude `e0` é informada em milímetros. O AstraStruct **não escolhe automaticamente** uma razão `L/n` normativa.
+
+A imperfeição entra no equilíbrio por carga geométrica equivalente:
+
+`[K + Kg(N)] Δu = F − Kg(N) u0`
+
+O resultado mantém separadas:
+
+- `u0`: imperfeição inicial prescrita;
+- `Δu`: incremento devido às ações;
+- `utotal = u0 + Δu`: posição total relativa à geometria nominal.
+
+A deformada gráfica usa a cinemática total quando a imperfeição está ativa.
+
+### Validação da imperfeição modal
+
+Foi implementado um benchmark de coluna biarticulada discretizada sob compressão pura, com imperfeição coincidente com o primeiro autovetor.
+
+Para um modo próprio puro, a teoria fornece:
+
+`etotal = e0 / (1 − P/Pcr) = e0 / (1 − 1/λcr)`.
+
+Caso de regressão:
+
+- `e0 = 10 mm`;
+- `λcr = 11,1036687631`;
+- valor teórico: `etotal = 10,9897394931 mm`;
+- AstraStruct: `etotal = 10,9897394931 mm`.
+
+A diferença numérica nesse benchmark é inferior à precisão exibida acima.
 
 ## Validação canônica do P‑Delta
 
@@ -111,9 +187,19 @@ Resultados do CI:
 - AstraStruct P‑Delta: `δ = 6,913317 mm`;
 - convergência: `3 iterações`.
 
-A diferença é da ordem de `4,6 × 10⁻⁵ mm` para essa discretização.
-
 Outro teste confirma que, quando `N = 0`, o modo P‑Delta reproduz a solução linear.
+
+## Validação da flambagem de Euler
+
+A flambagem linear foi verificada em uma coluna biarticulada contra:
+
+`Pcr = π² EI / L²`.
+
+Resultados do CI para o benchmark atual:
+
+- referência de Euler: `λcr,1 = 98,69604401`;
+- AstraStruct: `λcr,1 = 98,69668565`;
+- `λcr,2 / λcr,1 = 4,00039`, próximo da razão teórica `4`.
 
 ## Ligações semirrígidas
 
@@ -159,6 +245,8 @@ O painel **Tensões** recupera:
 
 Para concreto armado, essas tensões correspondem à seção bruta linear elástica. Não representam seção fissurada, tensões na armadura, ELU/ELS ou verificação normativa.
 
+O canvas também oferece um mapa de `|σ|max` em MPa. Com envelope ativo, o mapa usa o maior valor absoluto encontrado entre os cenários avaliados.
+
 ## Casos, combinações e envelopes
 
 O **Scenario Engine** resolve casos e combinações customizadas, incluindo cargas nodais, cargas de barra, peso próprio, ações térmicas e recalques.
@@ -170,31 +258,22 @@ O módulo **Diagramas** fornece resposta contínua e envelopes mínimo/máximo. 
 ## Interface principal
 
 - **Análise** — Linear/P‑Delta, tolerância e número máximo de iterações;
+- **Estabilidade** — `λcr`, modos críticos, forma modal e definição de `e0` para o P‑Delta;
 - **Ligações** — rígida, semirrígida ou rótula por extremidade;
 - **Cargas+** — carga pontual em barra, peso próprio e recalques;
 - **Molas/Térmica** — `ΔT`, gradiente térmico, `α`, `kx`, `ky`, `kr`;
 - **Tensões** — `N/A ± Mc/I`;
 - **Diagramas** — `N(x)`, `V(x)`, `M(x)`, deformada e envelopes;
+- **Sonda** — resultados por seção diretamente no elemento;
+- **Mapa |σ|** — tensão elástica máxima ao longo do modelo;
 - **Propriedades** — materiais e seções paramétricas;
 - **Relatório** — memória técnica A4 do modelo e dos resultados.
 
-## Relatório técnico
-
-O relatório v0.10 registra:
-
-- tipo de análise Linear/P‑Delta;
-- convergência, iterações, tolerância e `Δu` final no modo P‑Delta;
-- esforços normais usados na matriz geométrica final;
-- geometria, materiais, seções e ações;
-- ligações de extremidade e `kθ`;
-- molas nodais;
-- deslocamentos, reações e esforços;
-- tensões elásticas;
-- rastreabilidade do schema, solver e cenário.
-
 ## Validação automatizada
 
-O workflow **AstraStruct CI** verifica sintaxe e executa regressões a cada push/PR. Casos atuais incluem:
+O workflow **AstraStruct CI** verifica TypeScript, sintaxe dos módulos do engine e regressões estruturais a cada push/PR. O workflow de Pages adiciona build Vite e Playwright em desktop, Android e tablet antes do deploy.
+
+Casos atuais incluem:
 
 - treliça, pórtico e modelo misto;
 - viga UDL: `RA = RB = 60 kN`, `Mmax = 90 kN·m`, flecha `3,600 mm`;
@@ -209,28 +288,31 @@ O workflow **AstraStruct CI** verifica sintaxe e executa regressões a cada push
 - gradiente térmico: `M = −37,5/+37,5 kN·m`;
 - barra com mola axial: `u = 0,1 mm`, `N = 100 kN`, força da mola `−10 kN`;
 - superposição de casos e envelopes;
-- viga-coluna P‑Delta contra solução contínua analítica.
+- viga-coluna P‑Delta contra solução contínua analítica;
+- coluna de Euler por autovalores;
+- amplificação de imperfeição modal contra solução fechada.
 
 ## Executar localmente
 
 ```bash
-python -m http.server 8080 --directory web
+npm install
+npm run dev
 ```
 
-Abra `http://localhost:8080`.
-
-Testes:
+Build e testes:
 
 ```bash
 npm run check
 npm test
+npm run test:e2e
+npm run build
 ```
 
 Requer Node.js 24 ou superior no workflow atual.
 
 ## Arquitetura-alvo
 
-A interface e o núcleo numérico permanecem desacoplados. A evolução pode incorporar WebAssembly, serviços Python científicos e backend HPC.
+A interface React/Vite e o núcleo numérico em `web/src/` permanecem desacoplados. A evolução pode incorporar WebAssembly, serviços Python científicos e backend HPC.
 
 Pipeline VNL atual:
 
@@ -243,10 +325,9 @@ Pipeline não linear-alvo:
 ## Próximas etapas prioritárias
 
 - offsets e excentricidades rígidas;
-- análise de flambagem por autovalores e fator crítico;
-- imperfeições geométricas iniciais;
 - formulação co-rotacional / grandes rotações;
 - Newton–Raphson incremental-iterativo geral;
+- generalização da flambagem/imperfeição para releases e ligações semirrígidas;
 - plasticidade do aço e modelos constitutivos de concreto;
 - concrete damage/cracking, bond-slip e pull-out de ancoragens;
 - biblioteca versionada de perfis comerciais de aço e seções RC;

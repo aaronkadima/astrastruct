@@ -39,8 +39,13 @@ test('co-rotational mode can be configured, solved and visualized in current geo
   await expect(page.getByTestId('nonlinear-result-metric')).toContainText('6 incrementos');
   await expect(page.getByTestId('nonlinear-result-note')).toContainText('co‑rotacional');
   await expect(page.locator('.result-overlays')).toHaveAttribute('data-current-geometry','true');
-  await expect(page.getByTestId('deformed-overlay')).toBeVisible();
+  const deformed=page.getByTestId('deformed-overlay');
+  await expect(deformed).toBeVisible();
+  await expect(deformed).toHaveAttribute('data-physical-geometry','true');
+  await expect(deformed).toHaveAttribute('data-deformation-scale','1');
   await expect(page.locator('.deformed-curve.nonlinear').first()).toBeVisible();
+  const visualAmplifier=page.locator('.canvas-result-scales label[title="Escala gráfica da deformada"]');
+  await expect(visualAmplifier).toBeHidden();
 });
 
 test('co-rotational mode refuses a model with a rotational release',async({page})=>{

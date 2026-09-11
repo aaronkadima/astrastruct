@@ -1,13 +1,32 @@
 import { expect, test, type Page } from '@playwright/test';
 
+async function visible(locator: ReturnType<Page['locator']>) {
+  return locator.isVisible().catch(() => false);
+}
+
 async function openCommand(page: Page, label: string) {
-  let button = page.locator(`button[aria-label="${label}"]:visible`).first();
-  if (await button.count()) { await button.click(); return; }
+  const direct = page.locator(`button[aria-label="${label}"]:visible`).first();
+  if (await visible(direct)) {
+    await direct.click();
+    return;
+  }
+
+  const library = page.locator('.library-tools button:visible').filter({ hasText: label }).first();
+  if (await visible(library)) {
+    await library.click();
+    return;
+  }
+
   const more = page.locator('button[aria-label="Mais comandos"]:visible').first();
-  await more.click();
-  button = page.locator(`button[aria-label="${label}"]:visible`).first();
-  await expect(button).toBeVisible();
-  await button.click();
+  if (await visible(more)) {
+    await more.click();
+    const command = page.locator(`.command-sheet button[aria-label="${label}"]:visible`).first();
+    await expect(command).toBeVisible();
+    await command.click();
+    return;
+  }
+
+  throw new Error(`Comando não encontrado na interface atual: ${label}`);
 }
 
 test('AstraStruct mounts and analyzes demo model', async ({ page }) => {

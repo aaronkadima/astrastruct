@@ -31,8 +31,8 @@ function validateModel(project){
   if((project.settlements||[]).length)throw new Error('Co-rotacional v0.13 experimental ainda não aceita recalques/deslocamentos impostos.');
   if(project.settings?.imperfection?.enabled)throw new Error('Co-rotacional v0.13 experimental ainda não aceita imperfeição geométrica inicial; desative a imperfeição modal ou use P-Delta.');
   for(const s of project.supports||[]){
-    const ux=Number(s.baseUxValue??s.uxValue)||0,uy=Number(s.baseUyValue??s.uyValue)||0,rz=Number(s.baseRzValue??s.rzValue)||0;
-    if(Math.abs(ux)>EPS||Math.abs(uy)>EPS||Math.abs(rz)>EPS)throw new Error('Co-rotacional v0.13 experimental ainda não aceita deslocamentos impostos nos apoios.');
+    const values=[s.baseUxValue,s.baseUyValue,s.baseRzValue,s.uxValue,s.uyValue,s.rzValue].map(v=>Number(v)||0);
+    if(values.some(v=>Math.abs(v)>EPS))throw new Error('Co-rotacional v0.13 experimental ainda não aceita deslocamentos impostos nos apoios.');
   }
 }
 

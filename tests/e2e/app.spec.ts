@@ -33,6 +33,36 @@ async function openCommand(page: Page, label: string) {
   throw new Error(`Comando não encontrado na interface atual: ${label}`);
 }
 
+async function chooseModelTool(page:Page,label:string){
+  const width=page.viewportSize()?.width||1280;
+  if(width<=1100){
+    await openCommand(page,label);
+    return;
+  }
+  const button=page.locator(`.model-tools button[aria-label="${label}"]`).first();
+  await expect(button).toBeVisible();
+  await button.click();
+}
+
+async function undoModel(page:Page){
+  const width=page.viewportSize()?.width||1280;
+  if(width<=1100){
+    await openCommand(page,'Desfazer');
+    return;
+  }
+  const button=page.locator('.model-tools button[aria-label="Desfazer"]').first();
+  await expect(button).toBeEnabled();
+  await button.click();
+}
+
+async function newProject(page:Page){
+  const direct=page.locator('button[aria-label="Novo projeto"]:visible').first();
+  if(await visible(direct)) await direct.click();
+  else await openCommand(page,'Novo');
+  await expect.poll(async()=>(await storedCounts(page)).nodes).toBe(0);
+  await expect.poll(async()=>(await storedCounts(page)).elements).toBe(0);
+}
+
 async function storedCounts(page:Page){
   return page.evaluate(()=>{const raw=localStorage.getItem('astrastruct.project');const p=raw?JSON.parse(raw):null;return{nodes:p?.nodes?.length||0,elements:p?.elements?.length||0}});
 }
@@ -82,23 +112,25 @@ test('migrated engineering panels mount without runtime failures', async ({ page
 
 test('React modeling creates nodes and members with undo', async ({ page }) => {
   await page.goto('./');
+  await newProject(page);
   const canvas=page.getByTestId('model-canvas');
   const box=await canvas.boundingBox();
   expect(box).not.toBeNull();
-  const before=await storedCounts(page);
 
-  await page.locator('.model-tools button[aria-label="Criar nó"]').click();
-  await canvas.click({position:{x:(box!.width*.72),y:(box!.height*.28)}});
-  await expect.poll(async()=>(await storedCounts(page)).nodes).toBe(before.nodes+1);
+  await chooseModelTool(page,'Criar nó');
+  await canvas.click({position:{x:(box!.width*.70),y:(box!.height*.30)}});
+  await expect.poll(async()=>(await storedCounts(page)).nodes).toBe(1);
 
-  await page.locator('.model-tools button[aria-label="Desfazer"]').click();
-  await expect.poll(async()=>(await storedCounts(page)).nodes).toBe(before.nodes);
+  await undoModel(page);
+  await expect.poll(async()=>(await storedCounts(page)).nodes).toBe(0);
 
-  await page.locator('.model-tools button[aria-label="Desenhar pórtico/viga"]').click();
-  await canvas.click({position:{x:(box!.width*.68),y:(box!.height*.32)}});
-  await canvas.click({position:{x:(box!.width*.82),y:(box!.height*.48)}});
-  await expect.poll(async()=>(await storedCounts(page)).elements).toBe(before.elements+1);
+  await chooseModelTool(page,'Desenhar pórtico/viga');
+  await canvas.click({position:{x:(box!.width*.34),y:(box!.height*.66)}});
+  await canvas.click({position:{x:(box!.width*.72),y:(box!.height*.34)}});
+  await expect.poll(async()=>(await storedCounts(page)).nodes).toBe(2);
+  await expect.poll(async()=>(await storedCounts(page)).elements).toBe(1);
 
-  await page.locator('.model-tools button[aria-label="Desfazer"]').click();
-  await expect.poll(async()=>(await storedCounts(page)).elements).toBe(before.elements);
+  await undoModel(page);
+  await expect.poll(async()=>(await storedCounts(page)).nodes).toBe(0);
+  await expect.poll(async()=>(await storedCounts(page)).elements).toBe(0);
 });

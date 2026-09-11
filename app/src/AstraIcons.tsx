@@ -39,7 +39,9 @@ const ICONS:Record<string,React.ReactNode>={
   deformed:<><path d="M4 17h16"/><path d="M4 17c4 0 4-8 8-8s4 8 8 8"/><circle cx="4" cy="17" r="1.2"/><circle cx="20" cy="17" r="1.2"/></>,
   axial:<><path d="M4 12h16M4 12l4-3m-4 3 4 3M20 12l-4-3m4 3-4 3"/><path d="M12 5v14"/></>,
   shear:<><path d="M5 5v14M19 5v14"/><path d="M5 8h14M5 16h14M9 5 5 8l4 3M15 13l4 3-4 3"/></>,
-  moment:<><path d="M6 16a7 7 0 1 1 12-5"/><path d="m18 7 .5 4-4-.5"/><path d="M12 6v12"/></>
+  moment:<><path d="M6 16a7 7 0 1 1 12-5"/><path d="m18 7 .5 4-4-.5"/><path d="M12 6v12"/></>,
+  probe:<><circle cx="10" cy="10" r="5"/><path d="M13.5 13.5 20 20M10 6v8M6 10h8"/></>,
+  envelope:<><path d="M4 17c3-6 5-8 8-5s4 7 8 2"/><path d="M4 9c3 2 5 1 8-2s4 0 8-2"/><path d="M4 9v8M20 5v9"/></>
 };
 
 export function Glyph({name}:{name:string}){return <svg className="glyph" viewBox="0 0 24 24" aria-hidden="true">{ICONS[name]||ICONS.more}</svg>}

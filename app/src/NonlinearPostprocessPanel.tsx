@@ -1,0 +1,29 @@
+import React, { useMemo, useState } from 'react';
+// @ts-ignore
+import { solve } from '../../web/src/solver/index.js';
+
+type Props={project:any;result:any;onClose:()=>void};
+const num=(v:any,f=0)=>Number.isFinite(Number(v))?Number(v):f;
+const fmt=(v:any,d=3)=>{const n=Number(v);if(!Number.isFinite(n))return'—';const a=Math.abs(n);return a>=1e4||(a>0&&a<1e-3)?n.toExponential(3):n.toFixed(d)};
+
+function MiniChart({points,field,label,unit,factor=1}:{points:any[];field:string;label:string;unit:string;factor?:number}){
+  if(!points?.length)return <div className="chart-card empty-state">Sem dados.</div>;
+  const W=560,H=190,L=48,R=14,T=22,B=30,xs=points.map(p=>num(p.x)),values=points.map(p=>num(p[field])*factor),min=Math.min(...values,0),max=Math.max(...values,0),span=Math.max(max-min,1e-9),lo=min-.1*span,hi=max+.1*span,x0=Math.min(...xs),x1=Math.max(...xs),sx=(x:number)=>L+(x-x0)/Math.max(x1-x0,1e-12)*(W-L-R),sy=(y:number)=>T+(hi-y)/Math.max(hi-lo,1e-12)*(H-T-B),path=points.map((p,i)=>`${i?'L':'M'} ${sx(num(p.x)).toFixed(1)} ${sy(num(p[field])*factor).toFixed(1)}`).join(' ');
+  return <div className="chart-card"><div className="chart-title"><b>{label}</b><span>{fmt(min)} … {fmt(max)} {unit}</span></div><svg viewBox={`0 0 ${W} ${H}`} className="react-chart"><line x1={L} y1={T} x2={L} y2={H-B}/><line x1={L} y1={H-B} x2={W-R} y2={H-B}/>{lo<=0&&hi>=0&&<line className="zero" x1={L} y1={sy(0)} x2={W-R} y2={sy(0)}/>}<path className="line" d={path}/></svg></div>;
+}
+
+function extrema(points:any[],field:string){const a=points.map(p=>Number(p[field])).filter(Number.isFinite);return a.length?{min:Math.min(...a),max:Math.max(...a),abs:Math.max(...a.map(Math.abs))}:{min:NaN,max:NaN,abs:NaN}}
+
+export function NonlinearPostprocessPanel({project,result,onClose}:Props){
+  const solved=useMemo(()=>{try{if(result?.analysisType==='corotational'&&result?.elementResponses?.length)return{value:result,error:''};const id=project.settings?.analysisScenarioId||project.loadCases?.[0]?.id;return{value:solve(project,id),error:''}}catch(e:any){return{value:null,error:e?.message||String(e)}}},[project,result]);
+  const responses=solved.value?.elementResponses||[], [elementId,setElementId]=useState(()=>responses[0]?.elementId||'');
+  const response=responses.find((r:any)=>r.elementId===elementId)||responses[0],points=response?.stations||[],history=solved.value?.nonlinear?.history||[],M=extrema(points,'M'),N=extrema(points,'N'),S=extrema(points,'sigmaAbs'),last=history.at(-1);
+  return <div className="react-modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><section data-testid="panel-nonlinear-postprocess" className="react-modal wide" role="dialog" aria-modal="true" aria-label="Resultados geometricamente não lineares">
+    <header className="react-modal-head"><div><h2>Resultados geometricamente não lineares</h2><p>Configuração corrente · cenário único · formulação co‑rotacional v0.13.</p></div><button className="plain-icon" aria-label="Fechar" onClick={onClose}>×</button></header>
+    {solved.error?<div className="panel-warning">{solved.error}</div>:<>{response&&<div className="modal-toolbar"><label>Elemento<select data-testid="nonlinear-element-select" value={response.elementId} onChange={e=>setElementId(e.target.value)}>{responses.map((r:any)=><option key={r.elementId} value={r.elementId}>{r.elementId}</option>)}</select></label><span className="chip">{solved.value?.scenario?.name||solved.value?.scenario?.id}</span><span className="chip">{history.length} incrementos</span></div>}
+    <div className="panel-warning" data-testid="nonlinear-envelope-note"><b>Envelope não linear desabilitado nesta versão.</b> Os gráficos abaixo pertencem somente ao cenário resolvido. A combinação de respostas de caminhos de equilíbrio distintos exige tratamento próprio e não é inferida automaticamente.</div>
+    {response&&<><div className="metrics-row"><div><small>Comprimento inicial</small><b>{fmt(response.L)} m</b></div><div><small>Comprimento corrente</small><b>{fmt(response.currentLength)} m</b></div><div><small>|N|max</small><b>{fmt(N.abs)} kN</b></div><div><small>|M|max</small><b>{fmt(M.abs)} kN·m</b></div><div><small>|σ|max</small><b>{fmt(S.abs)} MPa</b></div><div><small>Newton final</small><b>{last?.iterations??'—'} it.</b></div><div><small>Resíduo final</small><b>{Number.isFinite(Number(last?.residualNorm))?Number(last.residualNorm).toExponential(2):'—'}</b></div><div><small>Line search</small><b>{solved.value?.nonlinear?.lineSearch?'ativo':'inativo'}</b></div></div>
+    <div className="charts-grid"><MiniChart points={points} field="N" label="N(x)" unit="kN"/><MiniChart points={points} field="V" label="V(x)" unit="kN"/><MiniChart points={points} field="M" label="M(x)" unit="kN·m"/><MiniChart points={points} field="vLocal" label="v co‑rotante(x)" unit="mm" factor={1000}/><MiniChart points={points} field="sigmaTop" label="σ superior(x)" unit="MPa"/><MiniChart points={points} field="sigmaBottom" label="σ inferior(x)" unit="MPa"/></div></>}</>}
+    <div className="commit-bar"><span>Grandezas na geometria corrente. N positivo = tração; M positivo = sagente conforme convenção do pós-processador.</span><div className="commit-actions"><button className="primary" onClick={onClose}>Fechar</button></div></div>
+  </section></div>;
+}

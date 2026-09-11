@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0f16" />
+  <meta name="color-scheme" content="dark" />
+  <title>AstraStruct · diagnóstico</title>
+  <style>
+    *{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#0b0f16;color:#eef4ff;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}body{min-height:100dvh;padding:20px;display:grid;place-items:center}.card{width:min(760px,100%);border:1px solid #2a3648;border-radius:14px;background:#111822;padding:22px;box-shadow:0 18px 60px rgba(0,0,0,.28)}.head{display:flex;gap:14px;align-items:center}.mark{width:46px;height:46px;border-radius:12px;background:#163050;color:#9bc4ff;display:grid;place-items:center;font-weight:900}.ok{color:#8ee6ae}.muted{color:#91a0b6}.grid{display:grid;grid-template-columns:minmax(130px,.45fr) 1fr;gap:1px;margin-top:18px;border:1px solid #263247;border-radius:10px;overflow:hidden;background:#263247}.grid>*{padding:10px 12px;background:#0f1620;overflow-wrap:anywhere}.grid b{color:#aebdd2}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.actions a,.actions button{border:1px solid #34445d;border-radius:9px;background:#162234;color:#eef4ff;padding:9px 12px;text-decoration:none;font:inherit;cursor:pointer}@media(max-width:560px){.grid{grid-template-columns:1fr}.grid b{padding-bottom:4px}.grid span{padding-top:4px}}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="head"><div class="mark">AS</div><div><h1 style="margin:0;font-size:20px">AstraStruct · diagnóstico</h1><p class="ok" style="margin:4px 0 0">HTML estático do GitHub Pages carregado corretamente.</p></div></div>
+    <p class="muted">Esta página não depende do React, do solver nem do bundle principal. Se ela abrir e o aplicativo não, o problema está no bootstrap/bundle do frontend.</p>
+    <div class="grid">
+      <b>Diagnóstico</b><span>health-0.13.5</span>
+      <b>Horário local</b><span id="time">—</span>
+      <b>URL</b><span id="url">—</span>
+      <b>Viewport</b><span id="viewport">—</span>
+      <b>JavaScript</b><span id="js">executando</span>
+      <b>localStorage</b><span id="storage">testando…</span>
+      <b>User agent</b><span id="ua">—</span>
+    </div>
+    <div class="actions"><a href="./">Abrir AstraStruct</a><button id="clear" type="button">Limpar projeto salvo</button><button type="button" onclick="location.reload()">Recarregar diagnóstico</button></div>
+  </main>
+<script>
+  const text=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=String(value)};
+  text('time',new Date().toLocaleString('pt-BR'));
+  text('url',location.href);
+  text('viewport',`${innerWidth} × ${innerHeight} px · DPR ${devicePixelRatio||1}`);
+  text('ua',navigator.userAgent);
+  try{localStorage.setItem('__astra_health__','ok');const ok=localStorage.getItem('__astra_health__')==='ok';localStorage.removeItem('__astra_health__');text('storage',ok?'disponível':'indisponível')}catch(error){text('storage',`erro: ${error?.message||error}`)}
+  document.getElementById('clear')?.addEventListener('click',()=>{try{localStorage.removeItem('astrastruct.project');alert('Projeto local removido. Abra o AstraStruct novamente.')}catch(error){alert(`Não foi possível limpar o armazenamento: ${error?.message||error}`)}});
+</script>
+</body>
+</html>

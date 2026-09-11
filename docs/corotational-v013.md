@@ -1,115 +1,99 @@
 # AstraStruct — Formulação co-rotacional 2D v0.13 (experimental)
 
-## 1. Objetivo
+## 1. Objetivo e status
 
-Este documento registra a formulação geométrica não linear implementada no núcleo experimental `web/src/solver/corotational2d.js`.
+Este documento registra a formulação geométrica não linear implementada em `web/src/solver/corotational2d.js` e o pós-processamento em `web/src/solver/corotationalPostprocess.js`.
 
-A implementação não substitui os solvers `linear` e `pdelta` da versão corrente. Seu objetivo é estabelecer um núcleo verificável para grandes rotações de pórticos planos Euler–Bernoulli antes da incorporação de cargas de barra, imperfeições iniciais, ligações flexíveis e não linearidade material.
+O modo está disponível na interface como **Geom. não linear — experimental v0.13**, sem substituir os solvers Linear e P‑Delta. A promoção para a UI significa que configuração, solução, geometria corrente, pós-processamento e relatório já possuem fluxo próprio e testes E2E; não significa certificação normativa ou validação universal.
 
-## 2. Hipóteses da versão v0.13
+## 2. Hipóteses e limites
 
-A versão experimental admite:
+A v0.13 admite:
 
-- pórticos 2D compostos exclusivamente por elementos `frame2d`;
-- comportamento elástico linear no sistema básico do elemento;
+- pórticos 2D exclusivamente `frame2d`;
+- Euler–Bernoulli;
+- material elástico linear no sistema básico;
 - pequenas deformações locais e rotações globais finitas;
-- cargas nodais mortas, definidas no sistema global;
+- cargas nodais mortas em eixos globais;
 - extremidades rígidas;
-- apoios nodais clássicos com deslocamento prescrito igual a zero;
-- solução incremental por Newton–Raphson com line search.
+- apoios clássicos com deslocamento prescrito nulo;
+- Newton–Raphson incremental com line search opcional;
+- até 240 graus de liberdade livres no navegador.
 
-Ainda não estão incluídos neste kernel:
+O kernel recusa explicitamente:
 
-- cargas distribuídas, pontuais em barra, peso próprio e temperatura;
-- deslocamentos impostos não nulos;
+- cargas distribuídas, pontuais em barra, peso próprio automático e temperatura;
 - molas nodais;
 - releases e ligações semirrígidas;
-- imperfeição geométrica inicial;
-- material não linear ou seções de fibras;
-- cargas seguidoras;
-- controle de arco/comprimento de arco;
-- contato;
-- pórtico 3D, Timoshenko, shell ou solid.
+- recalques e deslocamentos prescritos não nulos;
+- imperfeição modal inicial;
+- elementos `truss2d` ou modelos mistos.
 
-Essas restrições são verificadas explicitamente pelo solver. O kernel não converte silenciosamente recursos não suportados em aproximações.
+Também não estão implementados material não linear, seções de fibras, cargas seguidoras, arc-length, contato, pórtico 3D, Timoshenko, shell ou solid.
 
 ## 3. Cinemática co-rotacional
 
-Para um elemento com coordenadas iniciais
-
-`(X1,Y1)` e `(X2,Y2)`, define-se
+Para coordenadas iniciais `(X1,Y1)` e `(X2,Y2)`:
 
 `L0 = sqrt[(X2-X1)^2 + (Y2-Y1)^2]`
 
 `alpha0 = atan2(Y2-Y1, X2-X1)`.
 
-O vetor de graus de liberdade globais é
+O vetor global é:
 
 `q = [u1, v1, theta1, u2, v2, theta2]^T`.
 
-As coordenadas correntes são
+Coordenadas correntes:
 
 `x1 = X1 + u1`, `y1 = Y1 + v1`
 
 `x2 = X2 + u2`, `y2 = Y2 + v2`.
 
-A configuração corrente é caracterizada por
+Configuração corrente:
 
 `l = sqrt[(x2-x1)^2 + (y2-y1)^2]`
 
 `alpha = atan2(y2-y1, x2-x1)`.
 
-A rotação rígida da corda é
+A rotação rígida da corda é:
 
 `Delta alpha = alpha - alpha0`,
 
-normalizada no intervalo principal por `atan2(sin(Delta alpha),cos(Delta alpha))` na versão atual.
+normalizada por `atan2(sin(Delta alpha),cos(Delta alpha))`.
 
-As três deformações básicas do elemento são
+Deformações básicas:
 
-`db = [l-L0, phi1, phi2]^T`,
-
-com
+`db = [l-L0, phi1, phi2]^T`
 
 `phi1 = theta1 - Delta alpha`
 
 `phi2 = theta2 - Delta alpha`.
 
-Assim, uma translação e rotação rígidas do elemento não geram deformação básica.
+Logo, movimento rígido não gera deformação básica.
 
 ## 4. Relação constitutiva básica
 
 Para Euler–Bernoulli elástico linear:
 
-`qb = kb db`,
-
-onde
+`qb = kb db`
 
 `qb = [N, M1, M2]^T`
-
-e
 
 `kb = [[EA/L0, 0, 0],
        [0, 4EI/L0, 2EI/L0],
        [0, 2EI/L0, 4EI/L0]]`.
 
-A não linearidade desta versão é exclusivamente geométrica. A relação constitutiva local permanece linear.
+A não linearidade da v0.13 é exclusivamente geométrica.
 
 ## 5. Transformação cinemática
 
-Definindo
-
-`c = cos(alpha)` e `s = sin(alpha)`, usam-se os vetores
+Com `c = cos(alpha)` e `s = sin(alpha)`:
 
 `r = [-c,-s,0,c,s,0]^T`
 
 `z = [s,-c,0,-s,c,0]^T`.
 
-A matriz cinemática básica é
-
-`B = d(db)/d(q)`.
-
-Suas linhas são
+A matriz cinemática `B = d(db)/d(q)` possui:
 
 `B1 = r^T`
 
@@ -117,39 +101,31 @@ Suas linhas são
 
 `B3 = -z^T/l + [0,0,0,0,0,1]`.
 
-As forças internas globais são
+Forças internas globais:
 
 `fint = B^T qb`.
 
 ## 6. Tangente consistente
 
-A matriz tangente implementada é
+A tangente implementada é:
 
-`Kt = B^T kb B + Kg,N + Kg,M`,
-
-com
+`Kt = B^T kb B + Kg,N + Kg,M`
 
 `Kg,N = (N/l) z z^T`
 
 `Kg,M = [(M1+M2)/l^2] (r z^T + z r^T)`.
 
-Portanto, a tangente inclui explicitamente os termos resultantes das derivadas de comprimento e rotação da corda.
+Ela foi comparada com a derivada numérica central de `fint` em um estado deformado. Erro relativo máximo do benchmark atual:
 
-A matriz foi verificada numericamente pela diferença central de `fint` em relação aos seis graus de liberdade em um estado já deformado.
-
-Resultado atual do CI:
-
-`erro relativo máximo = 1.7899600937e-9`.
-
-Esse teste é uma regressão obrigatória do kernel.
+`1.7899600937e-9`.
 
 ## 7. Equilíbrio incremental
 
-Para um fator de carga `lambda`, o equilíbrio é
+Para fator de carga `lambda`:
 
 `R(q) = lambda Fext - fint(q) = 0`.
 
-Em cada iteração de Newton–Raphson:
+Newton–Raphson:
 
 `Kt(q_i) Delta q = R(q_i)`
 
@@ -157,23 +133,21 @@ Em cada iteração de Newton–Raphson:
 
 onde `eta` é o fator do line search.
 
-A implementação atual usa:
+Controles disponíveis na UI:
 
-- número definido de incrementos de carga;
+- número de incrementos;
 - máximo de iterações por incremento;
-- tolerância no resíduo dos graus de liberdade livres;
-- line search por redução sucessiva de `eta` até melhora do resíduo ou limite `1/64`.
+- tolerância de resíduo;
+- line search ligado/desligado.
 
-O estado convergido de um incremento é usado como estimativa inicial do incremento seguinte.
+O histórico armazena, por incremento, fator de carga, iterações e norma do resíduo.
 
 ## 8. Convenção de esforços
 
-O vetor básico usa
-
 - `N > 0`: tração;
-- `M1`, `M2`: momentos básicos nas extremidades.
+- `M1`, `M2`: momentos básicos.
 
-Para exposição compatível com a estrutura de resultados do AstraStruct:
+Para a estrutura de resultados:
 
 `N1 = -N`
 
@@ -183,70 +157,68 @@ Para exposição compatível com a estrutura de resultados do AstraStruct:
 
 `V2 = -V1`.
 
-Essa conversão não altera o sistema básico usado pelo equilíbrio não linear.
+## 9. Pós-processamento na geometria corrente
 
-## 9. Benchmarks automatizados
+Cada elemento é reconstruído em 41 estações. A deflexão transversal no sistema co-rotante usa interpolação Hermite das rotações relativas `phi1` e `phi2`, depois é transformada para o sistema global.
 
-### 9.1 Objetividade
+Cada estação contém, entre outros:
 
-Um elemento de comprimento `3.7 m` recebe:
+- posição nominal `x0,y0`;
+- posição corrente `xd,yd`;
+- `N,V,M`;
+- `ux,uy`;
+- `uLocal,vLocal`;
+- tensões elásticas `sigmaAxial`, `sigmaTop`, `sigmaBottom`, `sigmaAbs`.
 
-- translação rígida `(1.25,-0.62) m`;
-- rotação rígida `0.83 rad`.
+Na interface:
 
-As rotações nodais são iguais à rotação da corda.
+- a deformada co-rotacional é exibida em **escala física ×1**;
+- o amplificador automático de deformação é ocultado;
+- diagramas, sonda e mapa de tensões seguem a geometria corrente;
+- o painel de pós-processamento é **somente por cenário**;
+- envelopes não lineares ficam explicitamente desabilitados.
 
-Critérios:
+O relatório técnico próprio registra formulação, parâmetros de Newton, histórico de convergência, deslocamentos, extremos por elemento e limitações.
+
+## 10. Benchmarks automatizados
+
+### 10.1 Objetividade
+
+Elemento `L = 3.7 m` com translação rígida `(1.25,-0.62) m` e rotação rígida `0.83 rad`:
 
 - `max|db| < 1e-12`;
 - `max|fint| < 1e-6`.
 
-O teste passa no CI.
+### 10.2 Tangente consistente
 
-### 9.2 Limite linear
+Diferença central em estado deformado:
 
-Console horizontal:
+`erro relativo máximo = 1.7899600937e-9`.
 
-- `L = 4 m`;
-- `E = 30 GPa`;
-- `I = 0.003125 m4`;
-- `P = 10 kN` vertical na extremidade.
+### 10.3 Limite linear
 
-Referência linear:
+Console `L = 4 m`, `E = 30 GPa`, `I = 0.003125 m4`, `P = 10 kN`:
 
-`delta = PL^3/(3EI) = 2.2755555556 mm`.
+- referência: `2.2755555556 mm`;
+- co-rotacional: `2.2755550703 mm`.
 
-AstraStruct co-rotacional:
+### 10.4 Grande rotação — arco circular
 
-`delta = 2.2755550703 mm`.
-
-A diferença é inferior a `5e-7 mm` no benchmark atual.
-
-### 9.3 Grande rotação — arco circular
-
-Console sob momento puro, com:
-
-- `L = 4 m`;
-- rotação final de extremidade `theta = 1 rad`;
-- `M = EI theta/L`.
-
-A solução contínua inextensível é
+Console sob momento puro com `theta = 1 rad`:
 
 `xL = L sin(theta)/theta`
 
 `yL = L [1-cos(theta)]/theta`.
 
-Para `theta = 1 rad`:
+Referência para `L = 4 m`:
 
-`xL = 3.3658839392 m`
+- `xL = 3.3658839392 m`;
+- `yL = 1.8387907765 m`.
 
-`yL = 1.8387907765 m`.
+Com 16 elementos:
 
-Com 16 elementos, o AstraStruct fornece
-
-`xL = 3.3664318343 m`
-
-`yL = 1.8390900930 m`.
+- `xL = 3.3664318343 m`;
+- `yL = 1.8390900930 m`.
 
 Erro vetorial de ponta:
 
@@ -254,37 +226,42 @@ Erro vetorial de ponta:
 - 8 elementos: `0.00249814644 m`;
 - 16 elementos: `0.00062432313 m`.
 
-A redução é aproximadamente por fator 4 a cada duplicação da malha, coerente com convergência quadrática nesse benchmark.
+### 10.5 Pós-processamento
 
-A reação de momento na base também é verificada contra o momento externo aplicado.
+No mesmo caso de momento puro, o erro máximo de `M(x)` ao longo das estações fica em aproximadamente:
 
-## 10. Relação com o P-Delta v0.12
+`2.25e-9 kN.m`.
 
-O P-Delta v0.12 resolve um problema de segunda ordem baseado em rigidez geométrica atualizada pelos esforços normais, mantendo a cinemática global de pequenas rotações.
+A última estação do último elemento coincide com a coordenada deformada do nó final dentro da tolerância de regressão.
 
-O kernel co-rotacional v0.13 atualiza explicitamente:
+### 10.6 Proteção de escopo
 
-- posição dos nós;
-- comprimento do elemento;
-- orientação da corda;
-- rotações locais relativas à corda;
-- matriz tangente em cada iteração.
+Testes verificam que o kernel gera erro explícito para:
 
-Portanto, ele é a base planejada para análise geometricamente não linear com grandes rotações.
+- recalque ativo convertido pelo Scenario Engine;
+- deslocamento-base prescrito em apoio;
+- imperfeição modal ativa.
 
-O P-Delta continua sendo o solver estável de produção do AstraStruct para segunda ordem dentro do escopo atualmente validado.
+Nenhum desses estados é descartado silenciosamente.
 
-## 11. Próxima evolução necessária antes de promoção para a interface principal
+## 11. Relação com o P‑Delta v0.12
 
-A promoção do modo co-rotacional para a interface de análise exige, no mínimo:
+O P‑Delta atualiza a rigidez geométrica por esforço normal mantendo a cinemática global de pequenas rotações. O co‑rotacional atualiza explicitamente posição, comprimento, orientação da corda, rotações relativas e tangente a cada iteração.
 
-1. pós-processamento não linear específico usando geometria corrente;
-2. representação da deformada sem reutilizar a interpolação linear de pequenas rotações;
-3. suporte a cargas de barra mortas e definição inequívoca de cargas seguidoras;
-4. adaptação de imperfeições iniciais como geometria de referência sem tensão espúria;
-5. estratégia para releases e ligações semirrígidas;
-6. controle adaptativo de incrementos;
-7. testes adicionais próximos a instabilidade e pontos-limite;
-8. integração ao VNL e histórico de convergência.
+O P‑Delta continua mais abrangente quanto a tipos de ações e recursos de elemento. O co‑rotacional v0.13 é a base para grandes rotações, porém com escopo propositalmente mais restrito.
 
-Até que esses itens sejam implementados e validados, o solver permanece classificado como **experimental** e não aparece como substituto do modo Linear ou P-Delta na interface principal.
+## 12. Estado da promoção para a interface
+
+A promoção experimental foi concluída com:
+
+1. terceiro modo no painel **Tipo de análise**;
+2. controles de incrementos, iterações, tolerância e line search;
+3. verificação de compatibilidade antes da seleção;
+4. solução pelo dispatcher principal;
+5. deformada física ×1 e geometria corrente;
+6. diagramas/sonda/mapa de tensão na geometria corrente;
+7. pós-processador de cenário específico sem envelope não linear;
+8. relatório técnico específico;
+9. testes E2E em desktop, Android e tablet.
+
+O rótulo **experimental** permanece obrigatório. A próxima evolução numérica prioritária é ampliar a formulação, com validação independente, para cargas de barra/peso próprio, releases/ligações semirrígidas, imperfeição inicial e seguimento de caminho próximo a pontos-limite.

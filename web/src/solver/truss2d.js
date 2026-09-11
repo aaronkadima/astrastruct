@@ -32,5 +32,5 @@ export function solveTruss2D(project) {
   const {u,R,free}=solveConstrained(K,F,prescribed);
   const displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[2*i],uy:u[2*i+1],rz:0}));
   const axial=cache.map(({e,i,j,c,s,L,mat,thermalStrain})=>{const de=-c*u[2*i]-s*u[2*i+1]+c*u[2*j]+s*u[2*j+1];return{elementId:e.id,type:'truss2d',N:mat.E*e.A*(de/L-thermalStrain),thermalStrain}});
-  return{type:'truss2d',solverVersion:'0.8.0',dofs:nd,activeDofs:free.length,displacements,reactions:nodes.map((n,i)=>({nodeId:n.id,fx:R[2*i],fy:R[2*i+1],mz:0})),springForces:recoverSpringForces(project,displacements),elementForces:axial};
+  return{type:'truss2d',solverVersion:'0.9.0',dofs:nd,activeDofs:free.length,displacements,reactions:nodes.map((n,i)=>({nodeId:n.id,fx:R[2*i],fy:R[2*i+1],mz:0})),springForces:recoverSpringForces(project,displacements),elementForces:axial};
 }

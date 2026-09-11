@@ -185,9 +185,11 @@ function circularArc(ne){
 }
 
 // 14) Console com mola rotacional na base: limite linear conhecido e momento transmitido pela mola.
+// O diagnóstico numérico mostrou piso de resíduo ~1.63e-9 neste problema; 1e-9 é
+// mantido como tolerância relativa do benchmark, ainda 10x mais estrita que a UI.
 {
   const p=emptyProject();p.name='Co-rotacional — console semirrígido';p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:4,y:0}];const e=makeFrameElement({id:'E1',n1:'N1',n2:'N2',sectionId:'rc_30x50'});e.rotationalSprings={rz1:10000,rz2:null};p.elements=[e];p.supports=[{nodeId:'N1',ux:true,uy:true,rz:true}];p.loads=[{id:'P1',caseId:'LC1',nodeId:'N2',fx:0,fy:-10,mz:0}];
-  const r=solveFrameCorotational2D(p,'LC1',{steps:8,maxIterations:40,tolerance:1e-10}),tip=r.displacements.find(d=>d.nodeId==='N2'),f=r.elementForces[0],conn=f.connectionRotations.find(x=>x.end===1),expected=10*4**3/(3*30e6*.003125)+10*4**2/10000;
+  const r=solveFrameCorotational2D(p,'LC1',{steps:8,maxIterations:40,tolerance:1e-9}),tip=r.displacements.find(d=>d.nodeId==='N2'),f=r.elementForces[0],conn=f.connectionRotations.find(x=>x.end===1),expected=10*4**3/(3*30e6*.003125)+10*4**2/10000;
   near(Math.abs(tip.uy),expected,2e-6,'Co-rotacional semirrígido: flecha');near(Math.abs(f.M1),40,.03,'Co-rotacional semirrígido: M1');near(Math.abs(conn.relativeRotation),.004,4e-6,'Co-rotacional semirrígido: rotação relativa');near(Math.abs(conn.moment),40,.03,'Co-rotacional semirrígido: momento da ligação');assert(f.connectionCondensation.internalResidual<1e-7,'Co-rotacional semirrígido: equilíbrio interno da ligação');
   console.log(p.name,'OK','delta [mm]=',Math.abs(tip.uy)*1000,'M=',f.M1,'dtheta=',conn.relativeRotation);
 }

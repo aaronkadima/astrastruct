@@ -28,8 +28,11 @@ function validateModel(project){
   if(elements.some(hasFlexibleEnds))throw new Error('Co-rotacional v0.13 experimental requer extremidades rígidas.');
   if((project.elementLoads||[]).length)throw new Error('Co-rotacional v0.13 experimental aceita somente cargas nodais; cargas de barra serão adicionadas após validação do núcleo.');
   if((project.nodeSprings||[]).length)throw new Error('Co-rotacional v0.13 experimental ainda não aceita molas nodais.');
+  if((project.settlements||[]).length)throw new Error('Co-rotacional v0.13 experimental ainda não aceita recalques/deslocamentos impostos.');
+  if(project.settings?.imperfection?.enabled)throw new Error('Co-rotacional v0.13 experimental ainda não aceita imperfeição geométrica inicial; desative a imperfeição modal ou use P-Delta.');
   for(const s of project.supports||[]){
-    if(Math.abs(Number(s.uxValue)||0)>EPS||Math.abs(Number(s.uyValue)||0)>EPS||Math.abs(Number(s.rzValue)||0)>EPS)throw new Error('Co-rotacional v0.13 experimental ainda não aceita deslocamentos impostos.');
+    const ux=Number(s.baseUxValue??s.uxValue)||0,uy=Number(s.baseUyValue??s.uyValue)||0,rz=Number(s.baseRzValue??s.rzValue)||0;
+    if(Math.abs(ux)>EPS||Math.abs(uy)>EPS||Math.abs(rz)>EPS)throw new Error('Co-rotacional v0.13 experimental ainda não aceita deslocamentos impostos nos apoios.');
   }
 }
 

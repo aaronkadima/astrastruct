@@ -25,7 +25,7 @@ async function persistedProject(page:Page){
 
 test('selected buckling mode becomes a P-Delta geometric imperfection',async({page})=>{
   await page.goto('./');
-  await openCommand(page,'Pórtico demonstrativo');
+  await expect(page.getByTestId('astra-app')).toBeVisible();
   await openCommand(page,'Estabilidade');
   await expect(page.getByTestId('panel-buckling')).toBeVisible();
   await page.getByTestId('buckling-calculate').click();

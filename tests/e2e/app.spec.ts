@@ -48,6 +48,21 @@ async function storedProject(page:Page){
 }
 async function storedCounts(page:Page){const p=await storedProject(page);return{nodes:p?.nodes?.length||0,elements:p?.elements?.length||0};}
 
+async function fireResultProbe(page:Page){
+  const hit=page.locator('.result-probe-hit').first();
+  await expect(hit).toHaveCount(1);
+  expect(await hit.evaluate(el=>getComputedStyle(el).pointerEvents)).toBe('stroke');
+  await hit.evaluate((el:any)=>{
+    const svg=el.ownerSVGElement as SVGSVGElement|null;
+    const ctm=el.getScreenCTM?.();
+    const length=el.getTotalLength?.();
+    if(!svg||!ctm||!Number.isFinite(length))throw new Error('Geometria SVG da sonda indisponível');
+    const local=el.getPointAtLength(length*.55);
+    const screen=new DOMPoint(local.x,local.y).matrixTransform(ctm);
+    el.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,pointerType:'mouse',button:0,clientX:screen.x,clientY:screen.y}));
+  });
+}
+
 test('AstraStruct mounts and analyzes demo model', async ({ page }) => {
   await page.goto('./');
   await expect(page.getByTestId('astra-app')).toBeVisible();
@@ -130,10 +145,7 @@ test('result probe reports section values and envelope overlays on model', async
   await page.getByTestId('analyze-button').click();
   await page.getByTestId('toggle-probe').click();
   await expect(page.getByTestId('result-probe-layer')).toBeVisible();
-  const hit=page.locator('.result-probe-hit').first();
-  await expect(hit).toBeVisible();
-  const box=await hit.boundingBox();expect(box).not.toBeNull();
-  await page.mouse.move(box!.x+box!.width*.55,box!.y+Math.max(2,box!.height*.5));
+  await fireResultProbe(page);
   await expect(page.getByTestId('result-probe-card')).toBeVisible();
   await expect(page.getByTestId('result-probe-card')).toContainText('N ');
   await expect(page.getByTestId('result-probe-card')).toContainText('σ');
@@ -141,6 +153,7 @@ test('result probe reports section values and envelope overlays on model', async
   await page.getByTestId('toggle-envelope').click();
   await expect(page.getByTestId('envelope-diagram')).toHaveAttribute('data-diagram','M');
   expect(await page.locator('.envelope-diagram').count()).toBeGreaterThan(0);
+  await fireResultProbe(page);
   await expect(page.getByTestId('result-probe-card')).toContainText('Env N');
 
   await page.getByTestId('diagram-V').click();

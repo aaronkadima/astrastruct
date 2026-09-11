@@ -58,7 +58,7 @@ export function normalizeProject(input) {
   p.settings = { ...base.settings, ...(p.settings || {}) };
   p.meta = { ...base.meta, ...(p.meta || {}), solverVersion: '0.2.0' };
   p.version = 2;
-  p.elements = p.elements.map(e => ({ releases: { rz1: false, rz2: false, ...(e.releases || {}) }, ...e }));
+  p.elements = p.elements.map(e => ({ ...e, releases: { rz1: false, rz2: false, ...(e.releases || {}) } }));
   return p;
 }
 

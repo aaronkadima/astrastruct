@@ -63,8 +63,12 @@ async function newProject(page:Page){
   await expect.poll(async()=>(await storedCounts(page)).elements).toBe(0);
 }
 
+async function storedProject(page:Page){
+  return page.evaluate(()=>{const raw=localStorage.getItem('astrastruct.project');return raw?JSON.parse(raw):null});
+}
+
 async function storedCounts(page:Page){
-  return page.evaluate(()=>{const raw=localStorage.getItem('astrastruct.project');const p=raw?JSON.parse(raw):null;return{nodes:p?.nodes?.length||0,elements:p?.elements?.length||0}});
+  const p=await storedProject(page);return{nodes:p?.nodes?.length||0,elements:p?.elements?.length||0};
 }
 
 test('AstraStruct mounts and analyzes demo model', async ({ page }) => {
@@ -133,4 +137,30 @@ test('React modeling creates nodes and members with undo', async ({ page }) => {
   await undoModel(page);
   await expect.poll(async()=>(await storedCounts(page)).nodes).toBe(0);
   await expect.poll(async()=>(await storedCounts(page)).elements).toBe(0);
+});
+
+test('canvas navigation supports zoom, fit, pan and persistent node drag', async ({ page }) => {
+  await page.goto('./');
+  const canvas=page.getByTestId('model-canvas');
+  await expect(canvas).toBeVisible();
+  const initialScale=Number(await canvas.getAttribute('data-camera-scale'));
+  expect(initialScale).toBeGreaterThan(0);
+
+  await page.getByRole('button',{name:'Aproximar'}).click();
+  await expect.poll(async()=>Number(await canvas.getAttribute('data-camera-scale'))).toBeGreaterThan(initialScale*1.1);
+  await page.getByRole('button',{name:'Ajustar à vista'}).click();
+  await expect.poll(async()=>Math.abs(Number(await canvas.getAttribute('data-camera-scale'))-initialScale)).toBeLessThan(.02);
+
+  const projectBefore=await storedProject(page),nodeBefore=projectBefore.nodes[0];
+  const nodeCircle=canvas.locator('g[data-entity="node"]').first().locator('circle.node');
+  const nodeBox=await nodeCircle.boundingBox();
+  expect(nodeBox).not.toBeNull();
+  const nx=nodeBox!.x+nodeBox!.width/2,ny=nodeBox!.y+nodeBox!.height/2;
+  await page.mouse.move(nx,ny);await page.mouse.down();await page.mouse.move(nx+54,ny-22,{steps:6});await page.mouse.up();
+  await expect.poll(async()=>{const p=await storedProject(page),n=p.nodes.find((x:any)=>x.id===nodeBefore.id);return Math.hypot(Number(n.x)-Number(nodeBefore.x),Number(n.y)-Number(nodeBefore.y))}).toBeGreaterThan(.05);
+
+  const box=await canvas.boundingBox();expect(box).not.toBeNull();
+  const cx0=Number(await canvas.getAttribute('data-camera-cx')),px=box!.x+box!.width*.5,py=box!.y+box!.height*.94;
+  await page.mouse.move(px,py);await page.mouse.down();await page.mouse.move(px+60,py-24,{steps:5});await page.mouse.up();
+  await expect.poll(async()=>Math.abs(Number(await canvas.getAttribute('data-camera-cx'))-cx0)).toBeGreaterThan(.02);
 });

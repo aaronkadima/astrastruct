@@ -1,4 +1,4 @@
-import { zeros, solveLinear, mul, addSub } from './matrix.js';
+import { zeros, solveConstrained, addSub } from './matrix.js';
 import { prepareFrameElement, recoverFrameEndForces, frameEndHasRotationalStiffness } from './frameElement.js';
 
 export function solveFrame2D(project) {
@@ -54,33 +54,23 @@ export function solveFrame2D(project) {
     F[3 * i + 2] += l.mz || 0;
   }
 
-  const fixed = new Set();
+  const prescribed = new Map();
   for (const support of project.supports || []) {
     const i = map.get(support.nodeId);
     if (i == null) continue;
-    if (support.ux) fixed.add(3 * i);
-    if (support.uy) fixed.add(3 * i + 1);
-    if (support.rz) fixed.add(3 * i + 2);
+    if (support.ux) prescribed.set(3 * i, Number(support.uxValue) || 0);
+    if (support.uy) prescribed.set(3 * i + 1, Number(support.uyValue) || 0);
+    if (support.rz) prescribed.set(3 * i + 2, Number(support.rzValue) || 0);
   }
 
-  // Rotações que não estão conectadas à rigidez de nenhum elemento são DOFs inativos,
-  // não mecanismos estruturais. Isso ocorre, por exemplo, em nós ligados apenas a
-  // extremidades rotuladas.
+  // Rotações sem rigidez conectada são DOFs inativos e recebem valor prescrito zero.
   nodes.forEach((node, i) => {
     const activeRotation = elements.some(e => frameEndHasRotationalStiffness(e, node.id));
-    if (!activeRotation) fixed.add(3 * i + 2);
+    if (!activeRotation && !prescribed.has(3 * i + 2)) prescribed.set(3 * i + 2, 0);
   });
+  if (!prescribed.size) throw new Error('Modelo sem restrições de apoio.');
 
-  const free = Array.from({ length: nd }, (_, i) => i).filter(i => !fixed.has(i));
-  if (!free.length) throw new Error('Modelo sem graus de liberdade livres.');
-
-  const Kr = free.map(i => free.map(j => K[i][j]));
-  const Fr = free.map(i => F[i]);
-  const ur = solveLinear(Kr, Fr);
-  const u = Array(nd).fill(0);
-  free.forEach((d, i) => { u[d] = ur[i]; });
-
-  const R = mul(K, u).map((v, i) => v - F[i]);
+  const {u,R,free} = solveConstrained(K,F,prescribed);
   const elementForces = cache.map(({ e, idx, prepared }) => {
     const ug = idx.map(i => u[i]);
     const { q, ul } = recoverFrameEndForces(prepared, ug);
@@ -95,7 +85,7 @@ export function solveFrame2D(project) {
 
   return {
     type: 'frame2d',
-    solverVersion: '0.2.0',
+    solverVersion: '0.5.0',
     dofs: nd,
     activeDofs: free.length,
     displacements: nodes.map((n, i) => ({

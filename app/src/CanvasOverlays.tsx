@@ -64,15 +64,14 @@ function Reactions({displayProject,result,to}:{displayProject:any;result:any;to:
   })}</g>;
 }
 
-export function CanvasOverlays({project,displayProject,result,activeCase,to}:{project:any;displayProject:any;result:any;activeCase:string;to:ToScreen}){
+export function CanvasOverlays({project,displayProject,result,activeCase,to,showLoads=true,showReactions=true}:{project:any;displayProject:any;result:any;activeCase:string;to:ToScreen;showLoads?:boolean;showReactions?:boolean}){
   return <>
     <defs>
       <marker id="astra-load-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path className="load-arrowhead" d="M0,0 L0,6 L6,3 z"/></marker>
       <marker id="astra-reaction-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path className="reaction-arrowhead" d="M0,0 L0,6 L6,3 z"/></marker>
     </defs>
-    <ElementLoads project={project} displayProject={displayProject} activeCase={activeCase} to={to}/>
-    <NodalLoads project={project} displayProject={displayProject} activeCase={activeCase} to={to}/>
-    <Reactions displayProject={displayProject} result={result} to={to}/>
-    <g className="canvas-svg-legend" transform="translate(18 28)"><line className="load-vector" x1="0" y1="0" x2="24" y2="0"/><text x="31" y="4">ações</text>{result&&<><line className="reaction-vector" x1="84" y1="0" x2="108" y2="0"/><text x="115" y="4">reações</text></>}</g>
+    {showLoads&&<><ElementLoads project={project} displayProject={displayProject} activeCase={activeCase} to={to}/><NodalLoads project={project} displayProject={displayProject} activeCase={activeCase} to={to}/></>}
+    {showReactions&&<Reactions displayProject={displayProject} result={result} to={to}/>} 
+    {(showLoads||(showReactions&&result))&&<g className="canvas-svg-legend" transform="translate(18 28)">{showLoads&&<><line className="load-vector" x1="0" y1="0" x2="24" y2="0"/><text x="31" y="4">ações</text></>}{showReactions&&result&&<><line className="reaction-vector" x1={showLoads?84:0} y1="0" x2={showLoads?108:24} y2="0"/><text x={showLoads?115:31} y="4">reações</text></>}</g>}
   </>;
 }

@@ -1,0 +1,1 @@
+export function checkDisplacement(project,limitMm=20){if(!project.results)return [];const lim=limitMm/1000;return project.results.displacements.map(d=>{const v=Math.hypot(d.ux,d.uy),util=v/lim;return {id:`disp-${d.nodeId}`,title:`Deslocamento ${d.nodeId}`,demand:v*1000,capacity:limitMm,unit:'mm',utilization:util,pass:util<=1,source:'Custom/User-defined'}})}

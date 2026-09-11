@@ -3,6 +3,7 @@ import { solveFrame2D } from './frame2d.js';
 import { solveMixed2D } from './mixed2d.js';
 import { solveFramePDelta2D } from './pdelta2d.js';
 import { solveBuckling2D } from './buckling2d.js';
+import { solveFrameCorotational2D } from './corotational2d.js';
 import { resolveScenario } from './scenario.js';
 import { buildElementResponses } from './postprocess.js';
 
@@ -35,6 +36,12 @@ function solveStructuralModel(sourceProject,resolvedProject,scenarioId) {
 }
 
 export function solve(project, scenarioId) {
+  const analysisType=project.settings?.analysisType||'linear';
+  if(analysisType==='corotational'){
+    const s=project.settings||{};
+    const result=solveFrameCorotational2D(project,scenarioId,{steps:s.nonlinearSteps,maxIterations:s.nonlinearMaxIterations,tolerance:s.nonlinearTolerance,lineSearch:s.nonlinearLineSearch});
+    return{...result,analysisType:'corotational',solverVersion:'0.13.0-exp'};
+  }
   const resolved = resolveScenario(project, scenarioId);
   const result = solveStructuralModel(project,resolved.project,scenarioId||resolved.scenario?.id);
   const elementResponses = buildElementResponses(resolved.project, result, 41);
@@ -43,6 +50,6 @@ export function solve(project, scenarioId) {
     elementResponses,
     scenario: resolved.scenario,
     analysisType: resolved.project.settings?.analysisType || 'linear',
-    solverVersion: '0.12.0'
+    solverVersion: analysisType==='pdelta'?'0.12.0':'0.13.0-exp'
   };
 }

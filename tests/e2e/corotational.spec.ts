@@ -39,6 +39,22 @@ async function installReferenceBeam(page:Page,kind:'uniform'|'selfWeight'){
   await page.reload();
 }
 
+async function installReferencePointBeam(page:Page){
+  await page.evaluate(()=>{
+    const raw=localStorage.getItem('astrastruct.project');if(!raw)throw new Error('Projeto inicial ausente');
+    const p=JSON.parse(raw),template=p.elements?.[0];if(!template)throw new Error('Elemento modelo ausente');
+    p.name='E2E — carga pontual em barra co-rotacional';
+    p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:6,y:0}];
+    p.elements=[{...template,id:'E1',n1:'N1',n2:'N2',A:.15,I:.003125,sectionId:'rc_30x50',releases:{rz1:false,rz2:false},rotationalSprings:{rz1:null,rz2:null}}];
+    p.supports=[{nodeId:'N1',ux:true,uy:true,rz:false},{nodeId:'N2',ux:false,uy:true,rz:false}];
+    p.loads=[];p.nodeSprings=[];p.settlements=[];
+    p.elementLoads=[{id:'P1',caseId:'LC1',elementId:'E1',kind:'point',xi:.5,px:0,py:-100}];
+    p.settings={...(p.settings||{}),analysisType:'linear',analysisScenarioId:'LC1',imperfection:{...(p.settings?.imperfection||{}),enabled:false}};
+    localStorage.setItem('astrastruct.project',JSON.stringify(p));
+  });
+  await page.reload();
+}
+
 async function enableCorotational(page:Page){
   await openCommand(page,'Tipo de análise');
   const mode=page.getByTestId('analysis-corotational');await expect(mode).toBeEnabled();await mode.click();
@@ -111,6 +127,22 @@ test('co-rotational mode accepts self-weight as a reference dead load',async({pa
   const post=page.getByTestId('panel-nonlinear-postprocess'),note=page.getByTestId('reference-load-postprocess-note');
   await expect(post).toBeVisible();await expect(note).toBeVisible();
   await expect(note).toContainText('peso próprio=3.750 kN/m');await expect(note).toContainText('qy₀=-3.750 kN/m');await expect(post).toContainText('16.875 kN·m');
+});
+
+test('co-rotational mode accepts a reference point member load and traces it in report',async({page})=>{
+  await page.goto('./');await installReferencePointBeam(page);await enableCorotational(page);
+  await page.getByTestId('analyze-button').click();await expect(page.getByTestId('nonlinear-result-metric')).toBeVisible();
+  await openCommand(page,'Diagramas/envelopes');
+  const post=page.getByTestId('panel-nonlinear-postprocess'),note=page.getByTestId('reference-load-postprocess-note');
+  await expect(post).toBeVisible();await expect(note).toBeVisible();
+  await expect(note).toContainText('carga pontual em barra');await expect(note).toContainText('P1(x/L=0.500)');await expect(note).toContainText('Py₀=-100.000 kN');await expect(note).toContainText('Não é carga seguidora');
+  await expect(post).toContainText('150.000 kN·m');
+  await post.locator('button[aria-label="Fechar"]').click();
+  await openCommand(page,'Relatório técnico');
+  const report=page.getByTestId('panel-nonlinear-report');await expect(report).toBeVisible();
+  await expect(page.getByTestId('nonlinear-load-model')).toContainText('carga pontual em barra');
+  await expect(report).toContainText('x/L=0.500');await expect(report).toContainText('-100.00');
+  await expect(page.getByTestId('nonlinear-report-limitations')).not.toContainText('carga pontual em barra, ações térmicas');
 });
 
 test('co-rotational mode refuses a model with a rotational release',async({page})=>{

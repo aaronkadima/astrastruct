@@ -22,8 +22,7 @@ function simpleCantilever(){
   console.log('Co-rotacional — objetividade OK','beta=',beta,'rad');
 }
 
-// 2) Tangente consistente: comparar d(fint)/dq analítico contra diferença central
-// em um estado com rotação/translação finitas, não apenas na origem.
+// 2) Tangente consistente: comparar d(fint)/dq analítico contra diferença central.
 {
   const args={X1:0,Y1:0,X2:3,Y2:1,E:200e6,A:.01,I:.0002},q=[.10,.20,.30,.40,-.10,-.20],h=1e-7;
   const base=corotationalElementState({...args,qGlobal:q});let maxDiff=0,maxRef=0;
@@ -55,9 +54,7 @@ function circularArc(ne){
   return{p,r,tip,x,y,xExact,yExact,error,M};
 }
 
-// 4) Grande rotação sob momento puro. A solução contínua inextensível é arco circular:
-// theta = M L/EI; xL=L sin(theta)/theta; yL=L(1-cos(theta))/theta.
-// O erro deve cair monotonicamente com refinamento 4 -> 8 -> 16 elementos.
+// 4) Grande rotação sob momento puro — arco circular e convergência de malha.
 {
   const a4=circularArc(4),a8=circularArc(8),a16=circularArc(16);
   assert(a8.error<a4.error*.35,`Co-rotacional: convergência 4->8 insuficiente (${a4.error} -> ${a8.error})`);
@@ -73,8 +70,7 @@ function circularArc(ne){
   console.log('Co-rotacional — convergência/pós-processamento OK','erros [m]=',a4.error,a8.error,a16.error,'tip16=',a16.x,a16.y,'erro M=',momentError);
 }
 
-// 5) UDL morta na configuração de referência: limite de pequenas rotações deve
-// recuperar a viga biapoiada clássica L=6 m, q=20 kN/m.
+// 5) UDL morta na configuração de referência.
 {
   const p=emptyProject();p.name='Co-rotacional — UDL de referência';
   p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:3,y:0},{id:'N3',x:6,y:0}];
@@ -89,7 +85,7 @@ function circularArc(ne){
   console.log(p.name,'OK','R=',ra.fy,rb.fy,'uy meio [mm]=',mid.uy*1000,'Mmax=',mmax,'resíduo=',recovery);
 }
 
-// 6) Peso próprio: gamma=25 kN/m3 e A=0.15 m2 -> w=3.75 kN/m.
+// 6) Peso próprio de referência.
 {
   const p=emptyProject();p.name='Co-rotacional — peso próprio de referência';
   p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:6,y:0}];p.elements=[makeFrameElement({id:'E1',n1:'N1',n2:'N2'})];
@@ -100,9 +96,7 @@ function circularArc(ne){
   console.log(p.name,'OK','R=',ra.fy,rb.fy,'Mmax=',mmax,'w=',resp.referenceLoad.selfWeight);
 }
 
-// 7) Carga pontual em barra como dead load de referência. O limite de pequenas
-// rotações deve reproduzir o mesmo modelo discreto linear, as reações globais e
-// o salto de cortante no ponto de aplicação.
+// 7) Carga pontual em barra como dead load de referência.
 {
   const p=emptyProject();p.name='Co-rotacional — carga pontual de referência';
   p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:6,y:0}];p.elements=[makeFrameElement({id:'E1',n1:'N1',n2:'N2'})];
@@ -116,17 +110,51 @@ function circularArc(ne){
   console.log(p.name,'OK','R=',ra.fy,rb.fy,'Mmax=',mmax,'salto V=',mid.V-before.V,'resíduo=',recovery);
 }
 
-// 8) Estados ainda fora do escopo devem ser recusados, nunca ignorados.
+// 8) Expansão térmica uniforme livre: epsT=alpha*dT deve aparecer como
+// alongamento geométrico sem força axial ou momento espúrio.
+{
+  const p=emptyProject();p.name='Co-rotacional — expansão térmica livre';
+  p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:2,y:0}];p.elements=[makeFrameElement({id:'E1',n1:'N1',n2:'N2'})];
+  p.supports=[{nodeId:'N1',ux:true,uy:true,rz:true}];p.elementLoads=[{id:'T1',caseId:'LC1',elementId:'E1',kind:'thermal',dT:50,dTGradient:0}];
+  const r=solveFrameCorotational2D(p,'LC1',{steps:5,maxIterations:30,tolerance:1e-11}),tip=r.displacements.find(d=>d.nodeId==='N2'),f=r.elementForces[0],expected=10e-6*50*2;
+  near(tip.ux,expected,2e-10,'Co-rotacional térmico livre: ux');near(tip.uy,0,1e-10,'Co-rotacional térmico livre: uy');near(tip.rz,0,1e-10,'Co-rotacional térmico livre: rz');
+  near(f.basicForces.N,0,2e-5,'Co-rotacional térmico livre: N');near(f.basicForces.M1,0,2e-5,'Co-rotacional térmico livre: M1');near(f.basicForces.M2,0,2e-5,'Co-rotacional térmico livre: M2');
+  near(f.loadSummary.thermal.eps0,10e-6*50,1e-15,'Co-rotacional térmico livre: epsT');
+  console.log(p.name,'OK','ux [mm]=',tip.ux*1000,'N=',f.basicForces.N);
+}
+
+// 9) Expansão uniforme impedida: N=-EA alpha dT, compressão negativa.
+{
+  const p=emptyProject();p.name='Co-rotacional — expansão térmica impedida';
+  p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:2,y:0}];p.elements=[makeFrameElement({id:'E1',n1:'N1',n2:'N2'})];
+  p.supports=[{nodeId:'N1',ux:true,uy:true,rz:true},{nodeId:'N2',ux:true,uy:true,rz:false}];p.elementLoads=[{id:'T1',caseId:'LC1',elementId:'E1',kind:'thermal',dT:50,dTGradient:0}];
+  const r=solveFrameCorotational2D(p,'LC1',{steps:5,tolerance:1e-11}),f=r.elementForces[0],ra=r.reactions.find(x=>x.nodeId==='N1'),rb=r.reactions.find(x=>x.nodeId==='N2'),expected=-30e6*.15*10e-6*50;
+  near(f.basicForces.N,expected,2e-6,'Co-rotacional térmico impedido: N');near(ra.fx,-expected,2e-6,'Co-rotacional térmico impedido: reação N1');near(rb.fx,expected,2e-6,'Co-rotacional térmico impedido: reação N2');
+  console.log(p.name,'OK','N=',f.basicForces.N,'kN');
+}
+
+// 10) Gradiente térmico livre: a curvatura inicial deve produzir uma forma de
+// arco praticamente sem tensões. O erro geométrico cai com a discretização.
+{
+  const L=4,ne=8,le=L/ne,alpha=10e-6,dTg=20,h=.5,kappa=-alpha*dTg/h,theta=kappa*L;
+  const p=emptyProject();p.name='Co-rotacional — gradiente térmico livre';p.nodes=Array.from({length:ne+1},(_,i)=>({id:`N${i}`,x:i*le,y:0}));
+  p.elements=Array.from({length:ne},(_,i)=>makeFrameElement({id:`E${i+1}`,n1:`N${i}`,n2:`N${i+1}`,sectionId:'rc_30x50'}));p.supports=[{nodeId:'N0',ux:true,uy:true,rz:true}];
+  p.elementLoads=p.elements.map((e,i)=>({id:`TG${i+1}`,caseId:'LC1',elementId:e.id,kind:'thermal',dT:0,dTGradient:dTg}));
+  const r=solveFrameCorotational2D(p,'LC1',{steps:8,maxIterations:40,tolerance:1e-11}),tip=r.displacements.find(d=>d.nodeId===`N${ne}`),x=L+tip.ux,y=tip.uy,xExact=Math.sin(theta)/kappa,yExact=(1-Math.cos(theta))/kappa,error=Math.hypot(x-xExact,y-yExact),maxForce=Math.max(...r.elementForces.flatMap(f=>[f.basicForces.N,f.basicForces.M1,f.basicForces.M2].map(Math.abs)));
+  near(tip.rz,theta,2e-9,'Co-rotacional gradiente térmico: rotação final');assert(error<1e-7,`Co-rotacional gradiente térmico: erro geométrico excessivo (${error})`);assert(maxForce<2e-4,`Co-rotacional gradiente térmico: força residual excessiva (${maxForce})`);
+  near(r.elementForces[0].loadSummary.thermal.kappa0,kappa,1e-15,'Co-rotacional gradiente térmico: kappaT');
+  console.log(p.name,'OK','theta=',tip.rz,'tip=',x,y,'erro [m]=',error,'força residual=',maxForce);
+}
+
+// 11) Estados ainda fora do escopo devem ser recusados, nunca ignorados.
 {
   const settlement=simpleCantilever();settlement.settlements=[{id:'SET1',caseId:'LC1',nodeId:'N1',ux:0,uy:.001,rz:0}];
   mustThrow(()=>solveFrameCorotational2D(settlement,'LC1'),/deslocamentos impostos|recalques/i,'Co-rotacional: recalque deve ser recusado');
   const imperfect=simpleCantilever();imperfect.settings.imperfection={...(imperfect.settings.imperfection||{}),enabled:true,scenarioId:'LC1',mode:1,amplitudeMm:10};
-  mustThrow(()=>solveFrameCorotational2D(imperfect,'LC1'),/imperfei/i,'Co-rotacional: imperfeição modal deve ser recusada');
+  mustThrow(()=>solveFrameCorotational2D(imperfect,'LC1'),/imperfei/i,'Co-rotacional: imperfeição modal deve ser recusida');
   const prescribed=simpleCantilever();prescribed.supports[0].baseUxValue=.001;
   mustThrow(()=>solveFrameCorotational2D(prescribed,'LC1'),/deslocamentos impostos/i,'Co-rotacional: deslocamento base deve ser recusado');
-  const thermal=simpleCantilever();thermal.elementLoads=[{id:'T1',caseId:'LC1',elementId:'E1',kind:'thermal',dT:20,dTGradient:0}];
-  mustThrow(()=>solveFrameCorotational2D(thermal,'LC1'),/thermal|tipo/i,'Co-rotacional: ação térmica deve ser recusada');
-  console.log('Co-rotacional — escopo protegido OK: recalques, imperfeição, deslocamento base e ação térmica recusados');
+  console.log('Co-rotacional — escopo protegido OK: recalques, imperfeição e deslocamento base recusados');
 }
 
-console.log('Todos os smoke tests co-rotacionais experimentais do AstraStruct v0.13.2 passaram.');
+console.log('Todos os smoke tests co-rotacionais experimentais do AstraStruct v0.13.3 passaram.');

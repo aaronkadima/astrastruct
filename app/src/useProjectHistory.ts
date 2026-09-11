@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 // @ts-ignore
 import { normalizeProject } from '../../web/src/core/model.js';
 
@@ -15,6 +15,12 @@ export function useProjectHistory(initial:any){
 
   const persist=(p:any)=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(p))}catch{}}
   const replace=(p:any)=>{projectRef.current=p;setProjectState(p);persist(p);forceRender(x=>x+1)};
+
+  useEffect(()=>{
+    // Keep the persisted model synchronized with the React source of truth from the
+    // first render, not only after the user's first edit.
+    persist(projectRef.current);
+  },[]);
 
   const commit=useCallback((next:any,{record=true}:{record?:boolean}={})=>{
     const current=projectRef.current;

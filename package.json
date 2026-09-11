@@ -1,11 +1,28 @@
 {
   "name": "astrastruct",
-  "version": "0.11.0",
+  "version": "1.0.0-alpha.1",
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "vite --config vite.config.ts",
+    "build": "vite build --config vite.config.ts",
+    "preview": "vite preview --config vite.config.ts --host 127.0.0.1 --port 4173",
     "test": "node tests/solver-smoke.mjs && node tests/pdelta-smoke.mjs",
-    "check": "node --check web/src/runtimeGuard.js && node --check web/src/app.js && node --check web/src/core/model.js && node --check web/src/ui/loadManager.js && node --check web/src/ui/postprocessPanel.js && node --check web/src/ui/advancedLoads.js && node --check web/src/ui/loadOverlay.js && node --check web/src/ui/connectionOverlay.js && node --check web/src/ui/propertyLibrary.js && node --check web/src/ui/report.js && node --check web/src/ui/stressPanel.js && node --check web/src/ui/mechanicsPanel.js && node --check web/src/ui/connectionsPanel.js && node --check web/src/ui/analysisPanel.js && node --check web/src/ui/responsiveShell.js && node --check web/src/solver/scenario.js && node --check web/src/solver/postprocess.js && node --check web/src/solver/envelope.js && node --check web/src/solver/frameElement.js && node --check web/src/solver/endConnections.js && node --check web/src/solver/springs.js && node --check web/src/solver/pdelta2d.js && node --check web/src/solver/frame2d.js && node --check web/src/solver/truss2d.js && node --check web/src/solver/mixed2d.js && node --check tests/pdelta-smoke.mjs"
+    "test:e2e": "playwright test",
+    "check": "tsc -p tsconfig.json --noEmit && node --check web/src/core/model.js && node --check web/src/solver/index.js && node --check web/src/solver/scenario.js && node --check web/src/solver/postprocess.js && node --check web/src/solver/envelope.js && node --check web/src/solver/frameElement.js && node --check web/src/solver/endConnections.js && node --check web/src/solver/springs.js && node --check web/src/solver/pdelta2d.js && node --check web/src/solver/frame2d.js && node --check web/src/solver/truss2d.js && node --check web/src/solver/mixed2d.js"
+  },
+  "dependencies": {
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.2",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.5"
   },
   "engines": {
     "node": ">=24"

@@ -16,5 +16,5 @@ export function solve(project, scenarioId) {
   const resolved = resolveScenario(project, scenarioId);
   const result = solveStructuralModel(resolved.project);
   const elementResponses = buildElementResponses(resolved.project, result, 41);
-  return { ...result, elementResponses, scenario: resolved.scenario, solverVersion: '0.8.0' };
+  return { ...result, elementResponses, scenario: resolved.scenario, solverVersion: '0.9.0' };
 }

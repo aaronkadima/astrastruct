@@ -4,6 +4,7 @@ import {
 } from '../web/src/core/model.js';
 import { solve } from '../web/src/solver/index.js';
 import { solveEnvelope } from '../web/src/solver/envelope.js';
+import { solveBuckling2D } from '../web/src/solver/buckling2d.js';
 
 function assert(condition,message){if(!condition)throw new Error(message)}
 function near(actual,expected,tol,message){if(Math.abs(actual-expected)>tol)throw new Error(`${message}: esperado ${expected}, obtido ${actual}`)}
@@ -87,4 +88,15 @@ for(const p of [demoTruss(),demoFrame(),demoMixed()]){
   const env=solveEnvelope(p);assert(env.scenarios.length===3,'Envelope: cenários');assert(env.elementResponses.length===p.elements.length,'Envelope: elementos');assert(env.elementResponses.some(e=>e.stations.some(s=>s.sigmaAxial)),'Envelope: tensões ausentes');console.log(p.name,'OK','envelope=',env.scenarios.length);
 }
 
-console.log('Todos os smoke tests do AstraStruct v0.9 passaram.');
+// Flambagem linear: coluna biarticulada deve convergir para Euler Pcr = pi^2 EI/L^2.
+{
+  const p=emptyProject();p.name='Coluna de Euler — biarticulada';const L=4,n=12,P=100,E=200e6,I=8e-5,A=.01;
+  p.nodes=Array.from({length:n+1},(_,i)=>({id:`N${i}`,x:0,y:L*i/n}));p.elements=[];
+  for(let i=0;i<n;i++){const e=makeFrameElement({id:`E${i+1}`,n1:`N${i}`,n2:`N${i+1}`});e.materialId='steel355';e.A=A;e.I=I;e.releases={rz1:false,rz2:false};e.rotationalSprings={rz1:null,rz2:null};p.elements.push(e)}
+  p.supports=[{nodeId:'N0',ux:true,uy:true,rz:false},{nodeId:`N${n}`,ux:true,uy:false,rz:false}];p.loads=[{id:'PcrRef',caseId:'LC1',nodeId:`N${n}`,fx:0,fy:-P,mz:0}];
+  const b=solveBuckling2D(p,'LC1',{modes:3}),expected=Math.PI**2*E*I/L**2/P,mid=b.modes[0].displacements[Math.floor(n/2)];
+  near(b.criticalFactor,expected,.75,'Flambagem Euler: fator crítico');assert(Math.abs(mid.ux)>.9,'Flambagem Euler: primeiro modo lateral não normalizado');assert(b.modes[1].factor>b.modes[0].factor,'Flambagem: modos fora de ordem');assert(b.modes[1].factor/b.modes[0].factor>3.7&&b.modes[1].factor/b.modes[0].factor<4.3,'Flambagem Euler: razão modal inesperada');
+  console.log(p.name,'OK','lambda1=',b.criticalFactor,'Euler=',expected,'lambda2/lambda1=',b.modes[1].factor/b.modes[0].factor);
+}
+
+console.log('Todos os smoke tests do AstraStruct v0.11 passaram.');

@@ -1,10 +1,10 @@
 export const uid = (p = 'id') => `${p}_${Math.random().toString(36).slice(2, 9)}`;
 
 export const MATERIALS = [
-  { id: 'concrete30', name: 'Concreto C30 (exemplo)', type: 'concrete', E: 30e6, nu: 0.20, density: 25, fck: 30, fctm: 2.9, fy: null, unit: 'kN/m²', verified: false },
-  { id: 'steel355', name: 'Aço estrutural fy=355 MPa (exemplo)', type: 'steel', E: 200e6, nu: 0.30, density: 78.5, fy: 355, fu: 510, unit: 'kN/m²', verified: false },
-  { id: 'rebar500', name: 'Aço de armadura fy=500 MPa (exemplo)', type: 'rebar', E: 210e6, nu: 0.30, density: 78.5, fy: 500, fu: 550, unit: 'kN/m²', verified: false },
-  { id: 'grout30', name: 'Graute 30 MPa (exemplo)', type: 'grout', E: 25e6, nu: 0.20, density: 23, fck: 30, unit: 'kN/m²', verified: false }
+  { id: 'concrete30', name: 'Concreto C30 (exemplo)', type: 'concrete', E: 30e6, nu: 0.20, density: 25, alpha: 10e-6, fck: 30, fctm: 2.9, fy: null, unit: 'kN/m²', verified: false },
+  { id: 'steel355', name: 'Aço estrutural fy=355 MPa (exemplo)', type: 'steel', E: 200e6, nu: 0.30, density: 78.5, alpha: 12e-6, fy: 355, fu: 510, unit: 'kN/m²', verified: false },
+  { id: 'rebar500', name: 'Aço de armadura fy=500 MPa (exemplo)', type: 'rebar', E: 210e6, nu: 0.30, density: 78.5, alpha: 12e-6, fy: 500, fu: 550, unit: 'kN/m²', verified: false },
+  { id: 'grout30', name: 'Graute 30 MPa (exemplo)', type: 'grout', E: 25e6, nu: 0.20, density: 23, alpha: 10e-6, fck: 30, unit: 'kN/m²', verified: false }
 ];
 
 export const SECTIONS = [
@@ -15,17 +15,27 @@ export const SECTIONS = [
 ];
 
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
+function defaultAlpha(type) { return type === 'steel' || type === 'rebar' ? 12e-6 : 10e-6; }
+
+export function sectionDepth(section) {
+  if (!section) return 0;
+  if (Number(section.h) > 0) return Number(section.h);
+  if (Number(section.d) > 0) return Number(section.d);
+  if (Number(section.depth) > 0) return Number(section.depth);
+  if (Number(section.cY) > 0) return 2 * Number(section.cY);
+  return 0;
+}
 
 export function emptyProject() {
   return {
-    id: uid('project'), name: 'Novo projeto', version: 5, units: 'kN-m-MPa',
+    id: uid('project'), name: 'Novo projeto', version: 8, units: 'kN-m-MPa',
     nodes: [], elements: [], materials: clone(MATERIALS), sections: clone(SECTIONS), supports: [],
-    loads: [], elementLoads: [], settlements: [],
+    loads: [], elementLoads: [], settlements: [], nodeSprings: [],
     loadCases: [{ id: 'LC1', name: 'Caso 1', type: 'user' }],
     loadCombinations: [{ id: 'COMB1', name: 'Combinação customizada 1', type: 'custom', terms: [{ caseId: 'LC1', factor: 1.0 }] }],
     connections: [], results: null,
     settings: { grid: 0.25, snap: true, deformationScale: 1, activeLoadCaseId: 'LC1', analysisScenarioId: 'LC1' },
-    meta: { solverVersion: '0.5.0', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+    meta: { solverVersion: '0.8.0', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
   };
 }
 
@@ -39,17 +49,20 @@ export function normalizeProject(input) {
   p.loads = Array.isArray(p.loads) ? p.loads : [];
   p.elementLoads = Array.isArray(p.elementLoads) ? p.elementLoads : [];
   p.settlements = Array.isArray(p.settlements) ? p.settlements : [];
+  p.nodeSprings = Array.isArray(p.nodeSprings) ? p.nodeSprings : [];
   p.loadCases = Array.isArray(p.loadCases) && p.loadCases.length ? p.loadCases : clone(base.loadCases);
   p.loadCombinations = Array.isArray(p.loadCombinations) ? p.loadCombinations : clone(base.loadCombinations);
   p.connections = Array.isArray(p.connections) ? p.connections : [];
   p.settings = { ...base.settings, ...(p.settings || {}) };
-  p.meta = { ...base.meta, ...(p.meta || {}), solverVersion: '0.5.0' };
-  p.version = 5;
+  p.meta = { ...base.meta, ...(p.meta || {}), solverVersion: '0.8.0' };
+  p.version = 8;
 
   const firstCaseId = p.loadCases[0]?.id || 'LC1';
   p.loads = p.loads.map(l => ({ ...l, caseId: l.caseId || firstCaseId }));
   p.elementLoads = p.elementLoads.map(l => ({ ...l, caseId: l.caseId || firstCaseId }));
   p.settlements = p.settlements.map(s => ({ ...s, caseId: s.caseId || firstCaseId, ux: Number(s.ux)||0, uy: Number(s.uy)||0, rz: Number(s.rz)||0 }));
+  p.nodeSprings = p.nodeSprings.map(s => ({ ...s, id: s.id || uid('SPR'), kx: Math.max(0, Number(s.kx)||0), ky: Math.max(0, Number(s.ky)||0), kr: Math.max(0, Number(s.kr)||0) }));
+  p.materials = p.materials.map(m => ({ ...m, alpha: Number.isFinite(Number(m.alpha)) ? Number(m.alpha) : defaultAlpha(m.type) }));
   p.elements = p.elements.map(e => ({ ...e, releases: { rz1: false, rz2: false, ...(e.releases || {}) } }));
   p.supports = p.supports.map(s => ({
     ...s,
@@ -59,9 +72,11 @@ export function normalizeProject(input) {
   }));
 
   const validCaseIds = new Set(p.loadCases.map(c => c.id));
+  const validNodeIds = new Set(p.nodes.map(n => n.id));
   p.loads = p.loads.filter(l => validCaseIds.has(l.caseId));
   p.elementLoads = p.elementLoads.filter(l => validCaseIds.has(l.caseId));
   p.settlements = p.settlements.filter(s => validCaseIds.has(s.caseId));
+  p.nodeSprings = p.nodeSprings.filter(s => validNodeIds.has(s.nodeId) && (s.kx || s.ky || s.kr));
   p.loadCombinations = p.loadCombinations.map(c => ({
     ...c, type: c.type || 'custom',
     terms: (c.terms || []).filter(t => validCaseIds.has(t.caseId)).map(t => ({ caseId: t.caseId, factor: Number(t.factor) || 0 }))

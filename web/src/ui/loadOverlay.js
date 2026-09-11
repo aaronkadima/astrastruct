@@ -25,6 +25,12 @@ function renderOverlay(){
       layer.append(make('path',{d:`M ${x} ${y-34} L ${x} ${y-10} M ${x-5} ${y-16} L ${x} ${y-10} L ${x+5} ${y-16}`,class:'selfweight-arrow'}));
       layer.append(make('text',{x:x+8,y:y-23,class:'advanced-load-label selfweight-label'},'PP'));
     }
+    if(load.kind==='thermal'){
+      const x=(x1+x2)/2,y=(y1+y2)/2;
+      layer.append(make('rect',{x:x-14,y:y-10,width:28,height:20,rx:5,class:'thermal-marker'}));
+      const parts=[`ΔT=${num(load.dT,1)}°C`];if(Math.abs(Number(load.dTGradient)||0)>1e-12)parts.push(`ΔTg=${num(load.dTGradient,1)}°C`);
+      layer.append(make('text',{x:x+18,y:y+4,class:'advanced-load-label thermal-label'},parts.join(' · ')));
+    }
   }
 
   for(const st of (p.settlements||[]).filter(s=>s.caseId===caseId)){
@@ -34,6 +40,14 @@ function renderOverlay(){
     layer.append(make('circle',{cx:x,cy:y,r:12,class:'settlement-marker'}));
     const parts=[];if(Math.abs(st.ux||0)>1e-15)parts.push(`Δx=${num(st.ux*1000,2)} mm`);if(Math.abs(st.uy||0)>1e-15)parts.push(`Δy=${num(st.uy*1000,2)} mm`);if(Math.abs(st.rz||0)>1e-15)parts.push(`Δθ=${num(st.rz*1000,2)} mrad`);
     layer.append(make('text',{x:x+14,y:y+30,class:'advanced-load-label settlement-label'},parts.join(' · ')));
+  }
+
+  for(const spring of p.nodeSprings||[]){
+    const group=svg.querySelector(`[data-node="${CSS.escape(spring.nodeId)}"]`),node=group?.querySelector('circle.node');if(!node)continue;
+    const x=+node.getAttribute('cx'),y=+node.getAttribute('cy');
+    layer.append(make('path',{d:`M ${x+8} ${y} l 7 -5 l 7 10 l 7 -10 l 7 10 l 7 -5`,class:'spring-marker'}));
+    const parts=[];if(spring.kx)parts.push(`kx=${num(spring.kx,0)}`);if(spring.ky)parts.push(`ky=${num(spring.ky,0)}`);if(spring.kr)parts.push(`kr=${num(spring.kr,0)}`);
+    layer.append(make('text',{x:x+12,y:y-12,class:'advanced-load-label spring-label'},`k · ${parts.join(' / ')}`));
   }
 
   svg.append(layer);

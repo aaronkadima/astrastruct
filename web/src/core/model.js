@@ -46,7 +46,7 @@ export function emptyProject() {
       nonlinearSteps: 20, nonlinearMaxIterations: 35, nonlinearTolerance: 1e-8, nonlinearLineSearch: true,
       imperfection: { enabled: false, source: 'bucklingMode', scenarioId: null, mode: 1, amplitudeMm: 10 }
     },
-    meta: { solverVersion: '0.13.2-exp', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+    meta: { solverVersion: '0.13.3-exp', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
   };
 }
 
@@ -78,7 +78,7 @@ export function normalizeProject(input) {
   p.settings.imperfection.scenarioId = p.settings.imperfection.scenarioId || null;
   p.settings.imperfection.mode = Math.max(1, Math.min(12, Math.round(Number(p.settings.imperfection.mode) || 1)));
   p.settings.imperfection.amplitudeMm = Number.isFinite(Number(p.settings.imperfection.amplitudeMm)) && Number(p.settings.imperfection.amplitudeMm) > 0 ? Number(p.settings.imperfection.amplitudeMm) : 10;
-  p.meta = { ...base.meta, ...(p.meta || {}), solverVersion: '0.13.2-exp' };
+  p.meta = { ...base.meta, ...(p.meta || {}), solverVersion: '0.13.3-exp' };
   p.version = 13;
 
   const firstCaseId = p.loadCases[0]?.id || 'LC1';

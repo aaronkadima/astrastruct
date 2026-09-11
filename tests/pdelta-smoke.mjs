@@ -46,8 +46,8 @@ function assert(condition,message){if(!condition)throw new Error(message)}
   assert(imp?.enabled,'Imperfeição modal: metadado ausente');
   assert(r.initialDisplacements&&r.totalDisplacements,'Imperfeição modal: campos inicial/total ausentes');
   near(imp.amplitudeMm,e0mm,1e-9,'Imperfeição modal: amplitude registrada');
-  const maxInitial=Math.max(...r.initialDisplacements.map(d=>Math.hypot(d.ux,d.uy))),maxTotal=Math.max(...r.totalDisplacements.map(d=>Math.hypot(d.ux,d.uy))),expected=(e0mm/1000)/(1-1/imp.criticalFactor);
-  near(maxInitial,e0mm/1000,1e-9,'Imperfeição modal: normalização');
+  const maxInitial=Math.max(...r.initialDisplacements.map(d=>Math.abs(d.ux))),maxTotal=Math.max(...r.totalDisplacements.map(d=>Math.abs(d.ux))),expected=(e0mm/1000)/(1-1/imp.criticalFactor);
+  near(maxInitial,e0mm/1000,1e-9,'Imperfeição modal: normalização transversal');
   near(maxTotal,expected,5e-6,'Imperfeição modal: amplificação de Euler');
   assert(maxTotal>maxInitial,'Imperfeição modal: compressão não amplificou a forma inicial');
   console.log(p.name,'OK','lambda_cr=',imp.criticalFactor,'e0 [mm]=',maxInitial*1000,'etot [mm]=',maxTotal*1000,'teórico [mm]=',expected*1000);

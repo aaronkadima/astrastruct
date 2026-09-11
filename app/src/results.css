@@ -1,0 +1,2 @@
+.stress-map{pointer-events:none}.stress-segment{stroke-width:9;stroke-linecap:round;opacity:.92}.stress-legend{pointer-events:none}.stress-legend-bg{fill:rgba(8,14,23,.93);stroke:#40536d;stroke-width:1}.stress-legend text{fill:#d6e3f2;font-size:9px;font-weight:650;paint-order:stroke;stroke:#0c121a;stroke-width:2px}.stress-legend rect:not(.stress-legend-bg){stroke:#6b7d94;stroke-width:.6}
+@media(max-width:760px){.stress-segment{stroke-width:11}.stress-legend{transform:translate(14px,50px)}.stress-legend text{font-size:8px}}

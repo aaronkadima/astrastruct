@@ -40,7 +40,7 @@ export function solve(project, scenarioId) {
   if(analysisType==='corotational'){
     const s=project.settings||{};
     const result=solveFrameCorotational2D(project,scenarioId,{steps:s.nonlinearSteps,maxIterations:s.nonlinearMaxIterations,tolerance:s.nonlinearTolerance,lineSearch:s.nonlinearLineSearch});
-    return{...result,analysisType:'corotational',solverVersion:'0.13.4-exp'};
+    return{...result,analysisType:'corotational',solverVersion:'0.13.5-exp'};
   }
   const resolved = resolveScenario(project, scenarioId);
   const result = solveStructuralModel(project,resolved.project,scenarioId||resolved.scenario?.id);

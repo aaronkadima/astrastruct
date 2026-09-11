@@ -1,12 +1,12 @@
-# AstraStruct — Formulação co-rotacional 2D v0.13.3 (experimental)
+# AstraStruct — Formulação co-rotacional 2D v0.13.4 (experimental)
 
 ## 1. Objetivo e status
 
 Este documento registra a formulação geometricamente não linear implementada em `web/src/solver/corotational2d.js` e o pós-processamento em `web/src/solver/corotationalPostprocess.js`.
 
-O modo está disponível na interface como **Geom. não linear — experimental v0.13.3**. A promoção para a UI significa que configuração, solução, geometria corrente, pós-processamento, relatório, cargas mecânicas de referência e estado térmico possuem fluxo próprio e regressões automatizadas. Não significa certificação normativa ou validação universal.
+O modo está disponível na interface como **Geom. não linear — experimental v0.13.4**. A versão atual reúne cinemática co-rotacional, Newton–Raphson incremental, cargas mecânicas mortas de referência, estado térmico inicial e força seguidora concentrada na extremidade 2 com tangente externa consistente. O rótulo experimental permanece obrigatório: estes recursos não constituem certificação normativa ou validação universal.
 
-## 2. Escopo da v0.13.3
+## 2. Escopo da v0.13.4
 
 Admitido atualmente:
 
@@ -14,11 +14,10 @@ Admitido atualmente:
 - Euler–Bernoulli;
 - material elástico linear;
 - pequenas deformações locais e rotações globais finitas;
-- cargas nodais mortas em eixos globais;
-- `uniform` como dead load da configuração de referência;
-- `selfWeight` como dead load vertical global da referência;
-- `point` como carga pontual de barra convertida em vetor nodal equivalente da referência;
+- cargas nodais em eixos globais;
+- `uniform`, `selfWeight` e `point` como dead loads da configuração de referência;
 - `thermal` como deformação axial e curvatura iniciais;
+- `followerEnd` como força concentrada na extremidade 2, definida nos eixos locais da corda corrente;
 - extremidades rígidas;
 - apoios clássicos com deslocamentos prescritos nulos;
 - Newton–Raphson incremental com line search opcional;
@@ -26,14 +25,17 @@ Admitido atualmente:
 
 Recusado explicitamente:
 
-- follower loads/cargas seguidoras;
+- follower na extremidade 1;
+- follower distribuída;
+- follower aplicada em ponto interior da barra;
+- follower moment;
 - molas nodais;
 - releases e ligações semirrígidas;
 - recalques e deslocamentos prescritos não nulos;
 - imperfeição modal inicial;
 - `truss2d` e modelos mistos.
 
-Não estão implementados material não linear, seções de fibras, arc-length, contato, pórtico 3D, Timoshenko, shell ou solid.
+Também não estão implementados material não linear, seções de fibras, arc-length, contato, pórtico 3D, Timoshenko, shell ou solid.
 
 ## 3. Cinemática co-rotacional
 
@@ -57,13 +59,9 @@ Na configuração corrente:
 
 `alpha = atan2(y2-y1, x2-x1)`.
 
-A rotação rígida da corda é:
+A rotação rígida da corda é `Delta alpha = alpha-alpha0`, normalizada por `atan2(sin(Delta alpha),cos(Delta alpha))`.
 
-`Delta alpha = alpha - alpha0`,
-
-normalizada por `atan2(sin(Delta alpha),cos(Delta alpha))`.
-
-Deformações básicas:
+As deformações básicas são:
 
 `db = [l-L0, phi1, phi2]^T`
 
@@ -71,35 +69,49 @@ Deformações básicas:
 
 `phi2 = theta2 - Delta alpha`.
 
-Movimento rígido puro, portanto, não gera deformação básica.
+Movimento rígido puro não gera deformação básica.
 
-## 4. Relação constitutiva básica
+## 4. Relação constitutiva básica e temperatura
 
-Sem estado inicial, para Euler–Bernoulli elástico linear:
-
-`qb = kb db`
-
-`qb = [N, M1, M2]^T`
+Para Euler–Bernoulli elástico linear:
 
 `kb = [[EA/L0, 0, 0],
        [0, 4EI/L0, 2EI/L0],
        [0, 2EI/L0, 4EI/L0]]`.
 
-Com estado térmico inicial, a relação passa a:
+Sem estado inicial:
 
-`qb = kb (db - db,T)`.
+`qb = kb db`.
 
-A não linearidade material continua ausente; a v0.13.3 é geometricamente não linear com constituição elástica linear.
+Para temperatura uniforme e gradiente térmico:
 
-## 5. Transformação e força interna
+`epsilonT = alphaT DeltaT`
 
-Com `c = cos(alpha)` e `s = sin(alpha)`:
+`kappaT = -alphaT DeltaTg/h`.
+
+O vetor de deformação básica livre é:
+
+`db,T = [epsilonT L0, -kappaT L0/2, +kappaT L0/2]^T`.
+
+Assim:
+
+`qb = kb (db-db,T)`.
+
+O estado térmico é aplicado incrementalmente:
+
+`db,T(lambda) = lambda db,T`.
+
+Ele não é convertido em força externa. A profundidade `h` deve ser conhecida para gradiente térmico; caso contrário, o solver emite erro explícito.
+
+## 5. Transformação cinemática e força interna
+
+Com `c=cos(alpha)` e `s=sin(alpha)`:
 
 `r = [-c,-s,0,c,s,0]^T`
 
 `z = [s,-c,0,-s,c,0]^T`.
 
-A matriz cinemática básica `B = d(db)/d(q)` usa:
+A matriz cinemática `B=d(db)/dq` usa:
 
 `B1 = r^T`
 
@@ -111,79 +123,45 @@ A força interna global é:
 
 `fint = B^T qb`.
 
-## 6. Tangente consistente
+## 6. Tangente interna consistente
 
-A tangente implementada é:
+A tangente interna é:
 
-`Kt = B^T kb B + Kg,N + Kg,M`
+`Kint = B^T kb B + Kg,N + Kg,M`
+
+com:
 
 `Kg,N = (N/l) z z^T`
 
 `Kg,M = [(M1+M2)/l^2] (r z^T + z r^T)`.
 
-A derivada analítica foi comparada com diferença central de `fint` em estado deformado. O erro relativo máximo do benchmark atual é:
+A derivada analítica de `fint` foi comparada com diferença central em estado deformado. O benchmark principal apresenta erro relativo máximo:
 
 `1.7899600937e-9`.
 
-Como `db,T` é um estado inicial independente dos graus de liberdade globais, ele não acrescenta uma parcela própria à derivada cinemática; sua influência entra nas forças básicas `N, M1, M2`, que por sua vez participam dos termos geométricos da tangente.
+O estado térmico inicial não cria uma matriz tangente independente, mas modifica `N`, `M1` e `M2`, que entram nos termos geométricos da tangente interna.
 
-## 7. Equilíbrio incremental
+## 7. Cargas mecânicas mortas da configuração de referência
 
-Para fator de carga `lambda`:
+`uniform`, `selfWeight` e `point` são calculadas na geometria inicial e congeladas em eixos globais durante Newton–Raphson. Elas não acompanham a rotação da barra e não possuem tangente externa.
 
-`R(q) = lambda Fext - fint(q,lambda) = 0`.
-
-Em cada iteração:
-
-`Kt(q_i) Delta q = R(q_i)`
-
-`q_(i+1) = q_i + eta Delta q`,
-
-onde `eta` é o fator do line search.
-
-Cargas mecânicas de referência são multiplicadas por `lambda`. O estado térmico inicial também é aplicado incrementalmente:
-
-`db,T(lambda) = lambda db,T`.
-
-O critério de convergência utiliza a norma infinita do resíduo e uma escala mecânica. Na presença de temperatura, entram também as ordens de grandeza características:
-
-`EA |epsilonT|`
-
-`EI |kappaT|`.
-
-Isso evita comparar um resíduo de força/momento com uma escala de deformação dimensionalmente incompatível.
-
-## 8. Cargas mecânicas mortas da referência
-
-A v0.13.3 trata `uniform`, `selfWeight` e `point` como **dead loads da configuração inicial**. O vetor nodal equivalente é calculado em `L0, alpha0`, transformado para o sistema global inicial e congelado durante Newton–Raphson.
-
-Consequências:
-
-- a ação externa não acompanha a rotação corrente do elemento;
-- não existe tangente externa de follower load;
-- o recurso não deve ser interpretado como carga seguidora.
-
-### 8.1 Carga uniforme
+### 7.1 Carga uniforme
 
 Para `qx0,qy0` nos eixos locais iniciais:
 
 `pUDL = [qx0 L0/2, qy0 L0/2, qy0 L0²/12, qx0 L0/2, qy0 L0/2, -qy0 L0²/12]^T`.
 
-### 8.2 Peso próprio
+### 7.2 Peso próprio
 
-Com peso específico `gamma`, área `A` e fator `f`:
+Para peso específico `gamma`, área `A` e fator `f`:
 
 `w = gamma A f`.
 
-A força por comprimento é vertical no sistema global. Ela é projetada nos eixos locais iniciais para gerar `qx0,qy0` e, em seguida, o mesmo vetor consistente de UDL.
+A força gravitacional global é projetada nos eixos locais iniciais e convertida para o vetor consistente de UDL.
 
-### 8.3 Carga pontual em barra
+### 7.3 Carga pontual de barra
 
-Para uma carga local inicial `(Px,Py)` aplicada em:
-
-`xi = x/L0`, `0 <= xi <= 1`,
-
-o vetor equivalente usa interpolação axial linear e funções de forma Hermite:
+Para `(Px,Py)` em `xi=x/L0`, com `0<=xi<=1`:
 
 `h1 = 1 - 3xi² + 2xi³`
 
@@ -191,52 +169,107 @@ o vetor equivalente usa interpolação axial linear e funções de forma Hermite
 
 `h3 = 3xi² - 2xi³`
 
-`h4 = L0(-xi² + xi³)`.
-
-Então:
+`h4 = L0(-xi² + xi³)`
 
 `pP = [Px(1-xi), Py h1, Py h2, Px xi, Py h3, Py h4]^T`.
 
-Esse vetor é transformado pela orientação inicial `alpha0` e congelado. A posição relativa `xi` é preservada para a reconstrução dos diagramas na configuração corrente.
+O vetor é transformado pela orientação inicial `alpha0` e congelado. A posição relativa `xi` é preservada para reconstruir saltos nos diagramas na geometria corrente.
 
-## 9. Estado térmico inicial — v0.13.3
+## 8. Força seguidora concentrada — v0.13.4
 
-Para temperatura uniforme:
+A ação `followerEnd` representa uma força concentrada na **extremidade 2**. Suas componentes locais `(Px,Py)` permanecem constantes nos eixos da corda corrente.
 
-`epsilonT = alpha DeltaT`.
+O vetor externo elementar é:
 
-Para gradiente térmico através da profundidade `h` da seção:
+`Pf(q) = [0,0,0,Fx,Fy,0]^T`
 
-`kappaT = -alpha DeltaTg/h`.
+com:
 
-O vetor de deformação básica livre é:
+`Fx = c Px - s Py`
 
-`db,T = [epsilonT L0, -kappaT L0/2, +kappaT L0/2]^T`.
+`Fy = s Px + c Py`.
 
-As forças básicas são obtidas de:
+Como `alpha` depende de `q`, esta ação possui derivada externa. Para a corda corrente:
 
-`qb = kb (db - db,T)`.
+`g = d(alpha)/dq = [s/l, -c/l, 0, -s/l, c/l, 0]`.
 
-Interpretação física:
+As derivadas direcionais são:
 
-- em expansão uniforme livre, a barra pode alcançar `l-L0 = epsilonT L0` sem esforço axial;
-- com expansão totalmente impedida, surge `N = -EA epsilonT`;
-- com gradiente livre, a barra tende a uma curvatura `kappaT` sem momento residual significativo;
-- se a curvatura térmica é restringida, surgem momentos de restrição.
+`dFx/dalpha = -s Px - c Py`
 
-O gradiente requer uma profundidade de seção positiva e rastreável. Se `h` não estiver disponível, o solver emite erro explícito em vez de inferir uma dimensão arbitrária.
+`dFy/dalpha = c Px - s Py`.
 
-A ação térmica não é convertida em vetor nodal externo e não constitui follower load.
+Logo, as linhas translacionais da extremidade 2 da tangente externa são:
 
-## 10. Recuperação física de esforços
+`Kext[ux2,:] = (dFx/dalpha) g`
 
-O equilíbrio global utiliza as forças internas constitutivas e os vetores externos equivalentes das cargas mecânicas. Para expor esforços físicos de extremidade sob cargas mecânicas distribuídas/pontuais, o solver recupera:
+`Kext[uy2,:] = (dFy/dalpha) g`.
+
+As demais linhas são nulas nesta formulação. Em geral, `Kext` é **não simétrica**. Isso é esperado para uma ação seguidora não conservativa e não deve ser artificialmente simetrizado.
+
+### 8.1 Equilíbrio e Newton com follower
+
+Definindo `Fref` como cargas nodais e dead loads de referência, o resíduo é:
+
+`R(q,lambda) = lambda [Fref + Pf(q)] - fint(q,lambda)`.
+
+A derivada do resíduo leva a:
+
+`(Kint - lambda Kext) Deltaq = R`.
+
+Portanto, o solver não trata follower como vetor congelado: tanto sua direção global quanto `Kext` são atualizados na configuração corrente a cada iteração.
+
+### 8.2 Casos e combinações
+
+O Scenario Engine aplica o fator do caso/combinação às componentes locais `Px/Py` antes da trajetória não linear. Assim, por exemplo, uma ação `Px=100 kN` em um caso com fator `1.4` entra no solver como `Px=140 kN`.
+
+A combinação continua sendo **custom/user-defined**; isso não representa automaticamente combinações normativas.
+
+### 8.3 Limites atuais da follower
+
+A v0.13.4 não generaliza esta formulação para:
+
+- extremidade 1;
+- momento seguidor;
+- carga distribuída seguidora;
+- carga seguidora em ponto interior;
+- dependências adicionais de orientação além da corda corrente.
+
+Esses estados devem ganhar formulações e tangentes externas próprias antes de serem habilitados.
+
+## 9. Equilíbrio incremental e convergência
+
+Para cada incremento `lambda`, o solver atualiza a geometria, `Kint`, forças internas, estado térmico, follower e `Kext`.
+
+O passo é:
+
+`Ktan Deltaq = R`
+
+com:
+
+`Ktan = Kint - lambda Kext`.
+
+A atualização usa:
+
+`q_(i+1) = q_i + eta Deltaq`,
+
+onde `eta` é o fator do line search quando habilitado.
+
+O critério usa norma infinita do resíduo. A escala é construída com as forças externas mecânicas e, na presença de temperatura, também com:
+
+`EA |epsilonT|`
+
+`EI |kappaT|`.
+
+Essa escala é dimensionalmente compatível com o resíduo de força/momento.
+
+## 10. Recuperação física e pós-processamento
+
+Para as cargas mecânicas mortas de referência, os esforços físicos de extremidade são recuperados separando a força interna do vetor nodal equivalente:
 
 `fend = fint - peq`.
 
-Depois `fend` é projetado no sistema co-rotante corrente.
-
-Para a parcela uniforme na configuração corrente, a carga global congelada é projetada nos eixos atuais e escalada por `L0/l`, preservando a resultante da referência.
+Na configuração corrente, a componente uniforme global congelada é projetada nos eixos atuais e escalada por `L0/l`, preservando a resultante.
 
 Sem carga pontual:
 
@@ -246,179 +279,157 @@ Sem carga pontual:
 
 `M(x) = -M1 + V1 x + qy x²/2`.
 
-Para cada carga pontual `p` localizada em `a = xi l`, quando `x >= a`:
+Para uma carga pontual em `a=xi l`, quando `x>=a`:
 
-`N(x) <- N(x) - Px,p`
+`N(x) <- N(x) - Px`
 
-`V(x) <- V(x) + Py,p`
+`V(x) <- V(x) + Py`
 
-`M(x) <- M(x) + Py,p (x-a)`.
+`M(x) <- M(x) + Py(x-a)`.
 
-Assim, o diagrama apresenta o salto físico de `N/V` e a alteração de inclinação de `M` no ponto da carga.
+O pós-processador registra separadamente:
 
-O pós-processador registra `loadRecovery.equilibriumResidual` como diagnóstico entre a integração dos carregamentos mecânicos e os esforços de extremidade recuperados. O estado térmico é rastreado separadamente em `thermal`.
+- `referenceLoad` e resíduo de recuperação `N/V/M`;
+- `thermal` com `DeltaT`, `DeltaTg`, `alphaT`, `epsilonT`, `kappaT`;
+- `followerEnds` com `Px/Py`, `Fx/Fy` atuais, `alpha` e `max|Kext|`.
 
-## 11. Pós-processamento na geometria corrente
+Cada elemento possui 41 estações na geometria corrente. A deformada é exibida em escala física ×1. Envelopes não lineares permanecem desabilitados.
 
-Cada elemento é reconstruído em 41 estações. A deflexão transversal usa interpolação Hermite das rotações relativas `phi1,phi2` no sistema co-rotante e é transformada para o sistema global.
+## 11. Benchmarks automatizados
 
-Cada estação inclui:
+### 11.1 Objetividade
 
-- `x0,y0` — posição nominal;
-- `xd,yd` — posição corrente;
-- `N,V,M`;
-- `ux,uy`;
-- `uLocal,vLocal`;
-- `sigmaAxial`, `sigmaTop`, `sigmaBottom`, `sigmaAbs`.
-
-A interface também registra por elemento:
-
-- `qx0,qy0`;
-- peso próprio;
-- cargas pontuais `xi, Px0, Py0`;
-- projeção local corrente da carga pontual;
-- resíduo de recuperação `N/V/M`;
-- `DeltaT`, `DeltaTg`, `alpha`, `epsilonT`, `kappaT`, profundidade de seção e vetor térmico inicial.
-
-A deformada é exibida em **escala física ×1**. Envelopes não lineares permanecem desabilitados; o pós-processador opera sobre um cenário por vez.
-
-## 12. Benchmarks automatizados
-
-### 12.1 Objetividade
-
-Elemento `L=3.7 m` submetido a translação rígida `(1.25,-0.62) m` e rotação `0.83 rad`:
+Movimento rígido com rotação `0.83 rad`:
 
 - `max|db| < 1e-12`;
 - `max|fint| < 1e-6`.
 
-### 12.2 Tangente consistente
+### 11.2 Tangente interna
 
 Erro relativo máximo contra diferença central:
 
 `1.7899600937e-9`.
 
-### 12.3 Limite linear
+### 11.3 Limite linear
 
-Balanço `L=4 m`, `E=30 GPa`, `I=0.003125 m4`, `P=10 kN`:
+Balanço `L=4 m`, `P=10 kN`:
 
-- referência: `2.2755555556 mm`;
-- co-rotacional: `2.2755550703 mm`.
+- referência `uy=-2.2755555556 mm`;
+- co-rotacional `uy=-2.2755550703 mm`.
 
-### 12.4 Grande rotação — arco circular
+### 11.4 Grande rotação e convergência de malha
 
-Para `theta=1 rad`, `L=4 m`:
+Arco circular sob momento puro, `theta=1 rad`, `L=4 m`:
 
-`xL = L sin(theta)/theta`
-
-`yL = L[1-cos(theta)]/theta`.
-
-Referência:
-
-- `xL = 3.3658839392 m`;
-- `yL = 1.8387907765 m`.
-
-Com 16 elementos:
-
-- `xL = 3.3664318343 m`;
-- `yL = 1.8390900930 m`.
-
-Erro vetorial de ponta:
-
-- 4 elementos: `0.01000626945 m`;
+- erro de ponta com 4 elementos: `0.01000626945 m`;
 - 8 elementos: `0.00249814644 m`;
-- 16 elementos: `0.00062432313 m`.
+- 16 elementos: `0.00062432313 m`;
+- erro máximo de `M(x)` no caso refinado: aproximadamente `2.25e-9 kN.m`.
 
-### 12.5 Momento puro
+### 11.5 UDL, peso próprio e carga pontual
 
-Erro máximo de `M(x)` no benchmark refinado:
+UDL `q=20 kN/m`, `L=6 m`:
 
-`≈ 2.25e-9 kN.m`.
-
-### 12.6 UDL de referência
-
-Viga biapoiada `L=6 m`, `q=20 kN/m`:
-
-- `RA = 59.999999999999844 kN`;
-- `RB = 59.99999999999985 kN`;
+- `RA≈RB≈60 kN`;
 - flecha central `-3.599997114 mm`;
-- `Mmax = 89.999935920 kN.m`;
-- resíduo de recuperação `2.842170943e-14`.
+- `Mmax=89.999935920 kN.m`;
+- resíduo de recuperação `2.84e-14`.
 
-### 12.7 Peso próprio
+Peso próprio `gamma=25 kN/m³`, `A=0.15 m²`:
 
-Para `gamma=25 kN/m³`, `A=0.15 m²`:
+- `w=3.75 kN/m`;
+- `RA=RB=11.25 kN`;
+- `Mmax=16.875 kN.m`.
 
-- `w = 3.75 kN/m`;
-- `RA = RB = 11.25 kN`;
-- `Mmax = 16.875 kN.m`.
+Carga pontual `P=100 kN`, `L=6 m`, `xi=0.5`:
 
-### 12.8 Carga pontual de referência
+- `RA=RB=50 kN`;
+- `Mmax=150 kN.m`;
+- salto de cortante `-100 kN`;
+- resíduo de recuperação `0`.
 
-Viga biapoiada `L=6 m` com `P=100 kN` em `xi=0.5`:
+### 11.6 Temperatura
 
-- `RA = 50 kN`;
-- `RB = 50 kN`;
-- `Mmax = 150 kN.m`;
-- salto de cortante no ponto da carga: `-100 kN`;
-- resíduo de recuperação: `0`;
-- rotações nodais coincidem com o mesmo modelo discreto linear dentro da tolerância de regressão.
+Expansão livre:
 
-### 12.9 Expansão térmica uniforme livre — v0.13.3
+- `DeltaL=1.0 mm`;
+- AstraStruct `1.0000000000002203 mm`;
+- `N=7.5135e-10 kN`.
 
-Barra de `L=4 m`, `alpha=1e-5 /°C`, `DeltaT=25 °C`:
+Expansão impedida:
 
-- expansão teórica `DeltaL = alpha DeltaT L = 1.0 mm`;
-- AstraStruct `ux = 1.0000000000002203 mm`;
-- `N = 7.513521055e-10 kN`.
+- `N=-2250 kN`.
 
-### 12.10 Expansão térmica impedida
+Gradiente livre:
 
-Para a mesma ordem de grandeza térmica com deslocamento axial restringido no benchmark:
+- `theta=-0.0016 rad`;
+- erro geométrico `6.6667e-9 m`;
+- força residual máxima aproximadamente `3.0e-9`.
 
-- `N = -2250 kN`.
+### 11.7 Tangente externa follower
 
-O sinal negativo segue a convenção `N < 0` para compressão.
+No benchmark principal, `Kext` é comparado à diferença central de `Pf(q)` em um estado deformado com `Px=13 kN`, `Py=-7 kN`:
 
-### 12.11 Gradiente térmico livre
+- erro relativo `7.6273e-10`;
+- `max|Kext|=4.1089271687`;
+- assimetria não nula confirmada.
 
-Caso com curvatura térmica uniforme:
+Uma suíte follower independente também verifica a derivada com erro relativo da ordem de `1.11e-9` e testa a transformação da força para `alpha=0.63 rad`.
 
-- rotação de ponta `theta = -0.0016 rad`;
-- coordenada final `x = 3.9999983000002155 m`;
-- coordenada final `y = -0.003199999322666724 m`;
-- erro geométrico contra arco de curvatura constante `6.66666569e-9 m`;
-- força residual máxima `2.99760217e-9`.
+### 11.8 Follower no solver global
 
-### 12.12 Proteção de escopo
+Um balanço com `Py=-10 kN` na extremidade 2 verifica que a direção global acompanha a corda corrente e que reações equilibram a força seguidora atualizada.
+
+### 11.9 Combinação follower
+
+No benchmark axial:
+
+- `Px base=100 kN`;
+- fator da combinação `1.4`;
+- `Px resolvido=140 kN`;
+- deslocamento de ponta `ux=0.0622222222 mm`;
+- reação axial aproximadamente `-140 kN`.
+
+Isso congela a integração entre Scenario Engine e solver co-rotacional.
+
+### 11.10 Proteção de escopo
 
 A suíte confirma erro explícito para:
 
+- follower na extremidade 1;
 - recalques ativos;
 - deslocamentos prescritos não nulos;
 - imperfeição modal ativa.
 
 Nenhum desses estados é descartado silenciosamente.
 
-## 13. Relação com o P-Delta
+## 12. Interface, relatório e rastreabilidade
 
-O P‑Delta atualiza a rigidez geométrica por esforço normal mantendo a cinemática global de pequenas rotações. O co‑rotacional atualiza posição, comprimento, orientação da corda, rotações relativas e tangente a cada iteração.
+A v0.13.4 inclui:
 
-O P‑Delta continua mais abrangente quanto a molas, recalques, releases/semirrígidas e imperfeição modal. O co‑rotacional v0.13.3 acrescenta grandes rotações, UDL/peso próprio/carga pontual como dead loads de referência e ações térmicas como deformações iniciais.
-
-## 14. Promoção para a interface
-
-A v0.13.3 inclui:
-
-1. terceiro modo no painel **Tipo de análise**;
+1. seleção do modo co-rotacional no painel **Tipo de análise**;
 2. controles de incrementos, iterações, tolerância e line search;
-3. validação de compatibilidade antes da seleção;
-4. solução pelo dispatcher principal;
-5. deformada física ×1;
-6. pós-processamento na geometria corrente;
-7. UDL, peso próprio e carga pontual identificados como cargas mortas de referência;
-8. temperatura identificada separadamente como estado inicial `epsilonT/kappaT`;
-9. relatório técnico com cargas mecânicas, estado térmico, convergência e resultados;
-10. bloqueio explícito de envelopes não lineares;
-11. regressões estruturais e E2E em desktop, Android e tablet.
+3. editor de força seguidora com seleção do elemento e caso ativo;
+4. criação/edição de `Px/Py` na extremidade 2;
+5. bloqueio de aplicação do modo Linear/P‑Delta quando existe follower;
+6. solução pelo dispatcher principal com `solverVersion=0.13.4-exp`;
+7. deformada física ×1;
+8. pós-processamento na geometria corrente;
+9. rastreabilidade separada para dead loads, temperatura e follower;
+10. relatório técnico com `Kext`, força local/global atual e limitações;
+11. bloqueio explícito de envelopes não lineares;
+12. regressões estruturais e E2E em desktop, Android e tablet.
 
-O rótulo **experimental** permanece obrigatório. Próximas extensões numéricas prioritárias: follower loads com tangente externa consistente, releases/ligações semirrígidas, imperfeição inicial e arc-length/path-following.
+## 13. Relação com o P‑Delta e próximos passos
+
+O P‑Delta atualiza a rigidez geométrica por esforço normal mantendo cinemática global de pequenas rotações. O co-rotacional atualiza posição, comprimento, orientação da corda, rotações relativas, tangente interna e, quando aplicável, tangente externa da follower.
+
+O P‑Delta continua mais abrangente quanto a molas, recalques, releases/semirrígidas e imperfeição modal. O co‑rotacional v0.13.4 acrescenta grandes rotações, ações térmicas como estado inicial e uma primeira ação não conservativa com tangente externa consistente.
+
+Próximas extensões numéricas prioritárias:
+
+- follower distribuída, interior e follower moment;
+- releases, ligações semirrígidas e offsets no co‑rotacional;
+- imperfeição inicial na geometria co‑rotacional;
+- arc-length/path-following;
+- material não linear e seções de fibras.

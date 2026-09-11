@@ -33,6 +33,10 @@ async function openCommand(page: Page, label: string) {
   throw new Error(`Comando não encontrado na interface atual: ${label}`);
 }
 
+async function storedCounts(page:Page){
+  return page.evaluate(()=>{const raw=localStorage.getItem('astrastruct.project');const p=raw?JSON.parse(raw):null;return{nodes:p?.nodes?.length||0,elements:p?.elements?.length||0}});
+}
+
 test('AstraStruct mounts and analyzes demo model', async ({ page }) => {
   await page.goto('./');
   await expect(page.getByTestId('astra-app')).toBeVisible();
@@ -74,4 +78,27 @@ test('migrated engineering panels mount without runtime failures', async ({ page
     await panel.locator('button[aria-label="Fechar"]').click();
     await expect(panel).toHaveCount(0);
   }
+});
+
+test('React modeling creates nodes and members with undo', async ({ page }) => {
+  await page.goto('./');
+  const canvas=page.getByTestId('model-canvas');
+  const box=await canvas.boundingBox();
+  expect(box).not.toBeNull();
+  const before=await storedCounts(page);
+
+  await page.locator('.model-tools button[aria-label="Criar nó"]').click();
+  await canvas.click({position:{x:(box!.width*.72),y:(box!.height*.28)}});
+  await expect.poll(async()=>(await storedCounts(page)).nodes).toBe(before.nodes+1);
+
+  await page.locator('.model-tools button[aria-label="Desfazer"]').click();
+  await expect.poll(async()=>(await storedCounts(page)).nodes).toBe(before.nodes);
+
+  await page.locator('.model-tools button[aria-label="Desenhar pórtico/viga"]').click();
+  await canvas.click({position:{x:(box!.width*.68),y:(box!.height*.32)}});
+  await canvas.click({position:{x:(box!.width*.82),y:(box!.height*.48)}});
+  await expect.poll(async()=>(await storedCounts(page)).elements).toBe(before.elements+1);
+
+  await page.locator('.model-tools button[aria-label="Desfazer"]').click();
+  await expect.poll(async()=>(await storedCounts(page)).elements).toBe(before.elements);
 });

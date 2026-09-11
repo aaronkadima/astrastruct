@@ -115,20 +115,34 @@ test('result layers render curved deformed shape and N V M diagrams', async ({ p
   await expect(curved).toBeVisible();
   const d=await curved.getAttribute('d');
   expect((d?.match(/L/g)||[]).length).toBeGreaterThan(5);
-
   await page.getByTestId('diagram-M').click();
   await expect(page.getByTestId('result-diagram')).toHaveAttribute('data-diagram','M');
   expect(await page.locator('.result-diagram.moment').count()).toBeGreaterThan(0);
   await expect(page.getByLabel('Escala da deformada')).toBeVisible();
   await expect(page.getByLabel('Escala do diagrama')).toBeVisible();
+  await page.getByTestId('diagram-V').click(); await expect(page.getByTestId('result-diagram')).toHaveAttribute('data-diagram','V');
+  await page.getByTestId('diagram-N').click(); await expect(page.getByTestId('result-diagram')).toHaveAttribute('data-diagram','N');
+  await page.getByTestId('toggle-loads').click(); await expect(page.getByTestId('nodal-loads')).toHaveCount(0); await page.getByTestId('toggle-loads').click(); await expect(page.getByTestId('nodal-loads')).toBeVisible();
+});
+
+test('result probe reports section values and envelope overlays on model', async ({ page }) => {
+  await page.goto('./');
+  await page.getByTestId('analyze-button').click();
+  await page.getByTestId('toggle-probe').click();
+  await expect(page.getByTestId('result-probe-layer')).toBeVisible();
+  const hit=page.locator('.result-probe-hit').first();
+  await expect(hit).toBeVisible();
+  const box=await hit.boundingBox();expect(box).not.toBeNull();
+  await page.mouse.move(box!.x+box!.width*.55,box!.y+Math.max(2,box!.height*.5));
+  await expect(page.getByTestId('result-probe-card')).toBeVisible();
+  await expect(page.getByTestId('result-probe-card')).toContainText('N ');
+  await expect(page.getByTestId('result-probe-card')).toContainText('σ');
+
+  await page.getByTestId('toggle-envelope').click();
+  await expect(page.getByTestId('envelope-diagram')).toHaveAttribute('data-diagram','M');
+  expect(await page.locator('.envelope-diagram').count()).toBeGreaterThan(0);
+  await expect(page.getByTestId('result-probe-card')).toContainText('Env N');
 
   await page.getByTestId('diagram-V').click();
-  await expect(page.getByTestId('result-diagram')).toHaveAttribute('data-diagram','V');
-  await page.getByTestId('diagram-N').click();
-  await expect(page.getByTestId('result-diagram')).toHaveAttribute('data-diagram','N');
-
-  await page.getByTestId('toggle-loads').click();
-  await expect(page.getByTestId('nodal-loads')).toHaveCount(0);
-  await page.getByTestId('toggle-loads').click();
-  await expect(page.getByTestId('nodal-loads')).toBeVisible();
+  await expect(page.getByTestId('envelope-diagram')).toHaveAttribute('data-diagram','V');
 });

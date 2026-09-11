@@ -19,3 +19,8 @@ createRoot(root).render(
     </ErrorBoundary>
   </React.StrictMode>
 );
+
+requestAnimationFrame(()=>{
+  document.documentElement.dataset.astraReady='true';
+  (window as any).__ASTRA_BOOT_OK__?.();
+});

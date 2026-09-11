@@ -1,5 +1,6 @@
 import { zeros, addSub, solveLinear } from './matrix.js';
 import { resolveScenario } from './scenario.js';
+import { buildCorotationalResponses } from './corotationalPostprocess.js';
 
 const EPS=1e-12;
 const normInf=v=>v.length?Math.max(...v.map(x=>Math.abs(x))):0;
@@ -120,5 +121,6 @@ export function solveFrameCorotational2D(project,scenarioId,options={}){
   last=residualAt(prepared,u,1);
   const reactions=prepared.nodes.map((n,i)=>({nodeId:n.id,fx:last.fint[3*i]-prepared.F[3*i],fy:last.fint[3*i+1]-prepared.F[3*i+1],mz:last.fint[3*i+2]-prepared.F[3*i+2]})),displacements=prepared.nodes.map((n,i)=>({nodeId:n.id,ux:u[3*i],uy:u[3*i+1],rz:u[3*i+2]}));
   const elementForces=last.states.map(({item,state})=>({elementId:item.e.id,type:'frame2d',...state.endForces,basicForces:{N:state.basicForces[0],M1:state.basicForces[1],M2:state.basicForces[2]},corotational:{L0:state.L0,l:state.l,alpha:state.alpha,dAlpha:state.dAlpha,basic:state.basic}}));
-  return{type:'frame2d-corotational-experimental',solverVersion:'0.13.0-exp',scenario:resolved.scenario,dofs:prepared.nd,activeDofs:prepared.free.length,displacements,reactions,elementForces,nonlinear:{formulation:'2D co-rotational Euler-Bernoulli',steps,maxIterations,tolerance,lineSearch,history,converged:true}};
+  const base={type:'frame2d-corotational-experimental',solverVersion:'0.13.0-exp',scenario:resolved.scenario,dofs:prepared.nd,activeDofs:prepared.free.length,displacements,reactions,elementForces,nonlinear:{formulation:'2D co-rotational Euler-Bernoulli',steps,maxIterations,tolerance,lineSearch,history,converged:true}};
+  return{...base,elementResponses:buildCorotationalResponses(p,base,41)};
 }

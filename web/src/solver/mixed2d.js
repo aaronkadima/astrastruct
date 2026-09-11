@@ -18,7 +18,7 @@ export function solveMixed2D(project) {
     if(e.type==='frame2d'){
       const sec=(project.sections||[]).find(x=>x.id===e.sectionId);
       const loads=elementLoads.map(l=>l.kind==='selfWeight'?{...l,gamma:Number(l.gamma)||Number(mat.density)||0}:l);
-      const prepared=prepareFrameElement({E:mat.E,A:e.A,I:e.I,L,c,s,loads,releases:e.releases||{},alpha:Number(mat.alpha)||0,sectionHeight:sectionDepth(sec)});
+      const prepared=prepareFrameElement({E:mat.E,A:e.A,I:e.I,L,c,s,loads,releases:e.releases||{},rotationalSprings:e.rotationalSprings||{},alpha:Number(mat.alpha)||0,sectionHeight:sectionDepth(sec)});
       const idx=[3*i,3*i+1,3*i+2,3*j,3*j+1,3*j+2];addSub(K,prepared.kg,idx);prepared.pg.forEach((v,k)=>{F[idx[k]]+=v});cache.push({kind:'frame2d',e,idx,prepared});
     }else if(e.type==='truss2d'){
       if(!(e.A>0))throw new Error(`Elemento ${e.id}: A deve ser positiva.`);
@@ -47,8 +47,8 @@ export function solveMixed2D(project) {
   const displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[3*i],uy:u[3*i+1],rz:u[3*i+2]}));
 
   const elementForces=cache.map(item=>{
-    if(item.kind==='frame2d'){const ug=item.idx.map(i=>u[i]),{q,ul}=recoverFrameEndForces(item.prepared,ug);return{elementId:item.e.id,type:'frame2d',N1:q[0],V1:q[1],M1:q[2],N2:q[3],V2:q[4],M2:q[5],localDisplacements:ul,loadSummary:item.prepared.loadSummary}}
+    if(item.kind==='frame2d'){const ug=item.idx.map(i=>u[i]),{q,ul,ulNodal,connectionRotations}=recoverFrameEndForces(item.prepared,ug);return{elementId:item.e.id,type:'frame2d',N1:q[0],V1:q[1],M1:q[2],N2:q[3],V2:q[4],M2:q[5],localDisplacements:ul,nodalLocalDisplacements:ulNodal,connectionRotations,loadSummary:item.prepared.loadSummary}}
     const {e,i,j,c,s,L,mat,thermalStrain}=item,de=-c*u[3*i]-s*u[3*i+1]+c*u[3*j]+s*u[3*j+1];return{elementId:e.id,type:'truss2d',N:mat.E*e.A*(de/L-thermalStrain),thermalStrain};
   });
-  return{type:'mixed2d',solverVersion:'0.8.0',dofs:nd,activeDofs:free.length,displacements,reactions:nodes.map((n,i)=>({nodeId:n.id,fx:R[3*i],fy:R[3*i+1],mz:R[3*i+2]})),springForces:recoverSpringForces(project,displacements),elementForces};
+  return{type:'mixed2d',solverVersion:'0.9.0',dofs:nd,activeDofs:free.length,displacements,reactions:nodes.map((n,i)=>({nodeId:n.id,fx:R[3*i],fy:R[3*i+1],mz:R[3*i+2]})),springForces:recoverSpringForces(project,displacements),elementForces};
 }

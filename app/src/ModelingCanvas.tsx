@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 // @ts-ignore
 import { makeFrameElement, makeTrussElement, uid } from '../../web/src/core/model.js';
+// @ts-ignore
+import { solveEnvelope } from '../../web/src/solver/envelope.js';
 import { CanvasOverlays } from './CanvasOverlays';
 import { ResultOverlays, type DiagramKind } from './ResultOverlays';
 import { Glyph } from './AstraIcons';
@@ -40,9 +42,7 @@ function snap(project:any,v:number){const g=Number(project.settings?.grid)||.25;
 function nearest(project:any,x:number,y:number,t:number,excludeId?:string){return project.nodes.find((n:any)=>n.id!==excludeId&&Math.hypot(Number(n.x)-x,Number(n.y)-y)<=t)}
 function nextNodeId(project:any){let i=1;while(project.nodes.some((n:any)=>n.id===`N${i}`))i++;return`N${i}`}
 function screenPoint(svg:SVGSVGElement|null,clientX:number,clientY:number){
-  if(!svg)return{X:0,Y:0};
-  const r=svg.getBoundingClientRect();
-  return{X:r.width?(clientX-r.left)*VIEW.w/r.width:0,Y:r.height?(clientY-r.top)*VIEW.h/r.height:0};
+  if(!svg)return{X:0,Y:0};const r=svg.getBoundingClientRect();return{X:r.width?(clientX-r.left)*VIEW.w/r.width:0,Y:r.height?(clientY-r.top)*VIEW.h/r.height:0};
 }
 function isEditableTarget(target:EventTarget|null){const el=target as HTMLElement|null;return !!el?.closest?.('input,textarea,select,button,[contenteditable="true"]')}
 
@@ -52,10 +52,8 @@ function mergeNodeInto(project:any,sourceId:string,targetId:string){
   project.elements=(project.elements||[]).map((e:any)=>({...e,n1:e.n1===sourceId?targetId:e.n1,n2:e.n2===sourceId?targetId:e.n2}));
   const duplicateToKept=new Map<string,string>(),keptByKey=new Map<string,string>();
   project.elements=project.elements.filter((e:any)=>{
-    if(e.n1===e.n2)return false;
-    const pair=[e.n1,e.n2].sort().join('|'),key=`${e.type}|${pair}`,kept=keptByKey.get(key);
-    if(kept){duplicateToKept.set(e.id,kept);return false}
-    keptByKey.set(key,e.id);return true;
+    if(e.n1===e.n2)return false;const pair=[e.n1,e.n2].sort().join('|'),key=`${e.type}|${pair}`,kept=keptByKey.get(key);
+    if(kept){duplicateToKept.set(e.id,kept);return false}keptByKey.set(key,e.id);return true;
   });
   project.elementLoads=(project.elementLoads||[]).map((l:any)=>({...l,elementId:duplicateToKept.get(l.elementId)||l.elementId}));
   const supportMap=new Map<string,any>();
@@ -73,8 +71,7 @@ function mergeNodeInto(project:any,sourceId:string,targetId:string){
 }
 
 function Support({node,project,to}:{node:any;project:any;to:(x:number,y:number)=>[number,number]}){
-  const s=project.supports?.find((x:any)=>x.nodeId===node.id);if(!s||!(s.ux||s.uy||s.rz))return null;
-  const[x,y]=to(node.x,node.y);
+  const s=project.supports?.find((x:any)=>x.nodeId===node.id);if(!s||!(s.ux||s.uy||s.rz))return null;const[x,y]=to(node.x,node.y);
   if(s.ux&&s.uy&&s.rz)return <g className="support"><line x1={x-16} y1={y+14} x2={x+16} y2={y+14}/><line x1={x-13} y1={y+18} x2={x-5} y2={y+26}/><line x1={x-2} y1={y+18} x2={x+6} y2={y+26}/><line x1={x+9} y1={y+18} x2={x+17} y2={y+26}/></g>;
   if(s.uy)return <g className="support"><path d={`M ${x-13} ${y+17} L ${x+13} ${y+17} L ${x} ${y+3} Z`}/><circle cx={x-7} cy={y+22} r="3"/><circle cx={x+7} cy={y+22} r="3"/></g>;
   return <g className="support"><path d={`M ${x-13} ${y+17} L ${x+13} ${y+17} L ${x} ${y+3} Z`}/><line x1={x-18} y1={y+22} x2={x+18} y2={y+22}/></g>;
@@ -85,22 +82,24 @@ export function ModelingCanvas({project,result,tool,selection,onSelection,onComm
   const [camera,setCamera]=useState<Camera>(()=>fitCamera(project));
   const [draft,setDraft]=useState<WorldPoint|null>(null),[cursor,setCursor]=useState<WorldPoint|null>(null),[drag,setDrag]=useState<DragState|null>(null),[dragPoint,setDragPoint]=useState<WorldPoint|null>(null),[panDrag,setPanDrag]=useState<PanState|null>(null);
   const [showLoads,setShowLoads]=useState(true),[showReactions,setShowReactions]=useState(true),[showDeformed,setShowDeformed]=useState(true),[diagram,setDiagram]=useState<DiagramKind>('none');
+  const [showEnvelope,setShowEnvelope]=useState(false),[probeEnabled,setProbeEnabled]=useState(false);
   const [deformMultiplier,setDeformMultiplier]=useState(1),[diagramScale,setDiagramScale]=useState(1);
 
   useEffect(()=>{setDraft(null);setCursor(null);setDrag(null);setDragPoint(null);setPanDrag(null)},[tool]);
   useEffect(()=>{setCamera(fitCamera(project))},[project.id]);
+  useEffect(()=>{if(!result){setShowEnvelope(false);setProbeEnabled(false)}},[result]);
   useEffect(()=>{
     const down=(e:KeyboardEvent)=>{if(e.code==='Escape'){setDraft(null);setDrag(null);setDragPoint(null);setPanDrag(null);return}if(e.code==='Space'&&!isEditableTarget(e.target)){spacePressed.current=true;e.preventDefault()}};
-    const up=(e:KeyboardEvent)=>{if(e.code==='Space')spacePressed.current=false};
-    window.addEventListener('keydown',down);window.addEventListener('keyup',up);return()=>{window.removeEventListener('keydown',down);window.removeEventListener('keyup',up)};
+    const up=(e:KeyboardEvent)=>{if(e.code==='Space')spacePressed.current=false};window.addEventListener('keydown',down);window.addEventListener('keyup',up);return()=>{window.removeEventListener('keydown',down);window.removeEventListener('keyup',up)};
   },[]);
 
   const tf=useMemo(()=>transform(camera),[camera]),fitScale=useMemo(()=>fitCamera(project).scale,[project]);
   const displayProject=useMemo(()=>{if(!drag||!dragPoint)return project;const p=clone(project),n=p.nodes.find((x:any)=>x.id===drag.id);if(n){n.x=dragPoint.x;n.y=dragPoint.y}return p},[project,drag,dragPoint]);
-  const activeCase=project.settings?.activeLoadCaseId||project.loadCases?.[0]?.id;
+  const activeCase=project.settings?.activeLoadCaseId||project.loadCases?.[0]?.id,resultAvailable=!!result?.elementResponses?.length;
   const maxDisp=useMemo(()=>Math.max(0,...(result?.displacements||[]).map((d:any)=>Math.hypot(Number(d.ux)||0,Number(d.uy)||0))),[result]);
   const characteristicLength=useMemo(()=>{const b=bounds(project);return Math.max(2,b.maxX-b.minX,b.maxY-b.minY)},[project]);
   const autoDefScale=maxDisp>1e-15?clamp(characteristicLength*.08/maxDisp,1,5000):1,deformationScale=autoDefScale*deformMultiplier;
+  const envelope=useMemo(()=>{if(!showEnvelope||!resultAvailable)return null;try{return solveEnvelope(project)}catch{return null}},[showEnvelope,resultAvailable,project]);
 
   const gridData=useMemo(()=>{
     const base=Math.max(1e-6,Number(project.settings?.grid)||.25);let step=base;while(step*tf.scale<24)step*=2;
@@ -123,7 +122,7 @@ export function ModelingCanvas({project,result,tool,selection,onSelection,onComm
 
   const startPan=(e:React.PointerEvent<SVGSVGElement>)=>{setPanDrag({pointerId:e.pointerId,clientX:e.clientX,clientY:e.clientY,camera:{...camera}});svgRef.current?.setPointerCapture?.(e.pointerId)};
   const backgroundPointer=(e:React.PointerEvent<SVGSVGElement>)=>{
-    if((e.target as Element).closest?.('[data-entity]'))return;if(e.button===1||spacePressed.current)return;if(e.pointerType==='touch'&&touchesRef.current.size>=2)return;if(e.button!==0)return;
+    if((e.target as Element).closest?.('[data-entity],.result-probe-hit'))return;if(e.button===1||spacePressed.current)return;if(e.pointerType==='touch'&&touchesRef.current.size>=2)return;if(e.button!==0)return;
     if(tool==='select'){onSelection(null);startPan(e);return}
     const point=eventWorld(e);if(tool==='node'){if(point.nodeId)return;const p=clone(project),n=ensureNode(p,point.x,point.y);onCommit(p);onSelection({kind:'node',id:n.id});return}if(tool==='frame2d'||tool==='truss2d'){if(!draft)setDraft(point);else finishMember(point.x,point.y,point.nodeId)};
   };
@@ -149,13 +148,14 @@ export function ModelingCanvas({project,result,tool,selection,onSelection,onComm
   const wheel=(e:React.WheelEvent<SVGSVGElement>)=>{e.preventDefault();const pt=screenPoint(svgRef.current,e.clientX,e.clientY),factor=Math.exp(-e.deltaY*.0015);setCamera(prev=>{const old=transform(prev),[wx,wy]=old.from(pt.X,pt.Y),nextScale=clamp(prev.scale*factor,MIN_SCALE,MAX_SCALE);return{scale:nextScale,cx:wx-(pt.X-VIEW.w/2)/nextScale,cy:wy+(pt.Y-VIEW.h/2)/nextScale}})};
   const zoomBy=(factor:number)=>setCamera(prev=>({...prev,scale:clamp(prev.scale*factor,MIN_SCALE,MAX_SCALE)})),fitView=()=>setCamera(fitCamera(project));
   const toggleDiagram=(kind:Exclude<DiagramKind,'none'>)=>setDiagram(d=>d===kind?'none':kind);
+  const toggleEnvelope=()=>setShowEnvelope(v=>{const next=!v;if(next&&diagram==='none')setDiagram('M');return next});
 
-  const draftEnd=cursor&&draft?tf.to(cursor.x,cursor.y):null,draftStart=draft?tf.to(draft.x,draft.y):null,zoomPercent=Math.round((camera.scale/Math.max(1e-9,fitScale))*100),resultAvailable=!!result?.elementResponses?.length;
+  const draftEnd=cursor&&draft?tf.to(cursor.x,cursor.y):null,draftStart=draft?tf.to(draft.x,draft.y):null,zoomPercent=Math.round((camera.scale/Math.max(1e-9,fitScale))*100);
   return <div className="canvas-shell">
     <svg ref={svgRef} data-testid="model-canvas" data-camera-scale={camera.scale.toFixed(4)} data-camera-cx={camera.cx.toFixed(5)} data-camera-cy={camera.cy.toFixed(5)} className={`model-canvas modeling tool-${tool} ${panDrag?'is-panning':''}`} viewBox={`0 0 ${VIEW.w} ${VIEW.h}`} role="img" aria-label="Modelo estrutural 2D" onPointerDownCapture={pointerCaptureDown} onPointerMoveCapture={pointerCaptureMove} onPointerUpCapture={pointerCaptureUp} onPointerCancelCapture={pointerCaptureUp} onPointerDown={backgroundPointer} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onPointerLeave={e=>{if(e.buttons===0)pointerUp()}} onWheel={wheel} onContextMenu={e=>e.preventDefault()}>
       <g className="grid-lines">{gridData.xs.map((x:number)=><line key={`v${x}`} x1={tf.to(x,0)[0]} y1="0" x2={tf.to(x,0)[0]} y2={VIEW.h}/>)}{gridData.ys.map((y:number)=><line key={`h${y}`} x1="0" y1={tf.to(0,y)[1]} x2={VIEW.w} y2={tf.to(0,y)[1]}/>)}</g>
       {displayProject.elements?.map((e:any)=>{const a=displayProject.nodes.find((n:any)=>n.id===e.n1),b=displayProject.nodes.find((n:any)=>n.id===e.n2);if(!a||!b)return null;const[x1,y1]=tf.to(a.x,a.y),[x2,y2]=tf.to(b.x,b.y);return <g data-entity="element" key={e.id} className="clickable" onPointerDown={ev=>{if(spacePressed.current||ev.button!==0)return;ev.stopPropagation();if(tool==='select')onSelection({kind:'element',id:e.id})}}><line className={`member ${e.type==='truss2d'?'truss':''} ${selection?.kind==='element'&&selection.id===e.id?'selected':''}`} x1={x1} y1={y1} x2={x2} y2={y2}/><text className="element-label" x={(x1+x2)/2+8} y={(y1+y2)/2-8}>{e.id}</text></g>})}
-      <ResultOverlays result={result} to={tf.to} showDeformed={showDeformed} deformationScale={deformationScale} diagram={diagram} diagramScale={diagramScale}/>
+      <ResultOverlays result={result} envelope={envelope} to={tf.to} showDeformed={showDeformed} deformationScale={deformationScale} diagram={diagram} diagramScale={diagramScale} showEnvelope={showEnvelope} probeEnabled={probeEnabled}/>
       <CanvasOverlays project={project} displayProject={displayProject} result={result} activeCase={activeCase} to={tf.to} showLoads={showLoads} showReactions={showReactions}/>
       {displayProject.nodes?.map((n:any)=>{const[x,y]=tf.to(n.x,n.y);return <g data-entity="node" data-node-id={n.id} key={n.id} className="clickable" onPointerDown={e=>nodePointerDown(e,n.id)}><Support node={n} project={displayProject} to={tf.to}/><circle className={`node ${selection?.kind==='node'&&selection.id===n.id?'selected':''}`} cx={x} cy={y} r={selection?.kind==='node'&&selection.id===n.id?9:6}/><text className="node-label" x={x+10} y={y-10}>{n.id}</text></g>})}
       {draftStart&&draftEnd&&<line className="draft-member" x1={draftStart[0]} y1={draftStart[1]} x2={draftEnd[0]} y2={draftEnd[1]}/>} {cursor&&tool!=='select'&&<circle className={`cursor-snap ${cursor.nodeId?'node-hit':''}`} cx={tf.to(cursor.x,cursor.y)[0]} cy={tf.to(cursor.x,cursor.y)[1]} r={cursor.nodeId?8:5}/>} 
@@ -165,6 +165,8 @@ export function ModelingCanvas({project,result,tool,selection,onSelection,onComm
       <button data-testid="toggle-loads" className={showLoads?'active':''} aria-label="Mostrar ou ocultar ações" title="Ações" onClick={()=>setShowLoads(v=>!v)}><Glyph name="loads"/></button>
       <button data-testid="toggle-reactions" className={showReactions?'active':''} aria-label="Mostrar ou ocultar reações" title="Reações" disabled={!result} onClick={()=>setShowReactions(v=>!v)}><Glyph name="reactions"/></button>
       <button data-testid="toggle-deformed" className={showDeformed?'active':''} aria-label="Mostrar ou ocultar deformada" title="Deformada" disabled={!resultAvailable} onClick={()=>setShowDeformed(v=>!v)}><Glyph name="deformed"/></button>
+      <button data-testid="toggle-probe" className={probeEnabled?'active':''} aria-label="Sonda de resultados" title="Inspecionar resultados na barra" disabled={!resultAvailable} onClick={()=>setProbeEnabled(v=>!v)}><Glyph name="probe"/></button>
+      <button data-testid="toggle-envelope" className={showEnvelope?'active':''} aria-label="Envelope no modelo" title="Envelope mínimo/máximo" disabled={!resultAvailable} onClick={toggleEnvelope}><Glyph name="envelope"/></button>
       <span className="result-tool-sep"/>
       <button data-testid="diagram-N" className={diagram==='N'?'active':''} aria-label="Diagrama de esforço normal" title="N(x)" disabled={!resultAvailable} onClick={()=>toggleDiagram('N')}><Glyph name="axial"/></button>
       <button data-testid="diagram-V" className={diagram==='V'?'active':''} aria-label="Diagrama de esforço cortante" title="V(x)" disabled={!resultAvailable} onClick={()=>toggleDiagram('V')}><Glyph name="shear"/></button>
@@ -173,10 +175,10 @@ export function ModelingCanvas({project,result,tool,selection,onSelection,onComm
 
     {resultAvailable&&(showDeformed||diagram!=='none')&&<div className="canvas-result-scales">
       {showDeformed&&<label title="Escala gráfica da deformada"><Glyph name="deformed"/><input aria-label="Escala da deformada" type="range" min="0.1" max="4" step="0.1" value={deformMultiplier} onChange={e=>setDeformMultiplier(Number(e.target.value))}/><span>×{deformationScale>=100?deformationScale.toFixed(0):deformationScale.toFixed(1)}</span></label>}
-      {diagram!=='none'&&<label title="Escala gráfica do diagrama"><Glyph name={diagram==='N'?'axial':diagram==='V'?'shear':'moment'}/><input aria-label="Escala do diagrama" type="range" min="0.4" max="2.5" step="0.1" value={diagramScale} onChange={e=>setDiagramScale(Number(e.target.value))}/><span>{diagram} ×{diagramScale.toFixed(1)}</span></label>}
+      {diagram!=='none'&&<label title={showEnvelope?'Escala gráfica do envelope':'Escala gráfica do diagrama'}><Glyph name={showEnvelope?'envelope':diagram==='N'?'axial':diagram==='V'?'shear':'moment'}/><input aria-label="Escala do diagrama" type="range" min="0.4" max="2.5" step="0.1" value={diagramScale} onChange={e=>setDiagramScale(Number(e.target.value))}/><span>{showEnvelope?'ENV ':''}{diagram} ×{diagramScale.toFixed(1)}</span></label>}
     </div>}
 
     <div className="canvas-nav" role="group" aria-label="Navegação do canvas"><button type="button" aria-label="Aproximar" title="Aproximar" onClick={()=>zoomBy(1.25)}><Glyph name="zoomIn"/></button><button type="button" aria-label="Afastar" title="Afastar" onClick={()=>zoomBy(.8)}><Glyph name="zoomOut"/></button><button type="button" aria-label="Ajustar à vista" title="Ajustar modelo à vista" onClick={fitView}><Glyph name="fit"/></button><span className="zoom-readout">{zoomPercent}%</span></div>
-    <div className="canvas-hud"><span>{cursor?`X ${cursor.x.toFixed(3)} · Y ${cursor.y.toFixed(3)}`:'X — · Y —'}</span><span>grade {gridData.step.toFixed(gridData.step<1?3:2)} m</span><span className="desktop-hint">arraste nó · fundo = pan · roda/pinça = zoom · Espaço = pan</span></div>
+    <div className="canvas-hud"><span>{cursor?`X ${cursor.x.toFixed(3)} · Y ${cursor.y.toFixed(3)}`:'X — · Y —'}</span><span>grade {gridData.step.toFixed(gridData.step<1?3:2)} m</span><span className="desktop-hint">arraste nó · fundo = pan · roda/pinça = zoom · Espaço = pan{probeEnabled?' · sonda ativa':''}</span></div>
   </div>;
 }

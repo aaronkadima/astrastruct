@@ -4,6 +4,7 @@ import App from './App';
 import { ErrorBoundary } from './ErrorBoundary';
 import './styles.css';
 import './panels.css';
+import './analysis-v13.css';
 import './modeling.css';
 import './results.css';
 import './buckling.css';

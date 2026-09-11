@@ -1,6 +1,6 @@
 import { emptyProject, makeFrameElement } from '../web/src/core/model.js';
 import { solve } from '../web/src/solver/index.js';
-import { corotationalElementState, solveFrameCorotational2D } from '../web/src/solver/corotational2d.js';
+import { corotationalElementState, followerEndLoadState, solveFrameCorotational2D } from '../web/src/solver/corotational2d.js';
 
 function assert(condition,message){if(!condition)throw new Error(message)}
 function near(actual,expected,tol,message){if(Math.abs(actual-expected)>tol)throw new Error(`${message}: esperado ${expected}, obtido ${actual}`)}
@@ -22,7 +22,7 @@ function simpleCantilever(){
   console.log('Co-rotacional — objetividade OK','beta=',beta,'rad');
 }
 
-// 2) Tangente consistente: comparar d(fint)/dq analítico contra diferença central.
+// 2) Tangente interna consistente: comparar d(fint)/dq analítico contra diferença central.
 {
   const args={X1:0,Y1:0,X2:3,Y2:1,E:200e6,A:.01,I:.0002},q=[.10,.20,.30,.40,-.10,-.20],h=1e-7;
   const base=corotationalElementState({...args,qGlobal:q});let maxDiff=0,maxRef=0;
@@ -31,8 +31,8 @@ function simpleCantilever(){
     const fp=corotationalElementState({...args,qGlobal:qp}).internal,fm=corotationalElementState({...args,qGlobal:qm}).internal;
     for(let i=0;i<6;i++){const numeric=(fp[i]-fm[i])/(2*h),analytic=base.tangent[i][j];maxDiff=Math.max(maxDiff,Math.abs(analytic-numeric));maxRef=Math.max(maxRef,Math.abs(numeric))}
   }
-  const relative=maxDiff/Math.max(1,maxRef);assert(relative<2e-6,`Co-rotacional: tangente inconsistente, erro relativo ${relative}`);
-  console.log('Co-rotacional — tangente consistente OK','erro relativo=',relative);
+  const relative=maxDiff/Math.max(1,maxRef);assert(relative<2e-6,`Co-rotacional: tangente interna inconsistente, erro relativo ${relative}`);
+  console.log('Co-rotacional — tangente interna consistente OK','erro relativo=',relative);
 }
 
 // 3) Limite de pequenas rotações: console deve reproduzir PL^3/(3EI).
@@ -144,7 +144,35 @@ function circularArc(ne){
   console.log(p.name,'OK','theta=',tip.rz,'tip=',x,y,'erro [m]=',error,'força residual=',maxForce);
 }
 
-// 11) Estados ainda fora do escopo devem ser recusados, nunca ignorados.
+// 11) Tangente externa consistente da força seguidora de extremidade.
+{
+  const X1=0,Y1=0,X2=3,Y2=1,q=[.10,.20,.13,.40,-.10,-.08],px=13,py=-7,h=1e-7;
+  const stateFromQ=qq=>{const x1=X1+qq[0],y1=Y1+qq[1],x2=X2+qq[3],y2=Y2+qq[4],dx=x2-x1,dy=y2-y1,l=Math.hypot(dx,dy);return followerEndLoadState({px,py,end:2,l,c:dx/l,s:dy/l})};
+  const base=stateFromQ(q);let maxDiff=0,maxRef=0;
+  for(let j=0;j<6;j++){
+    const qp=[...q],qm=[...q];qp[j]+=h;qm[j]-=h;const fp=stateFromQ(qp).vector,fm=stateFromQ(qm).vector;
+    for(let i=0;i<6;i++){const numeric=(fp[i]-fm[i])/(2*h),analytic=base.tangent[i][j];maxDiff=Math.max(maxDiff,Math.abs(analytic-numeric));maxRef=Math.max(maxRef,Math.abs(numeric))}
+  }
+  const relative=maxDiff/Math.max(1,maxRef);assert(relative<2e-7,`Follower: tangente externa inconsistente, erro relativo ${relative}`);
+  assert(Math.abs(base.tangent[3][1]-base.tangent[1][3])>1e-6,'Follower: Kext deveria ser não simétrica neste estado');
+  console.log('Co-rotacional — tangente externa follower OK','erro relativo=',relative,'max|Kext|=',base.tangentMaxAbs);
+}
+
+// 12) Follower axial + combinação: o Scenario Engine deve escalar Px/Py antes do caminho de Newton.
+{
+  const p=emptyProject();p.name='Co-rotacional — follower axial combinado';
+  p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:2,y:0}];p.elements=[makeFrameElement({id:'E1',n1:'N1',n2:'N2'})];
+  p.supports=[{nodeId:'N1',ux:true,uy:true,rz:true}];p.loads=[];
+  p.elementLoads=[{id:'F1',caseId:'LC1',elementId:'E1',kind:'followerEnd',end:2,px:100,py:0}];
+  p.loadCombinations=[{id:'COMB_F',name:'1.4 follower',type:'custom',terms:[{caseId:'LC1',factor:1.4}]}];
+  const r=solveFrameCorotational2D(p,'COMB_F',{steps:7,maxIterations:35,tolerance:1e-10}),tip=r.displacements.find(d=>d.nodeId==='N2'),ra=r.reactions.find(x=>x.nodeId==='N1'),f=r.elementResponses[0].followerEnds[0],expectedP=140,expectedU=expectedP*2/(30e6*.15);
+  near(tip.ux,expectedU,2e-10,'Follower combinado: deslocamento axial');near(tip.uy,0,1e-10,'Follower combinado: deslocamento transversal');near(ra.fx,-expectedP,2e-6,'Follower combinado: reação axial');
+  near(f.px,expectedP,1e-12,'Follower combinado: Px escalado');near(f.currentGlobal.fx,expectedP,2e-6,'Follower combinado: Fx global');near(f.currentGlobal.fy,0,1e-10,'Follower combinado: Fy global');
+  assert(f.consistentExternalTangent===true,'Follower combinado: metadado da tangente externa ausente');assert(r.nonlinear.followerLoads?.count===1,'Follower combinado: contagem de follower incorreta');assert(r.solverVersion==='0.13.4-exp','Follower combinado: versão do solver incorreta');
+  console.log(p.name,'OK','Px=',f.px,'ux [mm]=',tip.ux*1000,'R=',ra.fx);
+}
+
+// 13) Estados ainda fora do escopo devem ser recusados, nunca ignorados.
 {
   const settlement=simpleCantilever();settlement.settlements=[{id:'SET1',caseId:'LC1',nodeId:'N1',ux:0,uy:.001,rz:0}];
   mustThrow(()=>solveFrameCorotational2D(settlement,'LC1'),/deslocamentos impostos|recalques/i,'Co-rotacional: recalque deve ser recusado');
@@ -152,7 +180,9 @@ function circularArc(ne){
   mustThrow(()=>solveFrameCorotational2D(imperfect,'LC1'),/imperfei/i,'Co-rotacional: imperfeição modal deve ser recusada');
   const prescribed=simpleCantilever();prescribed.supports[0].baseUxValue=.001;
   mustThrow(()=>solveFrameCorotational2D(prescribed,'LC1'),/deslocamentos impostos/i,'Co-rotacional: deslocamento base deve ser recusado');
-  console.log('Co-rotacional — escopo protegido OK: recalques, imperfeição e deslocamento base recusados');
+  const invalidFollower=simpleCantilever();invalidFollower.loads=[];invalidFollower.elementLoads=[{id:'F1',caseId:'LC1',elementId:'E1',kind:'followerEnd',end:1,px:0,py:-10}];
+  mustThrow(()=>solveFrameCorotational2D(invalidFollower,'LC1'),/extremidade 2/i,'Co-rotacional: follower na extremidade 1 deve ser recusada');
+  console.log('Co-rotacional — escopo protegido OK: recalques, imperfeição, deslocamento base e follower fora da ext. 2 recusados');
 }
 
-console.log('Todos os smoke tests co-rotacionais experimentais do AstraStruct v0.13.3 passaram.');
+console.log('Todos os smoke tests co-rotacionais experimentais do AstraStruct v0.13.4 passaram.');

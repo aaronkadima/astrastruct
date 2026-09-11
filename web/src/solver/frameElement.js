@@ -1,4 +1,5 @@
-import { solveLinear, mul } from './matrix.js';
+import { mul } from './matrix.js';
+import { condenseEndConnections, recoverEndConnections, endRotationalStiffness } from './endConnections.js';
 
 export function transpose(A) { return A[0].map((_, j) => A.map(r => r[j])); }
 export function mm(A, B) { return A.map(r => B[0].map((_, j) => r.reduce((s, v, k) => s + v * B[k][j], 0))); }
@@ -37,8 +38,6 @@ export function thermalLoadVector({E,A,I,alpha=0,dT=0,dTGradient=0,sectionHeight
   if(Math.abs(grad)>1e-15){
     const h=Number(sectionHeight)||0;
     if(!(h>0))throw new Error('Gradiente térmico requer altura/profundidade positiva da seção.');
-    // dTGradient = T_top - T_bottom. Com +y local para o topo,
-    // a curvatura térmica livre compatível com epsilon_x=-y*kappa é -alpha*ΔT/h.
     kappa0=-(Number(alpha)||0)*grad/h;
   }
   const n0=E*A*eps0,m0=E*I*kappa0;
@@ -46,26 +45,8 @@ export function thermalLoadVector({E,A,I,alpha=0,dT=0,dTGradient=0,sectionHeight
 }
 
 function addVectors(a,b){return a.map((v,i)=>v+b[i])}
-function zeroMatrix(n){return Array.from({length:n},()=>Array(n).fill(0))}
-function releasedDofs(releases={}){const out=[];if(releases.rz1)out.push(2);if(releases.rz2)out.push(5);return out}
 
-function condenseReleased(kl,pOriginal,releases={}) {
-  const r=releasedDofs(releases);
-  if(!r.length)return{kEff:kl.map(row=>[...row]),pEff:[...pOriginal],releaseData:null};
-  const a=[0,1,2,3,4,5].filter(i=>!r.includes(i));
-  const Kaa=a.map(i=>a.map(j=>kl[i][j])),Kar=a.map(i=>r.map(j=>kl[i][j])),Kra=r.map(i=>a.map(j=>kl[i][j])),Krr=r.map(i=>r.map(j=>kl[i][j]));
-  const pa=a.map(i=>pOriginal[i]),pr=r.map(i=>pOriginal[i]);
-  const columns=a.map((_,j)=>solveLinear(Krr,Kra.map(row=>row[j])));
-  const X=r.map((_,ri)=>a.map((_,aj)=>columns[aj][ri]));
-  const y=solveLinear(Krr,pr);
-  const kCond=Kaa.map((row,i)=>row.map((v,j)=>v-Kar[i].reduce((sum,kar,rr)=>sum+kar*X[rr][j],0)));
-  const pCond=pa.map((v,i)=>v-Kar[i].reduce((sum,kar,rr)=>sum+kar*y[rr],0));
-  const kEff=zeroMatrix(6),pEff=Array(6).fill(0);
-  a.forEach((ii,i)=>{pEff[ii]=pCond[i];a.forEach((jj,j)=>{kEff[ii][jj]=kCond[i][j]})});
-  return{kEff,pEff,releaseData:{active:a,released:r,Krr,Kra,pr}};
-}
-
-export function prepareFrameElement({E,A,I,L,c,s,loads=[],releases={},alpha=0,sectionHeight=0}) {
+export function prepareFrameElement({E,A,I,L,c,s,loads=[],releases={},rotationalSprings={},alpha=0,sectionHeight=0}) {
   if(!(E>0))throw new Error('Módulo de elasticidade E deve ser positivo.');
   if(!(A>0))throw new Error('Área A deve ser positiva.');
   if(!(I>0))throw new Error('Inércia I deve ser positiva.');
@@ -91,32 +72,27 @@ export function prepareFrameElement({E,A,I,L,c,s,loads=[],releases={},alpha=0,se
       loadSummary.uniform.qx+=qx;loadSummary.uniform.qy+=qy;
     } else if(load.kind==='thermal'){
       const dT=Number(load.dT)||0,dTGradient=Number(load.dTGradient)||0;
-      const th=thermalLoadVector({E,A,I,alpha, dT,dTGradient,sectionHeight});
+      const th=thermalLoadVector({E,A,I,alpha,dT,dTGradient,sectionHeight});
       pOriginal=addVectors(pOriginal,th.vector);
       loadSummary.thermal.dT+=dT;loadSummary.thermal.dTGradient+=dTGradient;
       loadSummary.thermal.eps0+=th.eps0;loadSummary.thermal.kappa0+=th.kappa0;
     }
   }
 
-  const {kEff,pEff,releaseData}=condenseReleased(kl,pOriginal,releases);
+  const {kEff,pEff,connectionData}=condenseEndConnections(kl,pOriginal,releases,rotationalSprings);
   const kg=mm(transpose(tr),mm(kEff,tr)),pg=mul(transpose(tr),pEff);
-  return{kl,tr,kg,pg,pOriginal,pEff,releaseData,L,c,s,loadSummary};
+  return{kl,tr,kg,pg,pOriginal,pEff,connectionData,L,c,s,loadSummary};
 }
 
 export function recoverFrameEndForces(prepared,globalDisplacements) {
-  const ulNodal=mul(prepared.tr,globalDisplacements);let ul=[...ulNodal];
-  if(prepared.releaseData){
-    const {active,released,Krr,Kra,pr}=prepared.releaseData,ua=active.map(i=>ulNodal[i]);
-    const rhs=pr.map((v,ri)=>v-Kra[ri].reduce((sum,k,j)=>sum+k*ua[j],0));
-    const ur=solveLinear(Krr,rhs);released.forEach((dof,i)=>{ul[dof]=ur[i]});
-  }
-  const q=mul(prepared.kl,ul).map((v,i)=>v-prepared.pOriginal[i]);
-  return{q,ul,ulNodal};
+  const ulNodal=mul(prepared.tr,globalDisplacements);
+  const recovered=recoverEndConnections(prepared.kl,prepared.pOriginal,ulNodal,prepared.connectionData);
+  return{q:recovered.q,ul:recovered.uElement,ulNodal,connectionRotations:recovered.connectionRotations};
 }
 
 export function frameEndHasRotationalStiffness(element,nodeId) {
   if(element.type!=='frame2d')return false;
-  if(element.n1===nodeId)return !element.releases?.rz1;
-  if(element.n2===nodeId)return !element.releases?.rz2;
+  if(element.n1===nodeId)return endRotationalStiffness(element.releases||{},element.rotationalSprings||{},1)>0;
+  if(element.n2===nodeId)return endRotationalStiffness(element.releases||{},element.rotationalSprings||{},2)>0;
   return false;
 }

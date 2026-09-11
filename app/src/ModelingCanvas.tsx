@@ -82,12 +82,12 @@ export function ModelingCanvas({project,result,tool,selection,onSelection,onComm
   const [camera,setCamera]=useState<Camera>(()=>fitCamera(project));
   const [draft,setDraft]=useState<WorldPoint|null>(null),[cursor,setCursor]=useState<WorldPoint|null>(null),[drag,setDrag]=useState<DragState|null>(null),[dragPoint,setDragPoint]=useState<WorldPoint|null>(null),[panDrag,setPanDrag]=useState<PanState|null>(null);
   const [showLoads,setShowLoads]=useState(true),[showReactions,setShowReactions]=useState(true),[showDeformed,setShowDeformed]=useState(true),[diagram,setDiagram]=useState<DiagramKind>('none');
-  const [showEnvelope,setShowEnvelope]=useState(false),[probeEnabled,setProbeEnabled]=useState(false);
+  const [showEnvelope,setShowEnvelope]=useState(false),[probeEnabled,setProbeEnabled]=useState(false),[showStressMap,setShowStressMap]=useState(false);
   const [deformMultiplier,setDeformMultiplier]=useState(1),[diagramScale,setDiagramScale]=useState(1);
 
   useEffect(()=>{setDraft(null);setCursor(null);setDrag(null);setDragPoint(null);setPanDrag(null)},[tool]);
   useEffect(()=>{setCamera(fitCamera(project))},[project.id]);
-  useEffect(()=>{if(!result){setShowEnvelope(false);setProbeEnabled(false)}},[result]);
+  useEffect(()=>{if(!result){setShowEnvelope(false);setProbeEnabled(false);setShowStressMap(false)}},[result]);
   useEffect(()=>{
     const down=(e:KeyboardEvent)=>{if(e.code==='Escape'){setDraft(null);setDrag(null);setDragPoint(null);setPanDrag(null);return}if(e.code==='Space'&&!isEditableTarget(e.target)){spacePressed.current=true;e.preventDefault()}};
     const up=(e:KeyboardEvent)=>{if(e.code==='Space')spacePressed.current=false};window.addEventListener('keydown',down);window.addEventListener('keyup',up);return()=>{window.removeEventListener('keydown',down);window.removeEventListener('keyup',up)};
@@ -155,7 +155,7 @@ export function ModelingCanvas({project,result,tool,selection,onSelection,onComm
     <svg ref={svgRef} data-testid="model-canvas" data-camera-scale={camera.scale.toFixed(4)} data-camera-cx={camera.cx.toFixed(5)} data-camera-cy={camera.cy.toFixed(5)} className={`model-canvas modeling tool-${tool} ${panDrag?'is-panning':''}`} viewBox={`0 0 ${VIEW.w} ${VIEW.h}`} role="img" aria-label="Modelo estrutural 2D" onPointerDownCapture={pointerCaptureDown} onPointerMoveCapture={pointerCaptureMove} onPointerUpCapture={pointerCaptureUp} onPointerCancelCapture={pointerCaptureUp} onPointerDown={backgroundPointer} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onPointerLeave={e=>{if(e.buttons===0)pointerUp()}} onWheel={wheel} onContextMenu={e=>e.preventDefault()}>
       <g className="grid-lines">{gridData.xs.map((x:number)=><line key={`v${x}`} x1={tf.to(x,0)[0]} y1="0" x2={tf.to(x,0)[0]} y2={VIEW.h}/>)}{gridData.ys.map((y:number)=><line key={`h${y}`} x1="0" y1={tf.to(0,y)[1]} x2={VIEW.w} y2={tf.to(0,y)[1]}/>)}</g>
       {displayProject.elements?.map((e:any)=>{const a=displayProject.nodes.find((n:any)=>n.id===e.n1),b=displayProject.nodes.find((n:any)=>n.id===e.n2);if(!a||!b)return null;const[x1,y1]=tf.to(a.x,a.y),[x2,y2]=tf.to(b.x,b.y);return <g data-entity="element" key={e.id} className="clickable" onPointerDown={ev=>{if(spacePressed.current||ev.button!==0)return;ev.stopPropagation();if(tool==='select')onSelection({kind:'element',id:e.id})}}><line className={`member ${e.type==='truss2d'?'truss':''} ${selection?.kind==='element'&&selection.id===e.id?'selected':''}`} x1={x1} y1={y1} x2={x2} y2={y2}/><text className="element-label" x={(x1+x2)/2+8} y={(y1+y2)/2-8}>{e.id}</text></g>})}
-      <ResultOverlays result={result} envelope={envelope} to={tf.to} showDeformed={showDeformed} deformationScale={deformationScale} diagram={diagram} diagramScale={diagramScale} showEnvelope={showEnvelope} probeEnabled={probeEnabled}/>
+      <ResultOverlays result={result} envelope={envelope} to={tf.to} showDeformed={showDeformed} deformationScale={deformationScale} diagram={diagram} diagramScale={diagramScale} showEnvelope={showEnvelope} probeEnabled={probeEnabled} showStressMap={showStressMap}/>
       <CanvasOverlays project={project} displayProject={displayProject} result={result} activeCase={activeCase} to={tf.to} showLoads={showLoads} showReactions={showReactions}/>
       {displayProject.nodes?.map((n:any)=>{const[x,y]=tf.to(n.x,n.y);return <g data-entity="node" data-node-id={n.id} key={n.id} className="clickable" onPointerDown={e=>nodePointerDown(e,n.id)}><Support node={n} project={displayProject} to={tf.to}/><circle className={`node ${selection?.kind==='node'&&selection.id===n.id?'selected':''}`} cx={x} cy={y} r={selection?.kind==='node'&&selection.id===n.id?9:6}/><text className="node-label" x={x+10} y={y-10}>{n.id}</text></g>})}
       {draftStart&&draftEnd&&<line className="draft-member" x1={draftStart[0]} y1={draftStart[1]} x2={draftEnd[0]} y2={draftEnd[1]}/>} {cursor&&tool!=='select'&&<circle className={`cursor-snap ${cursor.nodeId?'node-hit':''}`} cx={tf.to(cursor.x,cursor.y)[0]} cy={tf.to(cursor.x,cursor.y)[1]} r={cursor.nodeId?8:5}/>} 
@@ -167,6 +167,7 @@ export function ModelingCanvas({project,result,tool,selection,onSelection,onComm
       <button data-testid="toggle-deformed" className={showDeformed?'active':''} aria-label="Mostrar ou ocultar deformada" title="Deformada" disabled={!resultAvailable} onClick={()=>setShowDeformed(v=>!v)}><Glyph name="deformed"/></button>
       <button data-testid="toggle-probe" className={probeEnabled?'active':''} aria-label="Sonda de resultados" title="Inspecionar resultados na barra" disabled={!resultAvailable} onClick={()=>setProbeEnabled(v=>!v)}><Glyph name="probe"/></button>
       <button data-testid="toggle-envelope" className={showEnvelope?'active':''} aria-label="Envelope no modelo" title="Envelope mínimo/máximo" disabled={!resultAvailable} onClick={toggleEnvelope}><Glyph name="envelope"/></button>
+      <button data-testid="toggle-stress-map" className={showStressMap?'active':''} aria-label="Mapa de tensão elástica" title="Mapa |σ| elástico [MPa]" disabled={!resultAvailable} onClick={()=>setShowStressMap(v=>!v)}><Glyph name="stress"/></button>
       <span className="result-tool-sep"/>
       <button data-testid="diagram-N" className={diagram==='N'?'active':''} aria-label="Diagrama de esforço normal" title="N(x)" disabled={!resultAvailable} onClick={()=>toggleDiagram('N')}><Glyph name="axial"/></button>
       <button data-testid="diagram-V" className={diagram==='V'?'active':''} aria-label="Diagrama de esforço cortante" title="V(x)" disabled={!resultAvailable} onClick={()=>toggleDiagram('V')}><Glyph name="shear"/></button>
@@ -179,6 +180,6 @@ export function ModelingCanvas({project,result,tool,selection,onSelection,onComm
     </div>}
 
     <div className="canvas-nav" role="group" aria-label="Navegação do canvas"><button type="button" aria-label="Aproximar" title="Aproximar" onClick={()=>zoomBy(1.25)}><Glyph name="zoomIn"/></button><button type="button" aria-label="Afastar" title="Afastar" onClick={()=>zoomBy(.8)}><Glyph name="zoomOut"/></button><button type="button" aria-label="Ajustar à vista" title="Ajustar modelo à vista" onClick={fitView}><Glyph name="fit"/></button><span className="zoom-readout">{zoomPercent}%</span></div>
-    <div className="canvas-hud"><span>{cursor?`X ${cursor.x.toFixed(3)} · Y ${cursor.y.toFixed(3)}`:'X — · Y —'}</span><span>grade {gridData.step.toFixed(gridData.step<1?3:2)} m</span><span className="desktop-hint">arraste nó · fundo = pan · roda/pinça = zoom · Espaço = pan{probeEnabled?' · sonda ativa':''}</span></div>
+    <div className="canvas-hud"><span>{cursor?`X ${cursor.x.toFixed(3)} · Y ${cursor.y.toFixed(3)}`:'X — · Y —'}</span><span>grade {gridData.step.toFixed(gridData.step<1?3:2)} m</span><span className="desktop-hint">arraste nó · fundo = pan · roda/pinça = zoom · Espaço = pan{probeEnabled?' · sonda ativa':''}{showStressMap?' · mapa |σ|':''}</span></div>
   </div>;
 }

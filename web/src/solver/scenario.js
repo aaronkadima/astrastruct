@@ -15,7 +15,7 @@ export function resolveScenario(project,scenarioId){
   scaled.elementLoads=(project.elementLoads||[]).map(load=>({load,factor:factorFor(load)})).filter(x=>Math.abs(x.factor)>1e-15).map(({load,factor})=>{
     const out={...clone(load),sourceCaseId:load.caseId||firstCaseId,scenarioFactor:factor};
     if(load.kind==='uniform'){out.qx=(load.qx||0)*factor;out.qy=(load.qy||0)*factor}
-    else if(load.kind==='point'){out.px=(load.px||0)*factor;out.py=(load.py||0)*factor}
+    else if(load.kind==='point'||load.kind==='followerEnd'){out.px=(load.px||0)*factor;out.py=(load.py||0)*factor}
     else if(load.kind==='selfWeight'){out.weightFactor=factor*(Number(load.factor)||1)}
     else if(load.kind==='thermal'){out.dT=(load.dT||0)*factor;out.dTGradient=(load.dTGradient||0)*factor}
     return out;

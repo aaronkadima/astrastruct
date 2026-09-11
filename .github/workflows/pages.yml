@@ -30,6 +30,8 @@ jobs:
         run: npm test
       - name: Build React/Vite application
         run: npm run build
+      - name: Validate GitHub Pages artifact
+        run: node tests/pages-artifact-smoke.mjs
       - name: Install Chromium for browser smoke tests
         run: npx playwright install --with-deps chromium
       - name: Run desktop, Android and tablet smoke tests

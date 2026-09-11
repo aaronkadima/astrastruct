@@ -2,6 +2,7 @@ import { zeros, addSub, solveLinear } from './matrix.js';
 import { resolveScenario } from './scenario.js';
 import { buildCorotationalResponses } from './corotationalPostprocess.js';
 import { uniformDistributedLoadVector, pointLoadVector } from './frameElement.js';
+import { endRotationalStiffness } from './endConnections.js';
 import { sectionDepth } from '../core/model.js';
 
 const EPS=1e-12;
@@ -17,22 +18,13 @@ const addVector=(a,b)=>a.map((v,i)=>v+b[i]);
 const subVector=(a,b)=>a.map((v,i)=>v-b[i]);
 const maxAbsMatrix=A=>Math.max(0,...A.flat().map(v=>Math.abs(v)));
 
-function hasFlexibleEnds(e){
-  if(e.releases?.rz1||e.releases?.rz2)return true;
-  for(const key of ['rz1','rz2']){
-    const raw=e.rotationalSprings?.[key];
-    if(raw!==null&&raw!==undefined&&raw!==''&&Number.isFinite(Number(raw)))return true;
-  }
-  return false;
-}
-
 function validateModel(project){
   const nodes=project.nodes||[],elements=project.elements||[];
   if(!nodes.length||!elements.length)throw new Error('Co-rotacional: modelo sem nós ou elementos.');
   if(elements.some(e=>e.type!=='frame2d'))throw new Error('Co-rotacional v0.13 experimental suporta somente elementos frame2d.');
-  if(elements.some(hasFlexibleEnds))throw new Error('Co-rotacional v0.13 experimental requer extremidades rígidas.');
+  for(const e of elements)for(const end of [1,2])endRotationalStiffness(e.releases||{},e.rotationalSprings||{},end);
   const unsupported=(project.elementLoads||[]).find(l=>!['uniform','selfWeight','point','thermal','followerEnd'].includes(l.kind));
-  if(unsupported)throw new Error(`Co-rotacional v0.13.4 experimental ainda não aceita carga de barra do tipo "${unsupported.kind}".`);
+  if(unsupported)throw new Error(`Co-rotacional experimental ainda não aceita carga de barra do tipo "${unsupported.kind}".`);
   const invalidFollower=(project.elementLoads||[]).find(l=>l.kind==='followerEnd'&&Number(l.end??2)!==2);
   if(invalidFollower)throw new Error('Co-rotacional v0.13.4 experimental aceita força seguidora somente na extremidade 2 do elemento.');
   if((project.nodeSprings||[]).length)throw new Error('Co-rotacional v0.13 experimental ainda não aceita molas nodais.');
@@ -58,11 +50,6 @@ function globalVectorToLocal(vector,c,s){
   ];
 }
 
-/**
- * Cargas mecânicas mortas da configuração de referência.
- * Os vetores nodais equivalentes são congelados na configuração inicial e não
- * acrescentam tangente externa ao Newton.
- */
 function prepareReferenceElementLoads(project,e,mat,L0,c0,s0){
   let qx=0,qy=0,pLocal=Array(6).fill(0),selfWeight=0;
   const points=[],loads=(project.elementLoads||[]).filter(l=>l.elementId===e.id);
@@ -90,11 +77,7 @@ function prepareReferenceElementLoads(project,e,mat,L0,c0,s0){
   const globalPerReferenceLength={x:c0*qx-s0*qy,y:s0*qx+c0*qy};
   return{
     pLocal,pGlobal,
-    summary:{
-      mode:'reference-dead',uniform:{qx,qy},selfWeight,points,
-      reference:{L0,c0,s0,globalPerReferenceLength},
-      supportedKinds:['uniform','selfWeight','point']
-    }
+    summary:{mode:'reference-dead',uniform:{qx,qy},selfWeight,points,reference:{L0,c0,s0,globalPerReferenceLength},supportedKinds:['uniform','selfWeight','point']}
   };
 }
 
@@ -105,30 +88,17 @@ function prepareFollowerElementLoads(project,e){
   }));
 }
 
-/**
- * Força seguidora concentrada na extremidade 2.
- * Px/Py permanecem constantes nos eixos locais da corda corrente. Como alpha
- * depende dos deslocamentos globais, a força externa possui tangente não
- * simétrica Kext=dP/dq. Para R=lambda P(q)-fint(q), Newton usa
- * (Kint-lambda Kext) Deltaq = R.
- */
 export function followerEndLoadState({px=0,py=0,end=2,l,c,s}){
   const L=Number(l),cc=Number(c),ss=Number(s),Px=Number(px)||0,Py=Number(py)||0,which=Number(end??2);
   if(which!==2)throw new Error('Força seguidora: somente a extremidade 2 é suportada nesta versão.');
   if(!(L>EPS)&&!(Number.isFinite(cc)&&Number.isFinite(ss)))throw new Error('Força seguidora: geometria corrente inválida.');
   if(!(L>EPS))throw new Error('Força seguidora: comprimento corrente inválido.');
-  const fx=cc*Px-ss*Py,fy=ss*Px+cc*Py;
-  const dfx=-ss*Px-cc*Py,dfy=cc*Px-ss*Py;
-  const g=[ss/L,-cc/L,0,-ss/L,cc/L,0];
-  const vector=[0,0,0,fx,fy,0],tangent=zeros(6);
+  const fx=cc*Px-ss*Py,fy=ss*Px+cc*Py,dfx=-ss*Px-cc*Py,dfy=cc*Px-ss*Py;
+  const g=[ss/L,-cc/L,0,-ss/L,cc/L,0],vector=[0,0,0,fx,fy,0],tangent=zeros(6);
   tangent[3]=g.map(v=>dfx*v);tangent[4]=g.map(v=>dfy*v);
   return{end:2,px:Px,py:Py,fx,fy,vector,tangent,dAlphaDq:g,tangentMaxAbs:maxAbsMatrix(tangent)};
 }
 
-/**
- * Estado térmico inicial. A temperatura não é força externa: entra como
- * deformação axial e curvatura inicial no sistema básico co-rotacional.
- */
 function prepareThermalInitialState(project,e,mat,section,L0){
   let dT=0,dTGradient=0;
   for(const load of (project.elementLoads||[]).filter(l=>l.elementId===e.id&&l.kind==='thermal')){
@@ -141,16 +111,11 @@ function prepareThermalInitialState(project,e,mat,section,L0){
     if(!(h>0))throw new Error(`Co-rotacional térmico: gradiente em ${e.id} requer altura/profundidade positiva da seção.`);
     kappa0=-alpha*dTGradient/h;
   }
-  const initialBasic=[eps0*L0,-kappa0*L0/2,kappa0*L0/2];
-  const E=Number(mat.E)||0,A=Number(e.A)||0,I=Number(e.I)||0;
+  const initialBasic=[eps0*L0,-kappa0*L0/2,kappa0*L0/2],E=Number(mat.E)||0,A=Number(e.A)||0,I=Number(e.I)||0;
   const forceScale=Math.max(Math.abs(E*A*eps0),Math.abs(E*I*kappa0));
   return{initialBasic,forceScale,summary:{dT,dTGradient,alpha,eps0,kappa0,sectionHeight:sectionDepth(section),initialBasic,forceScale}};
 }
 
-/**
- * Estado de um elemento de pórtico 2D co-rotacional de Euler-Bernoulli.
- * initialBasic representa deformações iniciais livres (p.ex. térmicas).
- */
 export function corotationalElementState({X1,Y1,X2,Y2,qGlobal,E,A,I,initialBasic=[0,0,0]}){
   const q=qGlobal.map(Number),dx0=X2-X1,dy0=Y2-Y1,L0=Math.hypot(dx0,dy0);
   if(!(L0>EPS))throw new Error('Co-rotacional: elemento com comprimento inicial nulo.');
@@ -168,20 +133,86 @@ export function corotationalElementState({X1,Y1,X2,Y2,qGlobal,E,A,I,initialBasic
   return{L0,l,alpha0,alpha,dAlpha,c,s,basic,initialBasic:initial,elasticBasic,basicForces,internal,tangent,endForces:{N1:-N,V1:V,M1,N2:N,V2:-V,M2}};
 }
 
+function connectionStiffnesses(releases={},rotationalSprings={}){
+  return[endRotationalStiffness(releases,rotationalSprings,1),endRotationalStiffness(releases,rotationalSprings,2)];
+}
+
+function condenseTangent(Ke,Tq,Tr,flex,kEnds){
+  const Hqq=mm(transpose(Tq),mm(Ke,Tq)),Hqr=mm(transpose(Tq),mm(Ke,Tr)),Hrq=mm(transpose(Tr),mm(Ke,Tq)),Hrr=mm(transpose(Tr),mm(Ke,Tr));
+  flex.forEach((end,a)=>{
+    const k=kEnds[end],dof=end===0?2:5;
+    Hqq[dof][dof]+=k;Hqr[dof][a]-=k;Hrq[a][dof]-=k;Hrr[a][a]+=k;
+  });
+  const K=Hqq.map(r=>[...r]);
+  for(let j=0;j<6;j++){
+    const x=solveLinear(Hrr,Hrq.map(r=>r[j]));
+    for(let i=0;i<6;i++)K[i][j]-=Hqr[i].reduce((sum,v,a)=>sum+v*x[a],0);
+  }
+  return K;
+}
+
+/**
+ * Condensação energética das rotações internas de extremidade.
+ * Para uma ligação flexível, theta_e é DOF interno e a mola armazena
+ * 1/2*k(theta_n-theta_e)^2. O Hessiano aumentado é condensado por Schur.
+ * pGlobal representa dead loads de referência conjugadas aos DOFs do elemento;
+ * seus momentos de extremidade participam do equilíbrio interno antes da
+ * condensação. Releases são o limite k=0 e rigidez infinita representa ligação rígida.
+ */
+export function corotationalConnectedElementState({X1,Y1,X2,Y2,qGlobal,E,A,I,initialBasic=[0,0,0],pGlobal=[0,0,0,0,0,0],loadFactor=1,releases={},rotationalSprings={}}){
+  const qNode=qGlobal.map(Number),p=pGlobal.map(Number),lambda=Number(loadFactor),kEnds=connectionStiffnesses(releases,rotationalSprings),flex=[0,1].filter(i=>Number.isFinite(kEnds[i]));
+  if(!flex.length){
+    const state=corotationalElementState({X1,Y1,X2,Y2,qGlobal:qNode,E,A,I,initialBasic});
+    return{state,qElement:qNode,gradient:state.internal.map((v,i)=>v-lambda*p[i]),tangent:state.tangent,connectionRotations:[],internalConnectionResidual:0,stiffnesses:kEnds};
+  }
+
+  const seed=corotationalElementState({X1,Y1,X2,Y2,qGlobal:qNode,E,A,I,initialBasic}),L0=seed.L0,ei=E*I/L0,Kb=[[4*ei,2*ei],[2*ei,4*ei]],rotDofs=[2,5],initial=initialBasic.map(Number),d0=[seed.dAlpha+initial[1],seed.dAlpha+initial[2]],beta=[qNode[2],qNode[5]],rigid=[0,1].filter(i=>!flex.includes(i));
+  const Aint=flex.map((i,a)=>flex.map((j,b)=>Kb[i][j]+(a===b?kEnds[i]:0)));
+  const rhs=flex.map(i=>{
+    const thermalChord=Kb[i][0]*d0[0]+Kb[i][1]*d0[1],fixed=rigid.reduce((sum,j)=>sum+Kb[i][j]*beta[j],0),k=kEnds[i],theta=qNode[rotDofs[i]],pMoment=lambda*p[rotDofs[i]];
+    return pMoment+k*theta+thermalChord-fixed;
+  });
+  const solved=solveLinear(Aint,rhs);flex.forEach((end,a)=>{beta[end]=solved[a]});
+  const qElement=[...qNode];qElement[2]=beta[0];qElement[5]=beta[1];
+  const state=corotationalElementState({X1,Y1,X2,Y2,qGlobal:qElement,E,A,I,initialBasic}),beamGradient=state.internal.map((v,i)=>v-lambda*p[i]);
+
+  const Tq=zeros(6),Tr=zeros(6,flex.length);
+  for(const d of [0,1,3,4])Tq[d][d]=1;
+  rigid.forEach(end=>{const d=rotDofs[end];Tq[d][d]=1});
+  flex.forEach((end,a)=>{Tr[rotDofs[end]][a]=1});
+  const gradient=mv(transpose(Tq),beamGradient),connectionRotations=[];
+  let internalConnectionResidual=0;
+  flex.forEach(end=>{
+    const dof=rotDofs[end],k=kEnds[end],relativeRotation=qNode[dof]-beta[end],springMoment=k*relativeRotation,elementMoment=beamGradient[dof],residual=elementMoment-springMoment;
+    gradient[dof]+=springMoment;internalConnectionResidual=Math.max(internalConnectionResidual,Math.abs(residual));
+    connectionRotations.push({dof,end:end+1,k,nodeRotation:qNode[dof],elementRotation:beta[end],relativeRotation,moment:elementMoment,springMoment,residual,type:k===0?'release':'semirigid'});
+  });
+  const tangent=condenseTangent(state.tangent,Tq,Tr,flex,kEnds);
+  return{state,qElement,gradient,tangent,connectionRotations,internalConnectionResidual,stiffnesses:kEnds};
+}
+
+function nodeHasRotationalStiffness(elements,nodeId){
+  return elements.some(e=>{
+    if(e.n1===nodeId)return endRotationalStiffness(e.releases||{},e.rotationalSprings||{},1)>0;
+    if(e.n2===nodeId)return endRotationalStiffness(e.releases||{},e.rotationalSprings||{},2)>0;
+    return false;
+  });
+}
+
 function prepare(project){
   const nodes=project.nodes||[],map=new Map(nodes.map((n,i)=>[n.id,i])),elements=[],nd=nodes.length*3,F=Array(nd).fill(0);
   for(const e of project.elements||[]){
     const i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Co-rotacional: elemento ${e.id} referencia nó inexistente.`);
     const mat=(project.materials||[]).find(m=>m.id===e.materialId);if(!mat)throw new Error(`Co-rotacional: material ausente em ${e.id}.`);
-    const section=(project.sections||[]).find(s=>s.id===e.sectionId);
-    const a=nodes[i],b=nodes[j],dx0=Number(b.x)-Number(a.x),dy0=Number(b.y)-Number(a.y),L0=Math.hypot(dx0,dy0);if(!(L0>EPS))throw new Error(`Co-rotacional: elemento ${e.id} possui comprimento nulo.`);
+    const section=(project.sections||[]).find(s=>s.id===e.sectionId),a=nodes[i],b=nodes[j],dx0=Number(b.x)-Number(a.x),dy0=Number(b.y)-Number(a.y),L0=Math.hypot(dx0,dy0);
+    if(!(L0>EPS))throw new Error(`Co-rotacional: elemento ${e.id} possui comprimento nulo.`);
     const E=Number(mat.E),A=Number(e.A),I=Number(e.I);if(!(E>0&&A>0&&I>0))throw new Error(`Co-rotacional: propriedades inválidas em ${e.id}.`);
     const idx=[3*i,3*i+1,3*i+2,3*j,3*j+1,3*j+2],c0=dx0/L0,s0=dy0/L0,referenceLoads=prepareReferenceElementLoads(project,e,mat,L0,c0,s0),thermal=prepareThermalInitialState(project,e,mat,section,L0),followers=prepareFollowerElementLoads(project,e);
-    referenceLoads.pGlobal.forEach((v,k)=>{F[idx[k]]+=v});
     elements.push({e,i,j,a,b,E,A,I,idx,c0,s0,thermal,followers,...referenceLoads});
   }
   const prescribed=new Set();
   for(const s of project.supports||[]){const i=map.get(s.nodeId);if(i==null)continue;if(s.ux)prescribed.add(3*i);if(s.uy)prescribed.add(3*i+1);if(s.rz)prescribed.add(3*i+2)}
+  nodes.forEach((node,i)=>{if(!nodeHasRotationalStiffness(project.elements||[],node.id)&&!prescribed.has(3*i+2))prescribed.add(3*i+2)});
   const free=Array.from({length:nd},(_,i)=>i).filter(i=>!prescribed.has(i));
   if(!free.length)throw new Error('Co-rotacional: não existem graus de liberdade livres.');
   if(free.length>240)throw new Error(`Co-rotacional v0.13 experimental limita a análise a 240 DOFs livres no navegador; modelo atual: ${free.length}.`);
@@ -192,15 +223,15 @@ function prepare(project){
 function assemble(prepared,u,loadFactor=1){
   const Kint=zeros(prepared.nd),Kext=zeros(prepared.nd),fint=Array(prepared.nd).fill(0),follower=Array(prepared.nd).fill(0),states=[];
   for(const item of prepared.elements){
-    const initialBasic=item.thermal.initialBasic.map(v=>v*loadFactor);
-    const state=corotationalElementState({X1:Number(item.a.x),Y1:Number(item.a.y),X2:Number(item.b.x),Y2:Number(item.b.y),qGlobal:item.idx.map(i=>u[i]),E:item.E,A:item.A,I:item.I,initialBasic});
-    addSub(Kint,state.tangent,item.idx);state.internal.forEach((v,k)=>{fint[item.idx[k]]+=v});
+    const initialBasic=item.thermal.initialBasic.map(v=>v*loadFactor),qNode=item.idx.map(i=>u[i]);
+    const connected=corotationalConnectedElementState({X1:Number(item.a.x),Y1:Number(item.a.y),X2:Number(item.b.x),Y2:Number(item.b.y),qGlobal:qNode,E:item.E,A:item.A,I:item.I,initialBasic,pGlobal:item.pGlobal,loadFactor,releases:item.e.releases||{},rotationalSprings:item.e.rotationalSprings||{}}),state=connected.state;
+    addSub(Kint,connected.tangent,item.idx);connected.gradient.forEach((v,k)=>{fint[item.idx[k]]+=v});
     const followerStates=item.followers.map(load=>{
       const current=followerEndLoadState({px:load.px,py:load.py,end:load.end,l:state.l,c:state.c,s:state.s});
       current.vector.forEach((v,k)=>{follower[item.idx[k]]+=v});addSub(Kext,current.tangent,item.idx);
       return{load,current};
     });
-    states.push({item,state,followerStates});
+    states.push({item,state,connected,followerStates});
   }
   return{Kint,Kext,fint,follower,states};
 }
@@ -211,16 +242,14 @@ function residualAt(prepared,u,loadFactor){
 }
 
 function residualScale(prepared,current,loadFactor){
-  const mechanical=normInf(prepared.free.map(i=>current.external[i]));
-  const thermal=Math.max(0,...prepared.elements.map(e=>Math.abs(e.thermal.forceScale*loadFactor)));
-  return Math.max(1,mechanical,thermal);
+  const mechanical=normInf(prepared.free.map(i=>current.external[i])),reference=Math.max(0,...prepared.elements.map(e=>normInf(e.pGlobal)*Math.abs(loadFactor))),thermal=Math.max(0,...prepared.elements.map(e=>Math.abs(e.thermal.forceScale*loadFactor)));
+  return Math.max(1,mechanical,reference,thermal);
 }
 
 export function solveFrameCorotational2D(project,scenarioId,options={}){
   const resolved=resolveScenario(project,scenarioId),p=resolved.project;validateModel(p);const prepared=prepare(p);
   const steps=clamp(Math.round(Number(options.steps??20)||20),1,200),maxIterations=clamp(Math.round(Number(options.maxIterations??35)||35),3,100),tolerance=Math.max(1e-12,Number(options.tolerance??1e-8)||1e-8),lineSearch=options.lineSearch!==false;
-  const u=Array(prepared.nd).fill(0),history=[];
-  let last=null;
+  const u=Array(prepared.nd).fill(0),history=[];let last=null;
   for(let step=1;step<=steps;step++){
     const lambda=step/steps;let converged=false,iteration=0;
     for(iteration=1;iteration<=maxIterations;iteration++){
@@ -239,20 +268,18 @@ export function solveFrameCorotational2D(project,scenarioId,options={}){
       next.trial.forEach((v,i)=>{u[i]=v});last=next.candidate;
       if(u.some(v=>!Number.isFinite(v)||Math.abs(v)>1e4))throw new Error(`Co-rotacional: resposta não física no passo ${step}.`);
     }
-    if(!converged){
-      const current=residualAt(prepared,u,lambda),scale=residualScale(prepared,current,lambda);if(current.norm<=tolerance*scale){converged=true;last=current}
-    }
+    if(!converged){const current=residualAt(prepared,u,lambda),scale=residualScale(prepared,current,lambda);if(current.norm<=tolerance*scale){converged=true;last=current}}
     if(!converged)throw new Error(`Co-rotacional não convergiu no passo ${step}/${steps} em ${maxIterations} iterações.`);
     history.push({step,loadFactor:lambda,iterations:iteration,residualNorm:last.norm});
   }
   last=residualAt(prepared,u,1);
   const reactions=prepared.nodes.map((n,i)=>({nodeId:n.id,fx:last.fint[3*i]-last.external[3*i],fy:last.fint[3*i+1]-last.external[3*i+1],mz:last.fint[3*i+2]-last.external[3*i+2]})),displacements=prepared.nodes.map((n,i)=>({nodeId:n.id,ux:u[3*i],uy:u[3*i+1],rz:u[3*i+2]}));
-  const elementForces=last.states.map(({item,state,followerStates})=>{
+  const elementForces=last.states.map(({item,state,connected,followerStates})=>{
     const endGlobal=state.internal.map((v,k)=>v-item.pGlobal[k]),endLocal=globalVectorToLocal(endGlobal,state.c,state.s);
     const followerEnds=followerStates.map(({load,current})=>({id:load.id,end:2,px:load.px,py:load.py,currentGlobal:{fx:current.fx,fy:current.fy},alpha:state.alpha,tangentMaxAbs:current.tangentMaxAbs,consistentExternalTangent:true}));
-    return{elementId:item.e.id,type:'frame2d',N1:endLocal[0],V1:endLocal[1],M1:endLocal[2],N2:endLocal[3],V2:endLocal[4],M2:endLocal[5],basicForces:{N:state.basicForces[0],M1:state.basicForces[1],M2:state.basicForces[2]},corotational:{L0:state.L0,l:state.l,alpha:state.alpha,dAlpha:state.dAlpha,basic:state.basic,initialBasic:state.initialBasic,elasticBasic:state.elasticBasic},loadSummary:{...item.summary,thermal:item.thermal.summary,followerEnds},equivalentNodalLoad:{referenceLocal:item.pLocal,global:item.pGlobal}};
+    return{elementId:item.e.id,type:'frame2d',N1:endLocal[0],V1:endLocal[1],M1:endLocal[2],N2:endLocal[3],V2:endLocal[4],M2:endLocal[5],basicForces:{N:state.basicForces[0],M1:state.basicForces[1],M2:state.basicForces[2]},connectionRotations:connected.connectionRotations,connectionCondensation:{internalResidual:connected.internalConnectionResidual,stiffnesses:connected.stiffnesses},corotational:{L0:state.L0,l:state.l,alpha:state.alpha,dAlpha:state.dAlpha,basic:state.basic,initialBasic:state.initialBasic,elasticBasic:state.elasticBasic},loadSummary:{...item.summary,thermal:item.thermal.summary,followerEnds},equivalentNodalLoad:{referenceLocal:item.pLocal,global:item.pGlobal}};
   });
-  const followerCount=prepared.elements.reduce((n,e)=>n+e.followers.length,0);
-  const base={type:'frame2d-corotational-experimental',solverVersion:'0.13.4-exp',scenario:resolved.scenario,dofs:prepared.nd,activeDofs:prepared.free.length,displacements,reactions,elementForces,nonlinear:{formulation:'2D co-rotational Euler-Bernoulli',steps,maxIterations,tolerance,lineSearch,loadModel:'reference-dead mechanical loads + thermal initial strain/curvature + follower end forces',followerLoads:{count:followerCount,externalTangent:'consistent',supported:'element end 2 concentrated force'},history,converged:true}};
+  const followerCount=prepared.elements.reduce((n,e)=>n+e.followers.length,0),flexibleEndCount=prepared.elements.reduce((n,item)=>n+connectionStiffnesses(item.e.releases||{},item.e.rotationalSprings||{}).filter(Number.isFinite).length,0);
+  const base={type:'frame2d-corotational-experimental',solverVersion:'0.13.4-exp',scenario:resolved.scenario,dofs:prepared.nd,activeDofs:prepared.free.length,displacements,reactions,elementForces,nonlinear:{formulation:'2D co-rotational Euler-Bernoulli',steps,maxIterations,tolerance,lineSearch,loadModel:'reference-dead mechanical loads + thermal initial strain/curvature + follower end forces',followerLoads:{count:followerCount,externalTangent:'consistent',supported:'element end 2 concentrated force'},endConnections:{flexibleEndCount,method:'internal end rotations + Schur condensation',experimental:true},history,converged:true}};
   return{...base,elementResponses:buildCorotationalResponses(p,base,41)};
 }

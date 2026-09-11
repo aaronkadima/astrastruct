@@ -1,5 +1,5 @@
 import {
-  demoTruss, demoFrame, demoBeamUDL, demoMixed,
+  demoTruss, demoFrame, demoBeamUDL, demoMixed, demoLoadCases,
   emptyProject, makeFrameElement
 } from '../web/src/core/model.js';
 import { solve } from '../web/src/solver/index.js';
@@ -26,7 +26,7 @@ for (const p of [demoTruss(), demoFrame(), demoMixed()]) {
 // Com E=30 GPa e I=0,003125 m4, flecha teórica no meio = 5 q L4 / (384 EI) = 0,0036 m.
 {
   const p = demoBeamUDL();
-  const r = solve(p);
+  const r = solve(p, 'LC1');
   const r1 = r.reactions.find(x => x.nodeId === 'N1');
   const r3 = r.reactions.find(x => x.nodeId === 'N3');
   const mid = r.displacements.find(x => x.nodeId === 'N2');
@@ -50,10 +50,32 @@ for (const p of [demoTruss(), demoFrame(), demoMixed()]) {
     { nodeId: 'N2', ux: false, uy: true, rz: false }
   ];
   p.elementLoads = [{ id: 'EL1', caseId: 'LC1', elementId: 'E1', kind: 'uniform', qx: 0, qy: -10 }];
-  const r = solve(p);
+  const r = solve(p, 'LC1');
   const f = r.elementForces[0];
   near(f.M2, 0, 1e-8, 'Liberação rotacional: M2');
   console.log(p.name, 'OK', 'M2=', f.M2);
 }
 
-console.log('Todos os smoke tests do AstraStruct v0.2 passaram.');
+// Princípio da superposição: COMB1 = 1.2G + 1.5Q deve reproduzir a combinação
+// linear dos vetores de deslocamentos e reações obtidos isoladamente.
+{
+  const p = demoLoadCases();
+  const g = solve(p, 'G');
+  const q = solve(p, 'Q');
+  const c = solve(p, 'COMB1');
+  assert(c.scenario.kind === 'combination', 'Combinação: metadado de cenário incorreto');
+
+  for (let i = 0; i < c.displacements.length; i++) {
+    for (const dof of ['ux', 'uy', 'rz']) {
+      near(c.displacements[i][dof], 1.2 * g.displacements[i][dof] + 1.5 * q.displacements[i][dof], 1e-10, `Superposição ${c.displacements[i].nodeId}.${dof}`);
+    }
+  }
+  for (let i = 0; i < c.reactions.length; i++) {
+    for (const dof of ['fx', 'fy', 'mz']) {
+      near(c.reactions[i][dof], 1.2 * g.reactions[i][dof] + 1.5 * q.reactions[i][dof], 1e-8, `Reação combinada ${c.reactions[i].nodeId}.${dof}`);
+    }
+  }
+  console.log(p.name, 'OK', 'cenário=', c.scenario.name, 'termos=', c.scenario.terms.map(t => `${t.factor}x${t.caseId}`).join(' + '));
+}
+
+console.log('Todos os smoke tests do AstraStruct v0.3 passaram.');

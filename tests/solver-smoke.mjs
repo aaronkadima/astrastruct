@@ -24,7 +24,15 @@ for(const p of [demoTruss(),demoFrame(),demoMixed()]){
 
 // Extremidade rotulada: momento recuperado nulo.
 {
-  const p=emptyProject();p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:4,y:0}];const e=makeFrameElement({id:'E1',n1:'N1',n2:'N2'});e.releases.rz2=true;p.elements=[e];p.supports=[{nodeId:'N1',ux:true,uy:true,rz:true},{nodeId:'N2',ux:false,uy:true,rz:false}];p.elementLoads=[{id:'EL1',caseId:'LC1',elementId:'E1',kind:'uniform',qx:0,qy:-10}];const r=solve(p,'LC1');near(r.elementForces[0].M2,0,1e-8,'Release M2');near(r.elementResponses[0].stations.at(-1).M,0,1e-8,'Release M(x=L)');console.log('Liberação rotacional OK');
+  const p=emptyProject();p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:4,y:0}];const e=makeFrameElement({id:'E1',n1:'N1',n2:'N2'});e.releases.rz2=true;e.rotationalSprings.rz2=0;p.elements=[e];p.supports=[{nodeId:'N1',ux:true,uy:true,rz:true},{nodeId:'N2',ux:false,uy:true,rz:false}];p.elementLoads=[{id:'EL1',caseId:'LC1',elementId:'E1',kind:'uniform',qx:0,qy:-10}];const r=solve(p,'LC1');near(r.elementForces[0].M2,0,1e-8,'Release M2');near(r.elementResponses[0].stations.at(-1).M,0,1e-8,'Release M(x=L)');console.log('Liberação rotacional OK');
+}
+
+// Cantilever com mola rotacional na base: delta = PL^3/(3EI) + PL^2/kθ.
+// P=10 kN, L=4 m, EI=93750 kN.m2, kθ=10000 kN.m/rad -> delta=18.27556 mm.
+{
+  const p=emptyProject();p.name='Console — ligação semirrígida';p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:4,y:0}];const e=makeFrameElement({id:'E1',n1:'N1',n2:'N2',sectionId:'rc_30x50'});e.rotationalSprings={rz1:10000,rz2:null};p.elements=[e];p.supports=[{nodeId:'N1',ux:true,uy:true,rz:true}];p.loads=[{id:'P1',caseId:'LC1',nodeId:'N2',fx:0,fy:-10,mz:0}];
+  const r=solve(p,'LC1'),tip=r.displacements.find(d=>d.nodeId==='N2'),f=r.elementForces[0],conn=f.connectionRotations.find(x=>x.end===1),expected=10*4**3/(3*30e6*.003125)+10*4**2/10000;
+  near(Math.abs(tip.uy),expected,1e-10,'Semirrígida: flecha do console');near(Math.abs(f.M1),40,1e-8,'Semirrígida: momento na base');near(Math.abs(conn.relativeRotation),.004,1e-10,'Semirrígida: rotação relativa');near(Math.abs(conn.moment),40,1e-8,'Semirrígida: momento transmitido');console.log(p.name,'OK','delta [mm]=',Math.abs(tip.uy)*1000,'M=',f.M1,'dtheta=',conn.relativeRotation);
 }
 
 // Carga pontual P=100 kN no meio de viga biapoiada L=6 m: R=50+50 kN e Mmax=PL/4=150 kN.m.
@@ -79,4 +87,4 @@ for(const p of [demoTruss(),demoFrame(),demoMixed()]){
   const env=solveEnvelope(p);assert(env.scenarios.length===3,'Envelope: cenários');assert(env.elementResponses.length===p.elements.length,'Envelope: elementos');assert(env.elementResponses.some(e=>e.stations.some(s=>s.sigmaAxial)),'Envelope: tensões ausentes');console.log(p.name,'OK','envelope=',env.scenarios.length);
 }
 
-console.log('Todos os smoke tests do AstraStruct v0.8 passaram.');
+console.log('Todos os smoke tests do AstraStruct v0.9 passaram.');

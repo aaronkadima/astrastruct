@@ -2,6 +2,7 @@ import { solveTruss2D } from './truss2d.js';
 import { solveFrame2D } from './frame2d.js';
 import { solveMixed2D } from './mixed2d.js';
 import { solveFramePDelta2D } from './pdelta2d.js';
+import { solveBuckling2D } from './buckling2d.js';
 import { resolveScenario } from './scenario.js';
 import { buildElementResponses } from './postprocess.js';
 
@@ -13,20 +14,35 @@ function solveLinearModel(project) {
   throw new Error(`Tipos de elementos ainda não suportados pelo solver: ${[...types].join(', ')}`);
 }
 
-function solveStructuralModel(project) {
-  if (project.settings?.analysisType === 'pdelta') return solveFramePDelta2D(project);
-  return solveLinearModel(project);
+function buildModalImperfection(project,scenarioId){
+  const cfg=project.settings?.imperfection;
+  if(!cfg?.enabled)return null;
+  if((cfg.source||'bucklingMode')!=='bucklingMode')throw new Error(`Fonte de imperfeição ainda não suportada: ${cfg.source}.`);
+  const amplitudeMm=Number(cfg.amplitudeMm),mode=Math.max(1,Math.min(12,Math.round(Number(cfg.mode)||1))),referenceScenarioId=cfg.scenarioId||scenarioId||project.settings?.analysisScenarioId||project.loadCases?.[0]?.id;
+  if(!(amplitudeMm>0&&Number.isFinite(amplitudeMm)))throw new Error('Imperfeição modal: amplitude máxima deve ser positiva e finita em mm.');
+  const buckling=solveBuckling2D(project,referenceScenarioId,{modes:mode}),selected=buckling.modes?.[mode-1];
+  if(!selected)throw new Error(`Imperfeição modal: modo ${mode} não disponível para o cenário ${referenceScenarioId}.`);
+  const amplitude=amplitudeMm/1000;
+  return{source:'bucklingMode',mode,referenceScenarioId,criticalFactor:selected.factor,amplitude,amplitudeMm,vector:selected.vector.map(v=>v*amplitude)};
+}
+
+function solveStructuralModel(sourceProject,resolvedProject,scenarioId) {
+  if (resolvedProject.settings?.analysisType === 'pdelta') {
+    const initialImperfection=buildModalImperfection(sourceProject,scenarioId);
+    return solveFramePDelta2D(resolvedProject,{initialImperfection});
+  }
+  return solveLinearModel(resolvedProject);
 }
 
 export function solve(project, scenarioId) {
   const resolved = resolveScenario(project, scenarioId);
-  const result = solveStructuralModel(resolved.project);
+  const result = solveStructuralModel(project,resolved.project,scenarioId||resolved.scenario?.id);
   const elementResponses = buildElementResponses(resolved.project, result, 41);
   return {
     ...result,
     elementResponses,
     scenario: resolved.scenario,
     analysisType: resolved.project.settings?.analysisType || 'linear',
-    solverVersion: '0.10.0'
+    solverVersion: '0.12.0'
   };
 }

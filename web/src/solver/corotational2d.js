@@ -1,7 +1,7 @@
 import { zeros, addSub, solveLinear } from './matrix.js';
 import { resolveScenario } from './scenario.js';
 import { buildCorotationalResponses } from './corotationalPostprocess.js';
-import { uniformDistributedLoadVector } from './frameElement.js';
+import { uniformDistributedLoadVector, pointLoadVector } from './frameElement.js';
 
 const EPS=1e-12;
 const normInf=v=>v.length?Math.max(...v.map(x=>Math.abs(x))):0;
@@ -28,8 +28,8 @@ function validateModel(project){
   if(!nodes.length||!elements.length)throw new Error('Co-rotacional: modelo sem nós ou elementos.');
   if(elements.some(e=>e.type!=='frame2d'))throw new Error('Co-rotacional v0.13 experimental suporta somente elementos frame2d.');
   if(elements.some(hasFlexibleEnds))throw new Error('Co-rotacional v0.13 experimental requer extremidades rígidas.');
-  const unsupported=(project.elementLoads||[]).find(l=>!['uniform','selfWeight'].includes(l.kind));
-  if(unsupported)throw new Error(`Co-rotacional v0.13.1 experimental ainda não aceita carga de barra do tipo "${unsupported.kind}"; nesta etapa são aceitas apenas uniform e selfWeight como cargas mortas da configuração de referência.`);
+  const unsupported=(project.elementLoads||[]).find(l=>!['uniform','selfWeight','point'].includes(l.kind));
+  if(unsupported)throw new Error(`Co-rotacional v0.13.2 experimental ainda não aceita carga de barra do tipo "${unsupported.kind}"; nesta etapa são aceitas uniform, selfWeight e point como cargas mortas da configuração de referência.`);
   if((project.nodeSprings||[]).length)throw new Error('Co-rotacional v0.13 experimental ainda não aceita molas nodais.');
   if((project.settlements||[]).length)throw new Error('Co-rotacional v0.13 experimental ainda não aceita recalques/deslocamentos impostos.');
   if(project.settings?.imperfection?.enabled)throw new Error('Co-rotacional v0.13 experimental ainda não aceita imperfeição geométrica inicial; desative a imperfeição modal ou use P-Delta.');
@@ -55,21 +55,29 @@ function globalVectorToLocal(vector,c,s){
 
 /**
  * Cargas mortas da configuração de referência.
- * - uniform: qx/qy são por unidade de L0 e referidos aos eixos locais iniciais;
- * - selfWeight: direção global -Y, intensidade gamma*A*factor por unidade de L0.
- * O vetor nodal equivalente global é congelado na configuração inicial e,
- * portanto, não acrescenta tangente externa ao Newton da v0.13.1.
+ * - uniform: qx/qy por unidade de L0 nos eixos locais iniciais;
+ * - selfWeight: direção global -Y, intensidade gamma*A*factor por unidade de L0;
+ * - point: px/py aplicados em xi=x/L0 nos eixos locais iniciais.
+ * Os vetores nodais equivalentes globais são congelados na configuração inicial e,
+ * portanto, não acrescentam tangente externa ao Newton da v0.13.2.
  */
 function prepareReferenceElementLoads(project,e,mat,L0,c0,s0){
   let qx=0,qy=0,pLocal=Array(6).fill(0),selfWeight=0;
-  const loads=(project.elementLoads||[]).filter(l=>l.elementId===e.id);
+  const points=[],loads=(project.elementLoads||[]).filter(l=>l.elementId===e.id);
   for(const load of loads){
+    if(load.kind==='point'){
+      const xi=clamp(Number(load.xi??0.5),0,1),px=Number(load.px)||0,py=Number(load.py)||0;
+      pLocal=addVector(pLocal,pointLoadVector(px,py,L0,xi));
+      points.push({xi,a0:xi*L0,px,py,global:{x:c0*px-s0*py,y:s0*px+c0*py}});
+      continue;
+    }
     let lx=0,ly=0;
     if(load.kind==='uniform'){
       lx=Number(load.qx)||0;ly=Number(load.qy)||0;
     }else if(load.kind==='selfWeight'){
       const gamma=Number(load.gamma)||Number(mat.density)||0;
-      const factor=Number.isFinite(Number(load.weightFactor))?Number(load.weightFactor):1;
+      const rawFactor=load.weightFactor??load.factor;
+      const factor=Number.isFinite(Number(rawFactor))?Number(rawFactor):1;
       const w=gamma*Number(e.A)*factor;
       lx=-s0*w;ly=-c0*w;selfWeight+=w;
     }
@@ -80,9 +88,9 @@ function prepareReferenceElementLoads(project,e,mat,L0,c0,s0){
   return{
     pLocal,pGlobal,
     summary:{
-      mode:'reference-dead',uniform:{qx,qy},selfWeight,
+      mode:'reference-dead',uniform:{qx,qy},selfWeight,points,
       reference:{L0,c0,s0,globalPerReferenceLength},
-      supportedKinds:['uniform','selfWeight']
+      supportedKinds:['uniform','selfWeight','point']
     }
   };
 }
@@ -180,6 +188,6 @@ export function solveFrameCorotational2D(project,scenarioId,options={}){
     const endGlobal=state.internal.map((v,k)=>v-item.pGlobal[k]),endLocal=globalVectorToLocal(endGlobal,state.c,state.s);
     return{elementId:item.e.id,type:'frame2d',N1:endLocal[0],V1:endLocal[1],M1:endLocal[2],N2:endLocal[3],V2:endLocal[4],M2:endLocal[5],basicForces:{N:state.basicForces[0],M1:state.basicForces[1],M2:state.basicForces[2]},corotational:{L0:state.L0,l:state.l,alpha:state.alpha,dAlpha:state.dAlpha,basic:state.basic},loadSummary:item.summary,equivalentNodalLoad:{referenceLocal:item.pLocal,global:item.pGlobal}};
   });
-  const base={type:'frame2d-corotational-experimental',solverVersion:'0.13.1-exp',scenario:resolved.scenario,dofs:prepared.nd,activeDofs:prepared.free.length,displacements,reactions,elementForces,nonlinear:{formulation:'2D co-rotational Euler-Bernoulli',steps,maxIterations,tolerance,lineSearch,loadModel:'reference-dead equivalent nodal loads',history,converged:true}};
+  const base={type:'frame2d-corotational-experimental',solverVersion:'0.13.2-exp',scenario:resolved.scenario,dofs:prepared.nd,activeDofs:prepared.free.length,displacements,reactions,elementForces,nonlinear:{formulation:'2D co-rotational Euler-Bernoulli',steps,maxIterations,tolerance,lineSearch,loadModel:'reference-dead equivalent nodal loads',history,converged:true}};
   return{...base,elementResponses:buildCorotationalResponses(p,base,41)};
 }

@@ -4,19 +4,48 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0b0f16" />
+    <meta name="color-scheme" content="dark" />
     <meta name="description" content="AstraStruct — modelagem e análise estrutural" />
     <title>AstraStruct</title>
     <style>
       html,body,#root{margin:0;min-width:320px;min-height:100%;height:100%;background:#0b0f16;color:#eef4ff;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
       body{min-height:100dvh}
-      .boot-fallback{min-height:100dvh;display:grid;place-items:center;background:#0b0f16}
-      .boot-card{width:min(420px,calc(100vw - 40px));padding:22px;border:1px solid #2a3648;border-radius:14px;background:#111822;text-align:center;box-sizing:border-box}
+      .boot-fallback{min-height:100dvh;display:grid;place-items:center;background:#0b0f16;padding:20px;box-sizing:border-box}
+      .boot-card{width:min(460px,100%);padding:22px;border:1px solid #2a3648;border-radius:14px;background:#111822;text-align:center;box-sizing:border-box;box-shadow:0 18px 60px rgba(0,0,0,.28)}
       .boot-mark{width:48px;height:48px;margin:0 auto 12px;display:grid;place-items:center;border-radius:12px;background:#163050;color:#9bc4ff;font-weight:900}
-      .boot-card strong{display:block;font-size:16px}.boot-card small{display:block;margin-top:7px;color:#91a0b6}
+      .boot-card strong{display:block;font-size:16px}.boot-card small{display:block;margin-top:7px;color:#91a0b6;line-height:1.45}
+      .boot-card code{display:block;margin-top:12px;padding:10px;border-radius:8px;background:#0b0f16;color:#ffbec6;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
+      .boot-actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:16px}.boot-actions button,.boot-actions a{appearance:none;border:1px solid #34445d;border-radius:9px;background:#162234;color:#eef4ff;padding:9px 12px;text-decoration:none;font:inherit;cursor:pointer}.boot-actions button:hover,.boot-actions a:hover{background:#1c2c43}
     </style>
+    <script>
+      (()=>{
+        const BOOT_VERSION='0.13.5';
+        let timer;
+        const ready=()=>document.documentElement.dataset.astraReady==='true';
+        const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+        const showFailure=(title,detail)=>{
+          if(ready())return;
+          const root=document.getElementById('root');if(!root)return;
+          root.innerHTML=`<div class="boot-fallback"><div class="boot-card"><div class="boot-mark">AS</div><strong>${esc(title)}</strong><small>O shell HTML foi carregado, mas a interface React não concluiu a inicialização. Bootstrap ${BOOT_VERSION}.</small><code>${esc(detail||'Falha de inicialização sem mensagem adicional.')}</code><div class="boot-actions"><button type="button" onclick="location.reload()">Recarregar</button><a href="./health.html">Abrir diagnóstico</a></div></div></div>`;
+        };
+        window.__ASTRA_BOOT_OK__=()=>{document.documentElement.dataset.astraReady='true';if(timer)clearTimeout(timer)};
+        window.addEventListener('error',event=>{
+          if(ready())return;
+          const target=event.target;
+          const src=target&&target.src?target.src:'';
+          showFailure('Falha ao carregar AstraStruct',src?`Recurso não carregado: ${src}`:(event.message||'Erro JavaScript durante o bootstrap.'));
+        },true);
+        window.addEventListener('unhandledrejection',event=>{
+          if(ready())return;
+          const reason=event.reason?.message||event.reason||'Promise rejeitada durante a inicialização.';
+          showFailure('AstraStruct não conseguiu iniciar',reason);
+        });
+        timer=setTimeout(()=>showFailure('AstraStruct demorou para iniciar','O módulo principal não sinalizou prontidão em 9 segundos. Verifique a rota health.html e recarregue a página.'),9000);
+      })();
+    </script>
   </head>
   <body>
-    <div id="root"><div class="boot-fallback"><div class="boot-card"><div class="boot-mark">AS</div><strong>Carregando AstraStruct</strong><small>Inicializando a interface de modelagem e análise estrutural…</small></div></div></div>
+    <div id="root"><div class="boot-fallback"><div class="boot-card"><div class="boot-mark">AS</div><strong>Carregando AstraStruct</strong><small>Inicializando a interface React/Vite · bootstrap 0.13.5…</small></div></div></div>
     <noscript><div style="padding:24px;background:#0b0f16;color:#eef4ff">O AstraStruct requer JavaScript habilitado.</div></noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>

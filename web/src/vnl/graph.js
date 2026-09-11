@@ -1,0 +1,3 @@
+export const VNL_BLOCKS=['Geometry','Mesh','Material','Section','Reinforcement','Boundary','Load','Combination','Solver','Increment','Convergence','Material Nonlinearity','Geometric Nonlinearity','Contact','Result','Plot','Export'];
+export function defaultGraph(){return ['Geometry','Material','Section','Boundary','Load','Solver','Result','Plot'].map((type,i)=>({id:`B${i+1}`,type,status:['Increment','Convergence','Material Nonlinearity','Geometric Nonlinearity','Contact'].includes(type)?'roadmap':'ready'}))}
+export function validateGraph(nodes){const names=nodes.map(n=>n.type),required=['Geometry','Material','Boundary','Load','Solver','Result'];const missing=required.filter(r=>!names.includes(r));return {ok:missing.length===0,missing};}

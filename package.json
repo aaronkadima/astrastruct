@@ -1,11 +1,11 @@
 {
   "name": "astrastruct",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "node tests/solver-smoke.mjs",
-    "check": "node --check web/src/app.js && node --check web/src/core/model.js && node --check web/src/ui/loadManager.js && node --check web/src/ui/postprocessPanel.js && node --check web/src/ui/advancedLoads.js && node --check web/src/ui/loadOverlay.js && node --check web/src/ui/propertyLibrary.js && node --check web/src/ui/report.js && node --check web/src/ui/stressPanel.js && node --check web/src/ui/mechanicsPanel.js && node --check web/src/solver/scenario.js && node --check web/src/solver/postprocess.js && node --check web/src/solver/envelope.js && node --check web/src/solver/frameElement.js && node --check web/src/solver/springs.js && node --check web/src/solver/frame2d.js && node --check web/src/solver/truss2d.js && node --check web/src/solver/mixed2d.js"
+    "check": "node --check web/src/app.js && node --check web/src/core/model.js && node --check web/src/ui/loadManager.js && node --check web/src/ui/postprocessPanel.js && node --check web/src/ui/advancedLoads.js && node --check web/src/ui/loadOverlay.js && node --check web/src/ui/connectionOverlay.js && node --check web/src/ui/propertyLibrary.js && node --check web/src/ui/report.js && node --check web/src/ui/stressPanel.js && node --check web/src/ui/mechanicsPanel.js && node --check web/src/ui/connectionsPanel.js && node --check web/src/solver/scenario.js && node --check web/src/solver/postprocess.js && node --check web/src/solver/envelope.js && node --check web/src/solver/frameElement.js && node --check web/src/solver/endConnections.js && node --check web/src/solver/springs.js && node --check web/src/solver/frame2d.js && node --check web/src/solver/truss2d.js && node --check web/src/solver/mixed2d.js"
   },
   "engines": {
     "node": ">=24"

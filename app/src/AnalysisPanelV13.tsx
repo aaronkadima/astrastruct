@@ -7,6 +7,12 @@ const num=(v:any,f=0)=>Number.isFinite(Number(v))?Number(v):f;
 const explicitSpring=(v:any)=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v));
 const supportedLoad=(kind:any)=>kind==='uniform'||kind==='selfWeight'||kind==='point'||kind==='thermal'||kind==='followerEnd';
 const referenceDeadLoad=(kind:any)=>kind==='uniform'||kind==='selfWeight'||kind==='point';
+const endState=(e:any,key:'rz1'|'rz2')=>{
+  if(e.releases?.[key])return{kind:'release',k:0};
+  const raw=e.rotationalSprings?.[key];
+  if(explicitSpring(raw))return{kind:Number(raw)===0?'release':'semirigid',k:Number(raw)};
+  return{kind:'rigid',k:Infinity};
+};
 
 type Props={project:any;onClose:()=>void;onCommit:(project:any)=>void};
 
@@ -14,7 +20,7 @@ function incompatibilities(project:any){
   const issues:string[]=[];
   if(!project.elements?.length)issues.push('O modelo não possui elementos.');
   if((project.elements||[]).some((e:any)=>e.type!=='frame2d'))issues.push('Somente elementos frame2d são aceitos nesta versão.');
-  if((project.elements||[]).some((e:any)=>e.releases?.rz1||e.releases?.rz2||explicitSpring(e.rotationalSprings?.rz1)||explicitSpring(e.rotationalSprings?.rz2)))issues.push('Releases e ligações semirrígidas ainda não são aceitos.');
+  for(const e of project.elements||[])for(const key of ['rz1','rz2'] as const){const raw=e.rotationalSprings?.[key];if(explicitSpring(raw)&&Number(raw)<0)issues.push(`Ligação ${e.id}/${key}: kθ deve ser não negativo.`)}
   const unsupported=[...new Set((project.elementLoads||[]).filter((l:any)=>!supportedLoad(l.kind)).map((l:any)=>String(l.kind||'desconhecida')))];
   if(unsupported.length)issues.push(`Cargas de barra ainda não suportadas no co‑rotacional: ${unsupported.join(', ')}.`);
   if((project.elementLoads||[]).some((l:any)=>l.kind==='followerEnd'&&Number(l.end??2)!==2))issues.push('A força seguidora concentrada está disponível somente na extremidade 2 nesta versão.');
@@ -45,6 +51,8 @@ export function AnalysisPanelV13({project,onClose,onCommit}:Props){
   const selectedFollowers=followerLoads.filter((l:any)=>l.caseId===activeCaseId&&l.elementId===followerElementId);
   const pointCount=referenceLoads.filter((l:any)=>l.kind==='point').length;
   const distributedCount=referenceLoads.length-pointCount;
+  const connectionStates=frames.flatMap((e:any)=>(['rz1','rz2'] as const).map(key=>({elementId:e.id,key,...endState(e,key)})));
+  const semirigidCount=connectionStates.filter(c=>c.kind==='semirigid').length,releaseCount=connectionStates.filter(c=>c.kind==='release').length,flexibleEndCount=semirigidCount+releaseCount;
   const issues=useMemo(()=>incompatibilities(effectiveProject),[effectiveProject]);
   const nonlinearOk=pureFrame&&!issues.length;
   const followerRequiresCorotational=mode!=='corotational'&&followerLoads.length>0;
@@ -52,15 +60,9 @@ export function AnalysisPanelV13({project,onClose,onCommit}:Props){
   const patchFollower=(id:string,key:'px'|'py',value:number)=>setElementLoads(old=>old.map((l:any)=>l.id===id?{...l,[key]:value}:l));
   const removeFollower=(id:string)=>setElementLoads(old=>old.filter((l:any)=>l.id!==id));
   const apply=()=>{
-    const p=clone(project);
-    p.elementLoads=clone(elementLoads);
-    p.settings.analysisType=mode;
-    p.settings.pDeltaMaxIterations=Math.max(2,Math.min(100,Math.round(num(pMaxIt,30))));
-    p.settings.pDeltaTolerance=Math.max(1e-12,num(pTol,1e-8));
-    p.settings.nonlinearSteps=Math.max(1,Math.min(200,Math.round(num(steps,20))));
-    p.settings.nonlinearMaxIterations=Math.max(3,Math.min(100,Math.round(num(maxIt,35))));
-    p.settings.nonlinearTolerance=Math.max(1e-12,num(tol,1e-8));
-    p.settings.nonlinearLineSearch=!!lineSearch;
+    const p=clone(project);p.elementLoads=clone(elementLoads);p.settings.analysisType=mode;
+    p.settings.pDeltaMaxIterations=Math.max(2,Math.min(100,Math.round(num(pMaxIt,30))));p.settings.pDeltaTolerance=Math.max(1e-12,num(pTol,1e-8));
+    p.settings.nonlinearSteps=Math.max(1,Math.min(200,Math.round(num(steps,20))));p.settings.nonlinearMaxIterations=Math.max(3,Math.min(100,Math.round(num(maxIt,35))));p.settings.nonlinearTolerance=Math.max(1e-12,num(tol,1e-8));p.settings.nonlinearLineSearch=!!lineSearch;
     onCommit(normalizeProject(p));onClose();
   };
   return <div className="react-modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
@@ -69,13 +71,15 @@ export function AnalysisPanelV13({project,onClose,onCommit}:Props){
       <div className="analysis-choices analysis-choices-v13">
         <button data-testid="analysis-linear" className={mode==='linear'?'active':''} onClick={()=>setMode('linear')}><b>Linear</b><span>K u = F</span><small>Pequenas deformações.</small></button>
         <button data-testid="analysis-pdelta" disabled={!pureFrame} className={mode==='pdelta'?'active':''} onClick={()=>setMode('pdelta')}><b>P‑Delta</b><span>[K + Kg(N)] u = F</span><small>Segunda ordem iterativa.</small></button>
-        <button data-testid="analysis-corotational" disabled={!nonlinearOk} className={mode==='corotational'?'active':''} onClick={()=>setMode('corotational')}><b>Geom. não linear</b><span>Co‑rotacional + Newton–Raphson</span><small>Grandes rotações · experimental v0.13.4.</small></button>
+        <button data-testid="analysis-corotational" disabled={!nonlinearOk} className={mode==='corotational'?'active':''} onClick={()=>setMode('corotational')}><b>Geom. não linear</b><span>Co‑rotacional + Newton–Raphson</span><small>Grandes rotações · experimental v0.13.5.</small></button>
       </div>
       {!pureFrame&&<div className="panel-warning">P‑Delta e co‑rotacional exigem modelos formados somente por frame2d.</div>}
       {pureFrame&&issues.length>0&&<div data-testid="corotational-incompatibilities" className="panel-warning"><b>Co‑rotacional indisponível neste modelo:</b><ul>{issues.map((x,i)=><li key={i}>{x}</li>)}</ul></div>}
       {followerRequiresCorotational&&<div data-testid="follower-mode-warning" className="panel-warning"><b>Força seguidora exige Geom. não linear.</b> Remova as ações follower ou selecione o solver co‑rotacional para evitar que uma ação dependente da configuração seja tratada incorretamente.</div>}
       {mode==='pdelta'&&<section className="react-card"><h3>Controle P‑Delta</h3><div className="geometry-grid"><label>Máx. iterações<input data-testid="pdelta-max-iterations" type="number" min="2" max="100" value={pMaxIt} onChange={e=>setPMaxIt(num(e.target.value,30))}/></label><label>Tolerância<input data-testid="pdelta-tolerance" type="number" value={pTol} onChange={e=>setPTol(num(e.target.value,1e-8))}/></label></div></section>}
-      {mode==='corotational'&&<section className="react-card" data-testid="corotational-controls"><h3>Newton–Raphson incremental</h3><div className="geometry-grid"><label>Incrementos<input data-testid="nonlinear-steps" type="number" min="1" max="200" value={steps} onChange={e=>setSteps(num(e.target.value,20))}/></label><label>Máx. iterações<input data-testid="nonlinear-max-iterations" type="number" min="3" max="100" value={maxIt} onChange={e=>setMaxIt(num(e.target.value,35))}/></label><label>Tolerância<input data-testid="nonlinear-tolerance" type="number" value={tol} onChange={e=>setTol(num(e.target.value,1e-8))}/></label><label className="checkbox-line"><input data-testid="nonlinear-line-search" type="checkbox" checked={lineSearch} onChange={e=>setLineSearch(e.target.checked)}/><span>Line search</span></label></div><div className="panel-warning">Escopo v0.13.4: frame2d Euler–Bernoulli, extremidades rígidas e apoios clássicos. Cargas nodais, uniforme, peso próprio e pontual em barra são aceitas; ações térmicas entram como <b>εT/κT</b>; força seguidora concentrada é aceita somente na <b>extremidade 2</b>, com componentes locais constantes e tangente externa consistente. Sem não linearidade material, contato, follower distribuída, molas, recalques ou imperfeição inicial.</div>{referenceLoads.length>0&&<div data-testid="reference-dead-load-note" className="panel-note">{distributedCount>0?`${distributedCount} carga(s) uniforme(s)/peso próprio`:''}{distributedCount>0&&pointCount>0?' + ':''}{pointCount>0?`${pointCount} carga(s) pontual(is) em barra`:''} serão convertidas em vetores nodais equivalentes e congeladas na configuração inicial. Elas não são cargas seguidoras.</div>}{thermalLoads.length>0&&<div data-testid="thermal-initial-state-note" className="panel-note"><b>{thermalLoads.length} ação(ões) térmica(s):</b> ΔT gera εT=αΔT e o gradiente gera κT=−αΔTg/h. Essas grandezas são deformações iniciais do elemento, não forças externas.</div>}{followerLoads.length>0&&<div data-testid="follower-load-note" className="panel-note"><b>{followerLoads.length} força(s) seguidora(s):</b> Px/Py permanecem constantes nos eixos locais da corda corrente. O equilíbrio usa <b>Kint − λKext</b>, com Kext=dP/dq; a matriz externa pode ser não simétrica por se tratar de ação não conservativa.</div>}
+      {mode==='corotational'&&<section className="react-card" data-testid="corotational-controls"><h3>Newton–Raphson incremental</h3><div className="geometry-grid"><label>Incrementos<input data-testid="nonlinear-steps" type="number" min="1" max="200" value={steps} onChange={e=>setSteps(num(e.target.value,20))}/></label><label>Máx. iterações<input data-testid="nonlinear-max-iterations" type="number" min="3" max="100" value={maxIt} onChange={e=>setMaxIt(num(e.target.value,35))}/></label><label>Tolerância<input data-testid="nonlinear-tolerance" type="number" value={tol} onChange={e=>setTol(num(e.target.value,1e-8))}/></label><label className="checkbox-line"><input data-testid="nonlinear-line-search" type="checkbox" checked={lineSearch} onChange={e=>setLineSearch(e.target.checked)}/><span>Line search</span></label></div><div className="panel-warning">Escopo v0.13.5: frame2d Euler–Bernoulli com extremidades rígidas, <b>rótulas e molas rotacionais semirrígidas</b>. Cargas nodais, uniforme, peso próprio e pontual em barra são aceitas; ações térmicas entram como εT/κT; força seguidora concentrada é aceita somente na extremidade 2, com tangente externa consistente. Sem não linearidade material, contato, follower distribuída, molas nodais, recalques ou imperfeição inicial.</div>
+        {flexibleEndCount>0&&<div data-testid="corotational-connection-note" className="panel-note"><b>{flexibleEndCount} extremidade(s) flexível(is):</b> {semirigidCount} semirrígida(s) e {releaseCount} rótula(s). O kernel introduz a rotação interna θe da extremidade e condensa esses DOFs por <b>Schur</b>; a mola obedece M=kθ(θn−θe). Configure as ligações no painel <b>Ligações</b>.</div>}
+        {referenceLoads.length>0&&<div data-testid="reference-dead-load-note" className="panel-note">{distributedCount>0?`${distributedCount} carga(s) uniforme(s)/peso próprio`:''}{distributedCount>0&&pointCount>0?' + ':''}{pointCount>0?`${pointCount} carga(s) pontual(is) em barra`:''} serão convertidas em vetores nodais equivalentes e congeladas na configuração inicial. Elas não são cargas seguidoras.</div>}{thermalLoads.length>0&&<div data-testid="thermal-initial-state-note" className="panel-note"><b>{thermalLoads.length} ação(ões) térmica(s):</b> ΔT gera εT=αΔT e o gradiente gera κT=−αΔTg/h. Essas grandezas são deformações iniciais do elemento, não forças externas.</div>}{followerLoads.length>0&&<div data-testid="follower-load-note" className="panel-note"><b>{followerLoads.length} força(s) seguidora(s):</b> Px/Py permanecem constantes nos eixos locais da corda corrente. O equilíbrio usa <b>Kint − λKext</b>, com Kext=dP/dq; a matriz externa pode ser não simétrica por se tratar de ação não conservativa.</div>}
         <div className="section-title"><h3>Força seguidora · extremidade 2</h3><button data-testid="follower-add" disabled={!followerElementId} onClick={addFollower}>+ Follower</button></div>
         <div className="geometry-grid"><label>Elemento<select data-testid="follower-element" value={followerElementId} onChange={e=>setFollowerElementId(e.target.value)}>{frames.map((e:any)=><option key={e.id} value={e.id}>{e.label||e.id} · {e.id}</option>)}</select></label><label>Caso ativo<input value={activeCaseId||''} disabled/></label></div>
         {selectedFollowers.length?selectedFollowers.map((f:any)=><div className="point-editor" key={f.id}><label>Px local [kN]<input data-testid="follower-px" type="number" value={num(f.px)} onChange={e=>patchFollower(f.id,'px',num(e.target.value))}/></label><label>Py local [kN]<input data-testid="follower-py" type="number" value={num(f.py)} onChange={e=>patchFollower(f.id,'py',num(e.target.value))}/></label><span className="chip">ext. 2</span><button className="danger" aria-label="Remover follower" onClick={()=>removeFollower(f.id)}>×</button></div>):<div data-testid="follower-empty" className="empty-state">Sem força seguidora neste elemento/caso.</div>}

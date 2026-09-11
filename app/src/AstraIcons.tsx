@@ -30,7 +30,16 @@ const ICONS:Record<string,React.ReactNode>={
   report:<><path d="M6 3.5h9l4 4V21H6zM15 3.5v4h4"/><path d="M9 17v-4m3 4V9m3 8v-6"/></>,
   vnl:<><rect x="3.5" y="5" width="6" height="5" rx="1"/><rect x="14.5" y="14" width="6" height="5" rx="1"/><path d="M9.5 7.5h4a4 4 0 0 1 4 4V14"/></>,
   support:<><path d="M12 5 5 16h14zM4 20h16"/><circle cx="12" cy="5" r="1.5"/></>,
-  delete:<><path d="M5 7h14M9 7V4h6v3M8 10v8m4-8v8m4-8v8M7 7l1 14h8l1-14"/></>
+  delete:<><path d="M5 7h14M9 7V4h6v3M8 10v8m4-8v8m4-8v8M7 7l1 14h8l1-14"/></>,
+  zoomIn:<><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M7.5 10.5h6M10.5 7.5v6"/></>,
+  zoomOut:<><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M7.5 10.5h6"/></>,
+  fit:<><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><path d="M8 12h8"/></>,
+  loads:<><path d="M5 5v10m0 0-3-4m3 4 3-4M12 4v13m0 0-3-4m3 4 3-4M19 7v8m0 0-3-4m3 4 3-4"/><path d="M3 20h18"/></>,
+  reactions:<><path d="M5 19V9m0 0-3 4m3-4 3 4M12 20V7m0 0-3 4m3-4 3 4M19 17V9m0 0-3 4m3-4 3 4"/><path d="M3 4h18"/></>,
+  deformed:<><path d="M4 17h16"/><path d="M4 17c4 0 4-8 8-8s4 8 8 8"/><circle cx="4" cy="17" r="1.2"/><circle cx="20" cy="17" r="1.2"/></>,
+  axial:<><path d="M4 12h16M4 12l4-3m-4 3 4 3M20 12l-4-3m4 3-4 3"/><path d="M12 5v14"/></>,
+  shear:<><path d="M5 5v14M19 5v14"/><path d="M5 8h14M5 16h14M9 5 5 8l4 3M15 13l4 3-4 3"/></>,
+  moment:<><path d="M6 16a7 7 0 1 1 12-5"/><path d="m18 7 .5 4-4-.5"/><path d="M12 6v12"/></>
 };
 
 export function Glyph({name}:{name:string}){return <svg className="glyph" viewBox="0 0 24 24" aria-hidden="true">{ICONS[name]||ICONS.more}</svg>}

@@ -5,6 +5,7 @@ import { makeFrameElement, makeTrussElement, uid } from '../../web/src/core/mode
 import { solveEnvelope } from '../../web/src/solver/envelope.js';
 import { CanvasOverlays } from './CanvasOverlays';
 import { ResultOverlays, type DiagramKind } from './ResultOverlays';
+import { BucklingOverlay } from './BucklingOverlay';
 import { Glyph } from './AstraIcons';
 
 export type ModelTool='select'|'node'|'frame2d'|'truss2d';
@@ -60,7 +61,7 @@ function mergeNodeInto(project:any,sourceId:string,targetId:string){
   for(const raw of project.supports||[]){
     const s={...raw,nodeId:raw.nodeId===sourceId?targetId:raw.nodeId},prev=supportMap.get(s.nodeId);
     if(!prev){supportMap.set(s.nodeId,s);continue}
-    supportMap.set(s.nodeId,{...prev,...s,ux:!!(prev.ux||s.ux),uy:!!(prev.uy||s.uy),rz:!!(prev.rz||s.rz),baseUxValue:Number(prev.baseUxValue)||Number(s.baseUxValue)||0,baseUyValue:Number(prev.baseUyValue)||Number(s.baseUyValue)||0,baseRzValue:Number(prev.baseRzValue)||Number(s.baseRzValue)||0});
+    supportMap.set(s.nodeId,{...prev,...s,ux:!!(prev.ux||s.ux),uy:!!(prev.uy||s.uy),rz:!!(prev.rz||s.rz),baseUxValue:Number(prev.baseUxValue)||Number(s.baseUxValue)||0,baseUyValue:Number(prev.baseUyValue)||Number(s.baseUyValue)||0,baseRzValue:Number(prev.baseRzValue)||0});
   }
   project.supports=[...supportMap.values()];
   project.loads=(project.loads||[]).map((l:any)=>({...l,nodeId:l.nodeId===sourceId?targetId:l.nodeId}));
@@ -77,17 +78,18 @@ function Support({node,project,to}:{node:any;project:any;to:(x:number,y:number)=
   return <g className="support"><path d={`M ${x-13} ${y+17} L ${x+13} ${y+17} L ${x} ${y+3} Z`}/><line x1={x-18} y1={y+22} x2={x+18} y2={y+22}/></g>;
 }
 
-export function ModelingCanvas({project,result,tool,selection,onSelection,onCommit}:{project:any;result:any;tool:ModelTool;selection:Selection;onSelection:(s:Selection)=>void;onCommit:(p:any)=>void}){
+export function ModelingCanvas({project,result,bucklingView,onClearBuckling,tool,selection,onSelection,onCommit}:{project:any;result:any;bucklingView?:any;onClearBuckling?:()=>void;tool:ModelTool;selection:Selection;onSelection:(s:Selection)=>void;onCommit:(p:any)=>void}){
   const svgRef=useRef<SVGSVGElement|null>(null),spacePressed=useRef(false),touchesRef=useRef(new Map<number,{x:number;y:number}>()),pinchRef=useRef<{distance:number;world:{x:number;y:number};scale:number}|null>(null);
   const [camera,setCamera]=useState<Camera>(()=>fitCamera(project));
   const [draft,setDraft]=useState<WorldPoint|null>(null),[cursor,setCursor]=useState<WorldPoint|null>(null),[drag,setDrag]=useState<DragState|null>(null),[dragPoint,setDragPoint]=useState<WorldPoint|null>(null),[panDrag,setPanDrag]=useState<PanState|null>(null);
   const [showLoads,setShowLoads]=useState(true),[showReactions,setShowReactions]=useState(true),[showDeformed,setShowDeformed]=useState(true),[diagram,setDiagram]=useState<DiagramKind>('none');
   const [showEnvelope,setShowEnvelope]=useState(false),[probeEnabled,setProbeEnabled]=useState(false),[showStressMap,setShowStressMap]=useState(false);
-  const [deformMultiplier,setDeformMultiplier]=useState(1),[diagramScale,setDiagramScale]=useState(1);
+  const [deformMultiplier,setDeformMultiplier]=useState(1),[diagramScale,setDiagramScale]=useState(1),[bucklingMultiplier,setBucklingMultiplier]=useState(1);
 
   useEffect(()=>{setDraft(null);setCursor(null);setDrag(null);setDragPoint(null);setPanDrag(null)},[tool]);
   useEffect(()=>{setCamera(fitCamera(project))},[project.id]);
   useEffect(()=>{if(!result){setShowEnvelope(false);setProbeEnabled(false);setShowStressMap(false)}},[result]);
+  useEffect(()=>{setBucklingMultiplier(1)},[bucklingView?.modeIndex,bucklingView?.result]);
   useEffect(()=>{
     const down=(e:KeyboardEvent)=>{if(e.code==='Escape'){setDraft(null);setDrag(null);setDragPoint(null);setPanDrag(null);return}if(e.code==='Space'&&!isEditableTarget(e.target)){spacePressed.current=true;e.preventDefault()}};
     const up=(e:KeyboardEvent)=>{if(e.code==='Space')spacePressed.current=false};window.addEventListener('keydown',down);window.addEventListener('keyup',up);return()=>{window.removeEventListener('keydown',down);window.removeEventListener('keyup',up)};
@@ -98,7 +100,7 @@ export function ModelingCanvas({project,result,tool,selection,onSelection,onComm
   const activeCase=project.settings?.activeLoadCaseId||project.loadCases?.[0]?.id,resultAvailable=!!result?.elementResponses?.length;
   const maxDisp=useMemo(()=>Math.max(0,...(result?.displacements||[]).map((d:any)=>Math.hypot(Number(d.ux)||0,Number(d.uy)||0))),[result]);
   const characteristicLength=useMemo(()=>{const b=bounds(project);return Math.max(2,b.maxX-b.minX,b.maxY-b.minY)},[project]);
-  const autoDefScale=maxDisp>1e-15?clamp(characteristicLength*.08/maxDisp,1,5000):1,deformationScale=autoDefScale*deformMultiplier;
+  const autoDefScale=maxDisp>1e-15?clamp(characteristicLength*.08/maxDisp,1,5000):1,deformationScale=autoDefScale*deformMultiplier,bucklingScale=characteristicLength*.12*bucklingMultiplier;
   const envelope=useMemo(()=>{if(!showEnvelope||!resultAvailable)return null;try{return solveEnvelope(project)}catch{return null}},[showEnvelope,resultAvailable,project]);
 
   const gridData=useMemo(()=>{
@@ -156,6 +158,7 @@ export function ModelingCanvas({project,result,tool,selection,onSelection,onComm
       <g className="grid-lines">{gridData.xs.map((x:number)=><line key={`v${x}`} x1={tf.to(x,0)[0]} y1="0" x2={tf.to(x,0)[0]} y2={VIEW.h}/>)}{gridData.ys.map((y:number)=><line key={`h${y}`} x1="0" y1={tf.to(0,y)[1]} x2={VIEW.w} y2={tf.to(0,y)[1]}/>)}</g>
       {displayProject.elements?.map((e:any)=>{const a=displayProject.nodes.find((n:any)=>n.id===e.n1),b=displayProject.nodes.find((n:any)=>n.id===e.n2);if(!a||!b)return null;const[x1,y1]=tf.to(a.x,a.y),[x2,y2]=tf.to(b.x,b.y);return <g data-entity="element" key={e.id} className="clickable" onPointerDown={ev=>{if(spacePressed.current||ev.button!==0)return;ev.stopPropagation();if(tool==='select')onSelection({kind:'element',id:e.id})}}><line className={`member ${e.type==='truss2d'?'truss':''} ${selection?.kind==='element'&&selection.id===e.id?'selected':''}`} x1={x1} y1={y1} x2={x2} y2={y2}/><text className="element-label" x={(x1+x2)/2+8} y={(y1+y2)/2-8}>{e.id}</text></g>})}
       <ResultOverlays result={result} envelope={envelope} to={tf.to} showDeformed={showDeformed} deformationScale={deformationScale} diagram={diagram} diagramScale={diagramScale} showEnvelope={showEnvelope} probeEnabled={probeEnabled} showStressMap={showStressMap}/>
+      {bucklingView&&<BucklingOverlay project={project} view={bucklingView} to={tf.to} scale={bucklingScale}/>} 
       <CanvasOverlays project={project} displayProject={displayProject} result={result} activeCase={activeCase} to={tf.to} showLoads={showLoads} showReactions={showReactions}/>
       {displayProject.nodes?.map((n:any)=>{const[x,y]=tf.to(n.x,n.y);return <g data-entity="node" data-node-id={n.id} key={n.id} className="clickable" onPointerDown={e=>nodePointerDown(e,n.id)}><Support node={n} project={displayProject} to={tf.to}/><circle className={`node ${selection?.kind==='node'&&selection.id===n.id?'selected':''}`} cx={x} cy={y} r={selection?.kind==='node'&&selection.id===n.id?9:6}/><text className="node-label" x={x+10} y={y-10}>{n.id}</text></g>})}
       {draftStart&&draftEnd&&<line className="draft-member" x1={draftStart[0]} y1={draftStart[1]} x2={draftEnd[0]} y2={draftEnd[1]}/>} {cursor&&tool!=='select'&&<circle className={`cursor-snap ${cursor.nodeId?'node-hit':''}`} cx={tf.to(cursor.x,cursor.y)[0]} cy={tf.to(cursor.x,cursor.y)[1]} r={cursor.nodeId?8:5}/>} 
@@ -168,18 +171,20 @@ export function ModelingCanvas({project,result,tool,selection,onSelection,onComm
       <button data-testid="toggle-probe" className={probeEnabled?'active':''} aria-label="Sonda de resultados" title="Inspecionar resultados na barra" disabled={!resultAvailable} onClick={()=>setProbeEnabled(v=>!v)}><Glyph name="probe"/></button>
       <button data-testid="toggle-envelope" className={showEnvelope?'active':''} aria-label="Envelope no modelo" title="Envelope mínimo/máximo" disabled={!resultAvailable} onClick={toggleEnvelope}><Glyph name="envelope"/></button>
       <button data-testid="toggle-stress-map" className={showStressMap?'active':''} aria-label="Mapa de tensão elástica" title="Mapa |σ| elástico [MPa]" disabled={!resultAvailable} onClick={()=>setShowStressMap(v=>!v)}><Glyph name="stress"/></button>
+      {bucklingView&&<button data-testid="toggle-buckling-mode" className="active" aria-label="Ocultar modo de flambagem" title="Ocultar modo de flambagem" onClick={onClearBuckling}><Glyph name="stability"/></button>}
       <span className="result-tool-sep"/>
       <button data-testid="diagram-N" className={diagram==='N'?'active':''} aria-label="Diagrama de esforço normal" title="N(x)" disabled={!resultAvailable} onClick={()=>toggleDiagram('N')}><Glyph name="axial"/></button>
       <button data-testid="diagram-V" className={diagram==='V'?'active':''} aria-label="Diagrama de esforço cortante" title="V(x)" disabled={!resultAvailable} onClick={()=>toggleDiagram('V')}><Glyph name="shear"/></button>
       <button data-testid="diagram-M" className={diagram==='M'?'active':''} aria-label="Diagrama de momento fletor" title="M(x)" disabled={!resultAvailable} onClick={()=>toggleDiagram('M')}><Glyph name="moment"/></button>
     </div>
 
-    {resultAvailable&&(showDeformed||diagram!=='none')&&<div className="canvas-result-scales">
-      {showDeformed&&<label title="Escala gráfica da deformada"><Glyph name="deformed"/><input aria-label="Escala da deformada" type="range" min="0.1" max="4" step="0.1" value={deformMultiplier} onChange={e=>setDeformMultiplier(Number(e.target.value))}/><span>×{deformationScale>=100?deformationScale.toFixed(0):deformationScale.toFixed(1)}</span></label>}
-      {diagram!=='none'&&<label title={showEnvelope?'Escala gráfica do envelope':'Escala gráfica do diagrama'}><Glyph name={showEnvelope?'envelope':diagram==='N'?'axial':diagram==='V'?'shear':'moment'}/><input aria-label="Escala do diagrama" type="range" min="0.4" max="2.5" step="0.1" value={diagramScale} onChange={e=>setDiagramScale(Number(e.target.value))}/><span>{showEnvelope?'ENV ':''}{diagram} ×{diagramScale.toFixed(1)}</span></label>}
+    {(resultAvailable&&(showDeformed||diagram!=='none')||bucklingView)&&<div className="canvas-result-scales">
+      {showDeformed&&resultAvailable&&<label title="Escala gráfica da deformada"><Glyph name="deformed"/><input aria-label="Escala da deformada" type="range" min="0.1" max="4" step="0.1" value={deformMultiplier} onChange={e=>setDeformMultiplier(Number(e.target.value))}/><span>×{deformationScale>=100?deformationScale.toFixed(0):deformationScale.toFixed(1)}</span></label>}
+      {diagram!=='none'&&resultAvailable&&<label title={showEnvelope?'Escala gráfica do envelope':'Escala gráfica do diagrama'}><Glyph name={showEnvelope?'envelope':diagram==='N'?'axial':diagram==='V'?'shear':'moment'}/><input aria-label="Escala do diagrama" type="range" min="0.4" max="2.5" step="0.1" value={diagramScale} onChange={e=>setDiagramScale(Number(e.target.value))}/><span>{showEnvelope?'ENV ':''}{diagram} ×{diagramScale.toFixed(1)}</span></label>}
+      {bucklingView&&<label title="Escala gráfica do modo de flambagem"><Glyph name="stability"/><input aria-label="Escala do modo de flambagem" type="range" min="0.25" max="3" step="0.05" value={bucklingMultiplier} onChange={e=>setBucklingMultiplier(Number(e.target.value))}/><span>modo ×{bucklingMultiplier.toFixed(2)}</span></label>}
     </div>}
 
     <div className="canvas-nav" role="group" aria-label="Navegação do canvas"><button type="button" aria-label="Aproximar" title="Aproximar" onClick={()=>zoomBy(1.25)}><Glyph name="zoomIn"/></button><button type="button" aria-label="Afastar" title="Afastar" onClick={()=>zoomBy(.8)}><Glyph name="zoomOut"/></button><button type="button" aria-label="Ajustar à vista" title="Ajustar modelo à vista" onClick={fitView}><Glyph name="fit"/></button><span className="zoom-readout">{zoomPercent}%</span></div>
-    <div className="canvas-hud"><span>{cursor?`X ${cursor.x.toFixed(3)} · Y ${cursor.y.toFixed(3)}`:'X — · Y —'}</span><span>grade {gridData.step.toFixed(gridData.step<1?3:2)} m</span><span className="desktop-hint">arraste nó · fundo = pan · roda/pinça = zoom · Espaço = pan{probeEnabled?' · sonda ativa':''}{showStressMap?' · mapa |σ|':''}</span></div>
+    <div className="canvas-hud"><span>{cursor?`X ${cursor.x.toFixed(3)} · Y ${cursor.y.toFixed(3)}`:'X — · Y —'}</span><span>grade {gridData.step.toFixed(gridData.step<1?3:2)} m</span><span className="desktop-hint">arraste nó · fundo = pan · roda/pinça = zoom · Espaço = pan{probeEnabled?' · sonda ativa':''}{showStressMap?' · mapa |σ|':''}{bucklingView?' · modo crítico':''}</span></div>
   </div>;
 }

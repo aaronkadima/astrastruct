@@ -168,7 +168,7 @@ function circularArc(ne){
   const r=solveFrameCorotational2D(p,'COMB_F',{steps:7,maxIterations:35,tolerance:1e-10}),tip=r.displacements.find(d=>d.nodeId==='N2'),ra=r.reactions.find(x=>x.nodeId==='N1'),f=r.elementResponses[0].followerEnds[0],expectedP=140,expectedU=expectedP*2/(30e6*.15);
   near(tip.ux,expectedU,2e-10,'Follower combinado: deslocamento axial');near(tip.uy,0,1e-10,'Follower combinado: deslocamento transversal');near(ra.fx,-expectedP,2e-6,'Follower combinado: reação axial');
   near(f.px,expectedP,1e-12,'Follower combinado: Px escalado');near(f.currentGlobal.fx,expectedP,2e-6,'Follower combinado: Fx global');near(f.currentGlobal.fy,0,1e-10,'Follower combinado: Fy global');
-  assert(f.consistentExternalTangent===true,'Follower combinado: metadado da tangente externa ausente');assert(r.nonlinear.followerLoads?.count===1,'Follower combinado: contagem de follower incorreta');assert(r.solverVersion==='0.13.4-exp','Follower combinado: versão do solver incorreta');
+  assert(f.consistentExternalTangent===true,'Follower combinado: metadado da tangente externa ausente');assert(r.nonlinear.followerLoads?.count===1,'Follower combinado: contagem de follower incorreta');assert(r.solverVersion==='0.13.5-exp','Follower combinado: versão do solver incorreta');
   console.log(p.name,'OK','Px=',f.px,'ux [mm]=',tip.ux*1000,'R=',ra.fx);
 }
 
@@ -215,4 +215,4 @@ function circularArc(ne){
   console.log('Co-rotacional — escopo protegido OK: recalques, imperfeição, deslocamento base e follower fora da ext. 2 recusados');
 }
 
-console.log('Todos os smoke tests co-rotacionais experimentais do AstraStruct v0.13.4 passaram.');
+console.log('Todos os smoke tests co-rotacionais experimentais do AstraStruct v0.13.5 passaram.');

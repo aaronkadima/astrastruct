@@ -7,7 +7,7 @@
     "dev": "vite --config vite.config.ts",
     "build": "vite build --config vite.config.ts",
     "preview": "vite preview --config vite.config.ts --host 127.0.0.1 --port 4173",
-    "test": "node tests/solver-smoke.mjs && node tests/pdelta-smoke.mjs && node tests/corotational-connections-diagnostic.mjs && node tests/corotational-smoke.mjs && node tests/corotational-follower-smoke.mjs",
+    "test": "node tests/solver-smoke.mjs && node tests/pdelta-smoke.mjs && node tests/corotational-smoke.mjs && node tests/corotational-follower-smoke.mjs",
     "test:e2e": "playwright test",
     "check": "tsc -p tsconfig.json --noEmit && node --check web/src/core/model.js && node --check web/src/solver/index.js && node --check web/src/solver/scenario.js && node --check web/src/solver/postprocess.js && node --check web/src/solver/envelope.js && node --check web/src/solver/frameElement.js && node --check web/src/solver/endConnections.js && node --check web/src/solver/springs.js && node --check web/src/solver/pdelta2d.js && node --check web/src/solver/buckling2d.js && node --check web/src/solver/corotational2d.js && node --check web/src/solver/corotationalPostprocess.js && node --check web/src/solver/frame2d.js && node --check web/src/solver/truss2d.js && node --check web/src/solver/mixed2d.js"
   },

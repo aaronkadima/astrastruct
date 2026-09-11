@@ -1,5 +1,7 @@
 import { zeros, solveConstrained, addSub } from './matrix.js';
 import { prepareFrameElement, recoverFrameEndForces, frameEndHasRotationalStiffness } from './frameElement.js';
+import { addNodalSprings, recoverSpringForces } from './springs.js';
+import { sectionDepth } from '../core/model.js';
 
 export function solveMixed2D(project) {
   const nodes=project.nodes||[],elements=project.elements||[];
@@ -14,8 +16,9 @@ export function solveMixed2D(project) {
     const elementLoads=(project.elementLoads||[]).filter(l=>l.elementId===e.id);
 
     if(e.type==='frame2d'){
+      const sec=(project.sections||[]).find(x=>x.id===e.sectionId);
       const loads=elementLoads.map(l=>l.kind==='selfWeight'?{...l,gamma:Number(l.gamma)||Number(mat.density)||0}:l);
-      const prepared=prepareFrameElement({E:mat.E,A:e.A,I:e.I,L,c,s,loads,releases:e.releases||{}});
+      const prepared=prepareFrameElement({E:mat.E,A:e.A,I:e.I,L,c,s,loads,releases:e.releases||{},alpha:Number(mat.alpha)||0,sectionHeight:sectionDepth(sec)});
       const idx=[3*i,3*i+1,3*i+2,3*j,3*j+1,3*j+2];addSub(K,prepared.kg,idx);prepared.pg.forEach((v,k)=>{F[idx[k]]+=v});cache.push({kind:'frame2d',e,idx,prepared});
     }else if(e.type==='truss2d'){
       if(!(e.A>0))throw new Error(`Elemento ${e.id}: A deve ser positiva.`);
@@ -25,20 +28,27 @@ export function solveMixed2D(project) {
         const gamma=Number(load.gamma)||Number(mat.density)||0,factor=Number.isFinite(Number(load.weightFactor))?Number(load.weightFactor):1,total=gamma*e.A*L*factor;
         F[3*i+1]-=total/2;F[3*j+1]-=total/2;
       }
-      cache.push({kind:'truss2d',e,i,j,c,s,L,mat});
+      let thermalStrain=0;
+      for(const load of elementLoads.filter(l=>l.kind==='thermal')){
+        if(Math.abs(Number(load.dTGradient)||0)>1e-15)throw new Error(`Elemento ${e.id}: treliça 2D não admite gradiente térmico.`);
+        const eps=(Number(mat.alpha)||0)*(Number(load.dT)||0),n0=mat.E*e.A*eps;
+        thermalStrain+=eps;F[3*i]+=-n0*c;F[3*i+1]+=-n0*s;F[3*j]+=n0*c;F[3*j+1]+=n0*s;
+      }
+      cache.push({kind:'truss2d',e,i,j,c,s,L,mat,thermalStrain});
     }else throw new Error(`Tipo de elemento não suportado no solver misto: ${e.type}`);
   }
 
+  addNodalSprings(K,project,map,3);
   for(const l of project.loads||[]){const i=map.get(l.nodeId);if(i==null)continue;F[3*i]+=l.fx||0;F[3*i+1]+=l.fy||0;F[3*i+2]+=l.mz||0}
   const prescribed=new Map();
   for(const support of project.supports||[]){const i=map.get(support.nodeId);if(i==null)continue;if(support.ux)prescribed.set(3*i,Number(support.uxValue)||0);if(support.uy)prescribed.set(3*i+1,Number(support.uyValue)||0);if(support.rz)prescribed.set(3*i+2,Number(support.rzValue)||0)}
   nodes.forEach((node,i)=>{const activeRotation=elements.some(e=>frameEndHasRotationalStiffness(e,node.id));if(!activeRotation&&!prescribed.has(3*i+2))prescribed.set(3*i+2,0)});
-  if(!prescribed.size)throw new Error('Modelo sem restrições de apoio.');
   const {u,R,free}=solveConstrained(K,F,prescribed);
+  const displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[3*i],uy:u[3*i+1],rz:u[3*i+2]}));
 
   const elementForces=cache.map(item=>{
     if(item.kind==='frame2d'){const ug=item.idx.map(i=>u[i]),{q,ul}=recoverFrameEndForces(item.prepared,ug);return{elementId:item.e.id,type:'frame2d',N1:q[0],V1:q[1],M1:q[2],N2:q[3],V2:q[4],M2:q[5],localDisplacements:ul,loadSummary:item.prepared.loadSummary}}
-    const {e,i,j,c,s,L,mat}=item,de=-c*u[3*i]-s*u[3*i+1]+c*u[3*j]+s*u[3*j+1];return{elementId:e.id,type:'truss2d',N:mat.E*e.A/L*de};
+    const {e,i,j,c,s,L,mat,thermalStrain}=item,de=-c*u[3*i]-s*u[3*i+1]+c*u[3*j]+s*u[3*j+1];return{elementId:e.id,type:'truss2d',N:mat.E*e.A*(de/L-thermalStrain),thermalStrain};
   });
-  return{type:'mixed2d',solverVersion:'0.5.0',dofs:nd,activeDofs:free.length,displacements:nodes.map((n,i)=>({nodeId:n.id,ux:u[3*i],uy:u[3*i+1],rz:u[3*i+2]})),reactions:nodes.map((n,i)=>({nodeId:n.id,fx:R[3*i],fy:R[3*i+1],mz:R[3*i+2]})),elementForces};
+  return{type:'mixed2d',solverVersion:'0.8.0',dofs:nd,activeDofs:free.length,displacements,reactions:nodes.map((n,i)=>({nodeId:n.id,fx:R[3*i],fy:R[3*i+1],mz:R[3*i+2]})),springForces:recoverSpringForces(project,displacements),elementForces};
 }

@@ -18,27 +18,27 @@ async function persistedProject(page:Page){
   return page.evaluate(()=>{const raw=localStorage.getItem('astrastruct.project');return raw?JSON.parse(raw):null});
 }
 
-async function mutateProject(page:Page,mutate:(p:any)=>void){
-  await page.evaluate(fn=>{
+async function mutateProject(page:Page,mutate:(p:any,...args:any[])=>void,...args:any[]){
+  await page.evaluate(({source,args})=>{
     const raw=localStorage.getItem('astrastruct.project');if(!raw)throw new Error('Projeto inicial ausente');
-    const p=JSON.parse(raw);(0,eval)(`(${fn})`)(p);localStorage.setItem('astrastruct.project',JSON.stringify(p));
-  },mutate.toString());
+    const p=JSON.parse(raw),apply=(0,eval)(`(${source})`);apply(p,...args);localStorage.setItem('astrastruct.project',JSON.stringify(p));
+  },{source:mutate.toString(),args});
   await page.reload();
 }
 
 async function installReferenceBeam(page:Page,kind:'uniform'|'selfWeight'){
-  await mutateProject(page,(p:any)=>{
+  await mutateProject(page,(p:any,loadKind:'uniform'|'selfWeight')=>{
     const template=p.elements?.[0];if(!template)throw new Error('Elemento modelo ausente');
-    p.name=kind==='uniform'?'E2E — UDL co-rotacional':'E2E — peso próprio co-rotacional';
+    p.name=loadKind==='uniform'?'E2E — UDL co-rotacional':'E2E — peso próprio co-rotacional';
     p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:3,y:0},{id:'N3',x:6,y:0}];
     p.elements=[
       {...template,id:'E1',n1:'N1',n2:'N2',A:.15,I:.003125,sectionId:'rc_30x50',releases:{rz1:false,rz2:false},rotationalSprings:{rz1:null,rz2:null}},
       {...template,id:'E2',n1:'N2',n2:'N3',A:.15,I:.003125,sectionId:'rc_30x50',releases:{rz1:false,rz2:false},rotationalSprings:{rz1:null,rz2:null}}
     ];
     p.supports=[{nodeId:'N1',ux:true,uy:true,rz:false},{nodeId:'N3',ux:false,uy:true,rz:false}];p.loads=[];p.nodeSprings=[];p.settlements=[];
-    p.elementLoads=kind==='uniform'?[{id:'EL1',caseId:'LC1',elementId:'E1',kind:'uniform',qx:0,qy:-20},{id:'EL2',caseId:'LC1',elementId:'E2',kind:'uniform',qx:0,qy:-20}]:[{id:'SW1',caseId:'LC1',elementId:'E1',kind:'selfWeight',factor:1},{id:'SW2',caseId:'LC1',elementId:'E2',kind:'selfWeight',factor:1}];
+    p.elementLoads=loadKind==='uniform'?[{id:'EL1',caseId:'LC1',elementId:'E1',kind:'uniform',qx:0,qy:-20},{id:'EL2',caseId:'LC1',elementId:'E2',kind:'uniform',qx:0,qy:-20}]:[{id:'SW1',caseId:'LC1',elementId:'E1',kind:'selfWeight',factor:1},{id:'SW2',caseId:'LC1',elementId:'E2',kind:'selfWeight',factor:1}];
     p.settings={...(p.settings||{}),analysisType:'linear',analysisScenarioId:'LC1',imperfection:{...(p.settings?.imperfection||{}),enabled:false}};
-  });
+  },kind);
 }
 
 async function installReferencePointBeam(page:Page){

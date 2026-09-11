@@ -159,3 +159,16 @@ test('result probe reports section values and envelope overlays on model', async
   await page.getByTestId('diagram-V').click();
   await expect(page.getByTestId('envelope-diagram')).toHaveAttribute('data-diagram','V');
 });
+
+test('elastic stress map switches between scenario and envelope values', async ({ page }) => {
+  await page.goto('./');
+  await page.getByTestId('analyze-button').click();
+  await page.getByTestId('toggle-stress-map').click();
+  const map=page.getByTestId('stress-map');
+  await expect(map).toHaveAttribute('data-mode','scenario');
+  expect(Number(await map.getAttribute('data-max-stress'))).toBeGreaterThan(0);
+  expect(await page.locator('.stress-segment').count()).toBeGreaterThan(5);
+  await page.getByTestId('toggle-envelope').click();
+  await expect(map).toHaveAttribute('data-mode','envelope');
+  expect(Number(await map.getAttribute('data-max-stress'))).toBeGreaterThan(0);
+});

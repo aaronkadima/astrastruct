@@ -31,4 +31,26 @@ function assert(condition,message){if(!condition)throw new Error(message)}
   console.log('P-Delta sem esforço axial OK','ux=',u2);
 }
 
-console.log('Todos os smoke tests P-Delta do AstraStruct v0.10 passaram.');
+// Imperfeição modal pura em coluna biarticulada sob compressão.
+// Para u0 coincidente com o primeiro autovetor, a resposta linearizada de
+// segunda ordem deve satisfazer e_total = e0/(1-P/Pcr) = e0/(1-1/lambda_cr).
+{
+  const p=emptyProject();p.name='Coluna — imperfeição modal';p.settings.analysisType='pdelta';p.settings.pDeltaMaxIterations=40;p.settings.pDeltaTolerance=1e-11;
+  const L=6,ne=8,le=L/ne,P=4000,e0mm=10;
+  p.nodes=Array.from({length:ne+1},(_,i)=>({id:`N${i}`,x:0,y:i*le}));
+  p.elements=Array.from({length:ne},(_,i)=>makeFrameElement({id:`E${i+1}`,n1:`N${i}`,n2:`N${i+1}`,sectionId:'rc_30x60',A:.18,I:.0054,label:`Trecho ${i+1}`}));
+  p.supports=[{nodeId:'N0',ux:true,uy:true,rz:false},{nodeId:`N${ne}`,ux:true,uy:false,rz:false}];
+  p.loads=[{id:'P',caseId:'LC1',nodeId:`N${ne}`,fx:0,fy:-P,mz:0}];
+  p.settings.imperfection={enabled:true,source:'bucklingMode',scenarioId:'LC1',mode:1,amplitudeMm:e0mm};
+  const r=solve(p,'LC1'),imp=r.pDelta?.imperfection;
+  assert(imp?.enabled,'Imperfeição modal: metadado ausente');
+  assert(r.initialDisplacements&&r.totalDisplacements,'Imperfeição modal: campos inicial/total ausentes');
+  near(imp.amplitudeMm,e0mm,1e-9,'Imperfeição modal: amplitude registrada');
+  const maxInitial=Math.max(...r.initialDisplacements.map(d=>Math.hypot(d.ux,d.uy))),maxTotal=Math.max(...r.totalDisplacements.map(d=>Math.hypot(d.ux,d.uy))),expected=(e0mm/1000)/(1-1/imp.criticalFactor);
+  near(maxInitial,e0mm/1000,1e-9,'Imperfeição modal: normalização');
+  near(maxTotal,expected,5e-6,'Imperfeição modal: amplificação de Euler');
+  assert(maxTotal>maxInitial,'Imperfeição modal: compressão não amplificou a forma inicial');
+  console.log(p.name,'OK','lambda_cr=',imp.criticalFactor,'e0 [mm]=',maxInitial*1000,'etot [mm]=',maxTotal*1000,'teórico [mm]=',expected*1000);
+}
+
+console.log('Todos os smoke tests P-Delta do AstraStruct v0.12 passaram.');

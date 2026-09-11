@@ -110,8 +110,7 @@ function circularArc(ne){
   console.log(p.name,'OK','R=',ra.fy,rb.fy,'Mmax=',mmax,'salto V=',mid.V-before.V,'resíduo=',recovery);
 }
 
-// 8) Expansão térmica uniforme livre: epsT=alpha*dT deve aparecer como
-// alongamento geométrico sem força axial ou momento espúrio.
+// 8) Expansão térmica uniforme livre.
 {
   const p=emptyProject();p.name='Co-rotacional — expansão térmica livre';
   p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:2,y:0}];p.elements=[makeFrameElement({id:'E1',n1:'N1',n2:'N2'})];
@@ -133,14 +132,13 @@ function circularArc(ne){
   console.log(p.name,'OK','N=',f.basicForces.N,'kN');
 }
 
-// 10) Gradiente térmico livre: a curvatura inicial deve produzir uma forma de
-// arco praticamente sem tensões. O erro geométrico cai com a discretização.
+// 10) Gradiente térmico livre: forma de arco praticamente sem tensões.
 {
   const L=4,ne=8,le=L/ne,alpha=10e-6,dTg=20,h=.5,kappa=-alpha*dTg/h,theta=kappa*L;
   const p=emptyProject();p.name='Co-rotacional — gradiente térmico livre';p.nodes=Array.from({length:ne+1},(_,i)=>({id:`N${i}`,x:i*le,y:0}));
   p.elements=Array.from({length:ne},(_,i)=>makeFrameElement({id:`E${i+1}`,n1:`N${i}`,n2:`N${i+1}`,sectionId:'rc_30x50'}));p.supports=[{nodeId:'N0',ux:true,uy:true,rz:true}];
   p.elementLoads=p.elements.map((e,i)=>({id:`TG${i+1}`,caseId:'LC1',elementId:e.id,kind:'thermal',dT:0,dTGradient:dTg}));
-  const r=solveFrameCorotational2D(p,'LC1',{steps:8,maxIterations:40,tolerance:1e-11}),tip=r.displacements.find(d=>d.nodeId===`N${ne}`),x=L+tip.ux,y=tip.uy,xExact=Math.sin(theta)/kappa,yExact=(1-Math.cos(theta))/kappa,error=Math.hypot(x-xExact,y-yExact),maxForce=Math.max(...r.elementForces.flatMap(f=>[f.basicForces.N,f.basicForces.M1,f.basicForces.M2].map(Math.abs)));
+  const r=solveFrameCorotational2D(p,'LC1',{steps:8,maxIterations:40,tolerance:1e-9}),tip=r.displacements.find(d=>d.nodeId===`N${ne}`),x=L+tip.ux,y=tip.uy,xExact=Math.sin(theta)/kappa,yExact=(1-Math.cos(theta))/kappa,error=Math.hypot(x-xExact,y-yExact),maxForce=Math.max(...r.elementForces.flatMap(f=>[f.basicForces.N,f.basicForces.M1,f.basicForces.M2].map(Math.abs)));
   near(tip.rz,theta,2e-9,'Co-rotacional gradiente térmico: rotação final');assert(error<1e-7,`Co-rotacional gradiente térmico: erro geométrico excessivo (${error})`);assert(maxForce<2e-4,`Co-rotacional gradiente térmico: força residual excessiva (${maxForce})`);
   near(r.elementForces[0].loadSummary.thermal.kappa0,kappa,1e-15,'Co-rotacional gradiente térmico: kappaT');
   console.log(p.name,'OK','theta=',tip.rz,'tip=',x,y,'erro [m]=',error,'força residual=',maxForce);
@@ -151,7 +149,7 @@ function circularArc(ne){
   const settlement=simpleCantilever();settlement.settlements=[{id:'SET1',caseId:'LC1',nodeId:'N1',ux:0,uy:.001,rz:0}];
   mustThrow(()=>solveFrameCorotational2D(settlement,'LC1'),/deslocamentos impostos|recalques/i,'Co-rotacional: recalque deve ser recusado');
   const imperfect=simpleCantilever();imperfect.settings.imperfection={...(imperfect.settings.imperfection||{}),enabled:true,scenarioId:'LC1',mode:1,amplitudeMm:10};
-  mustThrow(()=>solveFrameCorotational2D(imperfect,'LC1'),/imperfei/i,'Co-rotacional: imperfeição modal deve ser recusida');
+  mustThrow(()=>solveFrameCorotational2D(imperfect,'LC1'),/imperfei/i,'Co-rotacional: imperfeição modal deve ser recusada');
   const prescribed=simpleCantilever();prescribed.supports[0].baseUxValue=.001;
   mustThrow(()=>solveFrameCorotational2D(prescribed,'LC1'),/deslocamentos impostos/i,'Co-rotacional: deslocamento base deve ser recusado');
   console.log('Co-rotacional — escopo protegido OK: recalques, imperfeição e deslocamento base recusados');

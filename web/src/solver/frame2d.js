@@ -1,5 +1,7 @@
 import { zeros, solveConstrained, addSub } from './matrix.js';
 import { prepareFrameElement, recoverFrameEndForces, frameEndHasRotationalStiffness } from './frameElement.js';
+import { addNodalSprings, recoverSpringForces } from './springs.js';
+import { sectionDepth } from '../core/model.js';
 
 export function solveFrame2D(project) {
   const nodes = project.nodes || [];
@@ -17,26 +19,29 @@ export function solveFrame2D(project) {
     if(!(L>1e-10))throw new Error(`Elemento ${e.id} possui comprimento nulo.`);
     const mat=(project.materials||[]).find(m=>m.id===e.materialId);
     if(!mat)throw new Error(`Material ausente em ${e.id}.`);
+    const sec=(project.sections||[]).find(s=>s.id===e.sectionId);
     const loads=(project.elementLoads||[]).filter(l=>l.elementId===e.id).map(l=>l.kind==='selfWeight'?{...l,gamma:Number(l.gamma)||Number(mat.density)||0}:l);
-    const prepared=prepareFrameElement({E:mat.E,A:e.A,I:e.I,L,c:dx/L,s:dy/L,loads,releases:e.releases||{}});
+    const prepared=prepareFrameElement({E:mat.E,A:e.A,I:e.I,L,c:dx/L,s:dy/L,loads,releases:e.releases||{},alpha:Number(mat.alpha)||0,sectionHeight:sectionDepth(sec)});
     const idx=[3*i,3*i+1,3*i+2,3*j,3*j+1,3*j+2];
     addSub(K,prepared.kg,idx);prepared.pg.forEach((v,k)=>{F[idx[k]]+=v});cache.push({e,idx,prepared});
   }
 
+  addNodalSprings(K,project,map,3);
   for(const l of project.loads||[]){const i=map.get(l.nodeId);if(i==null)continue;F[3*i]+=l.fx||0;F[3*i+1]+=l.fy||0;F[3*i+2]+=l.mz||0}
 
   const prescribed=new Map();
   for(const support of project.supports||[]){const i=map.get(support.nodeId);if(i==null)continue;if(support.ux)prescribed.set(3*i,Number(support.uxValue)||0);if(support.uy)prescribed.set(3*i+1,Number(support.uyValue)||0);if(support.rz)prescribed.set(3*i+2,Number(support.rzValue)||0)}
   nodes.forEach((node,i)=>{const activeRotation=elements.some(e=>frameEndHasRotationalStiffness(e,node.id));if(!activeRotation&&!prescribed.has(3*i+2))prescribed.set(3*i+2,0)});
-  if(!prescribed.size)throw new Error('Modelo sem restrições de apoio.');
 
   const {u,R,free}=solveConstrained(K,F,prescribed);
+  const displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[3*i],uy:u[3*i+1],rz:u[3*i+2]}));
   const elementForces=cache.map(({e,idx,prepared})=>{
     const ug=idx.map(i=>u[i]),{q,ul}=recoverFrameEndForces(prepared,ug);
     return {elementId:e.id,type:'frame2d',N1:q[0],V1:q[1],M1:q[2],N2:q[3],V2:q[4],M2:q[5],localDisplacements:ul,loadSummary:prepared.loadSummary};
   });
 
-  return {type:'frame2d',solverVersion:'0.5.0',dofs:nd,activeDofs:free.length,
-    displacements:nodes.map((n,i)=>({nodeId:n.id,ux:u[3*i],uy:u[3*i+1],rz:u[3*i+2]})),
-    reactions:nodes.map((n,i)=>({nodeId:n.id,fx:R[3*i],fy:R[3*i+1],mz:R[3*i+2]})),elementForces};
+  return {type:'frame2d',solverVersion:'0.8.0',dofs:nd,activeDofs:free.length,
+    displacements,
+    reactions:nodes.map((n,i)=>({nodeId:n.id,fx:R[3*i],fy:R[3*i+1],mz:R[3*i+2]})),
+    springForces:recoverSpringForces(project,displacements),elementForces};
 }

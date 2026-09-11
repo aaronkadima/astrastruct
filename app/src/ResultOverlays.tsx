@@ -39,8 +39,9 @@ function nearestProbe(response:any,to:ToScreen,p:[number,number],envResponse?:an
 function DeformedShape({result,to,scale}:{result:any;to:ToScreen;scale:number}){
   const responses=result?.elementResponses||[];
   if(!responses.length)return null;
-  return <g data-testid="deformed-overlay" className="result-deformed-overlay">{responses.map((r:any)=>{
-    const pts=(r.stations||[]).map((s:any)=>to(num(s.x0)+num(s.ux)*scale,num(s.y0)+num(s.uy)*scale));
+  const currentGeometry=responses.some((r:any)=>r.currentGeometry),effectiveScale=currentGeometry?1:scale;
+  return <g data-testid="deformed-overlay" data-deformation-scale={effectiveScale} data-physical-geometry={currentGeometry?'true':'false'} className="result-deformed-overlay">{responses.map((r:any)=>{
+    const pts=(r.stations||[]).map((s:any)=>to(num(s.x0)+num(s.ux)*effectiveScale,num(s.y0)+num(s.uy)*effectiveScale));
     if(pts.length<2)return null;
     return <path key={`def-${r.elementId}`} data-element-id={r.elementId} className={`deformed-curve ${r.type==='truss2d'?'truss':'frame'} ${r.currentGeometry?'nonlinear':''}`} d={pathFrom(pts)}/>;
   })}</g>;
@@ -133,8 +134,9 @@ export function ResultOverlays({result,envelope,to,showDeformed,deformationScale
   const hasResult=!!result?.elementResponses?.length;
   const resultDisplacements=result?.totalDisplacements||result?.displacements||[];
   const maxDisp=useMemo(()=>Math.max(0,...resultDisplacements.map((d:any)=>Math.hypot(num(d.ux),num(d.uy)))),[result]);
+  const currentGeometry=result?.elementResponses?.some((r:any)=>r.currentGeometry);
   if(!hasResult)return null;
-  return <g className="result-overlays" data-max-displacement={maxDisp} data-current-geometry={result?.elementResponses?.some((r:any)=>r.currentGeometry)?'true':'false'}>
+  return <g className="result-overlays" data-max-displacement={maxDisp} data-current-geometry={currentGeometry?'true':'false'}>
     {showStressMap&&<StressMap result={result} envelope={envelope} to={to} useEnvelope={showEnvelope}/>} 
     {showDeformed&&<DeformedShape result={result} to={to} scale={deformationScale}/>} 
     {showEnvelope?<EnvelopeDiagram result={result} envelope={envelope} to={to} diagram={diagram} scale={diagramScale}/>:<ForceDiagram result={result} to={to} diagram={diagram} scale={diagramScale}/>} 

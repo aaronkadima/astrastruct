@@ -12,3 +12,23 @@ export function solveLinear(A,b){
 }
 export function mul(A,x){return A.map(r=>r.reduce((s,v,j)=>s+v*x[j],0))}
 export function addSub(K,ke,idx){for(let i=0;i<idx.length;i++)for(let j=0;j<idx.length;j++)K[idx[i]][idx[j]]+=ke[i][j]}
+
+// Resolve K u = F com deslocamentos prescritos arbitrários.
+// prescribed é Map<dof,value>. Valores zero reproduzem os apoios clássicos.
+export function solveConstrained(K,F,prescribed=new Map()){
+  const nd=F.length,u=Array(nd).fill(0),constrained=[...prescribed.keys()].sort((a,b)=>a-b);
+  for(const d of constrained){
+    const value=Number(prescribed.get(d));
+    if(!Number.isFinite(value))throw new Error(`Deslocamento prescrito inválido no DOF ${d}.`);
+    u[d]=value;
+  }
+  const fixed=new Set(constrained),free=Array.from({length:nd},(_,i)=>i).filter(i=>!fixed.has(i));
+  if(free.length){
+    const Kr=free.map(i=>free.map(j=>K[i][j]));
+    const Fr=free.map(i=>F[i]-constrained.reduce((sum,j)=>sum+K[i][j]*u[j],0));
+    const ur=solveLinear(Kr,Fr);
+    free.forEach((d,i)=>{u[d]=ur[i]});
+  }
+  const R=mul(K,u).map((v,i)=>v-F[i]);
+  return {u,R,free,constrained};
+}

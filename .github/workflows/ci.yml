@@ -18,5 +18,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Run solver smoke tests
+      - name: Check frontend and scenario modules
+        run: npm run check
+      - name: Run structural solver smoke tests
         run: npm test

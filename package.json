@@ -1,0 +1,12 @@
+{
+  "name": "astrastruct",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/solver-smoke.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

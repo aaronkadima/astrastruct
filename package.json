@@ -1,12 +1,13 @@
 {
   "name": "astrastruct",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests/solver-smoke.mjs"
+    "test": "node tests/solver-smoke.mjs",
+    "check": "node --check web/src/app.js && node --check web/src/ui/loadManager.js && node --check web/src/solver/scenario.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   }
 }

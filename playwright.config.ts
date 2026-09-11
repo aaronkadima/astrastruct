@@ -6,7 +6,8 @@ export default defineConfig({
   expect: { timeout: 8_000 },
   use: {
     baseURL: 'http://127.0.0.1:4173/astrastruct/',
-    trace: 'retain-on-failure'
+    trace: 'retain-on-failure',
+    browserName: 'chromium'
   },
   webServer: {
     command: 'npm run preview',
@@ -15,8 +16,8 @@ export default defineConfig({
     timeout: 120_000
   },
   projects: [
-    { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'android-chrome', use: { ...devices['Pixel 7'] } },
-    { name: 'tablet', use: { ...devices['iPad Pro 11'] } }
+    { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'], browserName: 'chromium' } },
+    { name: 'android-chrome', use: { ...devices['Pixel 7'], browserName: 'chromium' } },
+    { name: 'tablet-chromium', use: { ...devices['iPad Pro 11'], browserName: 'chromium' } }
   ]
 });

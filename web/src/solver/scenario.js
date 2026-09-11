@@ -3,18 +3,8 @@ function clone(value) {
 }
 
 export function listScenarios(project) {
-  const cases = (project.loadCases || []).map(c => ({
-    id: c.id,
-    name: c.name,
-    kind: 'case',
-    type: c.type || 'user'
-  }));
-  const combinations = (project.loadCombinations || []).map(c => ({
-    id: c.id,
-    name: c.name,
-    kind: 'combination',
-    type: c.type || 'custom'
-  }));
+  const cases = (project.loadCases || []).map(c => ({ id: c.id, name: c.name, kind: 'case', type: c.type || 'user' }));
+  const combinations = (project.loadCombinations || []).map(c => ({ id: c.id, name: c.name, kind: 'combination', type: c.type || 'custom' }));
   return [...cases, ...combinations];
 }
 
@@ -25,10 +15,7 @@ export function resolveScenario(project, scenarioId) {
   const id = scenarioId || fallbackId;
   const loadCase = cases.find(c => c.id === id);
   const combination = combinations.find(c => c.id === id);
-
-  if (!loadCase && !combination) {
-    throw new Error(`Cenário de análise não encontrado: ${id || '(vazio)'}.`);
-  }
+  if (!loadCase && !combination) throw new Error(`Cenário de análise não encontrado: ${id || '(vazio)'}.`);
 
   const factors = new Map();
   let scenario;
@@ -71,13 +58,23 @@ export function resolveScenario(project, scenarioId) {
   scaled.elementLoads = (project.elementLoads || [])
     .map(load => ({ load, factor: factorFor(load) }))
     .filter(x => Math.abs(x.factor) > 1e-15)
-    .map(({ load, factor }) => ({
-      ...clone(load),
-      qx: (load.qx || 0) * factor,
-      qy: (load.qy || 0) * factor,
-      sourceCaseId: load.caseId || firstCaseId,
-      scenarioFactor: factor
-    }));
+    .map(({ load, factor }) => {
+      const out = {
+        ...clone(load),
+        sourceCaseId: load.caseId || firstCaseId,
+        scenarioFactor: factor
+      };
+      if (load.kind === 'uniform') {
+        out.qx = (load.qx || 0) * factor;
+        out.qy = (load.qy || 0) * factor;
+      } else if (load.kind === 'point') {
+        out.px = (load.px || 0) * factor;
+        out.py = (load.py || 0) * factor;
+      } else if (load.kind === 'selfWeight') {
+        out.weightFactor = factor * (Number(load.factor) || 1);
+      }
+      return out;
+    });
 
   scaled.results = null;
   scaled.__scenario = scenario;

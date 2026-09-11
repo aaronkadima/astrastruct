@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 // @ts-ignore
 import { makeFrameElement, makeTrussElement, uid } from '../../web/src/core/model.js';
+import { CanvasOverlays } from './CanvasOverlays';
 
 export type ModelTool='select'|'node'|'frame2d'|'truss2d';
 export type Selection={kind:'node'|'element';id:string}|null;
@@ -85,7 +86,7 @@ export function ModelingCanvas({project,result,tool,selection,onSelection,onComm
   const svgRef=useRef<SVGSVGElement|null>(null);
   const spacePressed=useRef(false);
   const touchesRef=useRef(new Map<number,{x:number;y:number}>());
-  const pinchRef=useRef<{distance:number;world:{x:number;y:number}}|null>(null);
+  const pinchRef=useRef<{distance:number;world:{x:number;y:number};scale:number}|null>(null);
   const [camera,setCamera]=useState<Camera>(()=>fitCamera(project));
   const [draft,setDraft]=useState<WorldPoint|null>(null);
   const [cursor,setCursor]=useState<WorldPoint|null>(null);
@@ -169,16 +170,15 @@ export function ModelingCanvas({project,result,tool,selection,onSelection,onComm
     touchesRef.current.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(touchesRef.current.size===2){
       const [a,b]=[...touchesRef.current.values()],distance=Math.max(1,Math.hypot(b.x-a.x,b.y-a.y)),midClient={x:(a.x+b.x)/2,y:(a.y+b.y)/2},mid=screenPoint(svgRef.current,midClient.x,midClient.y),[wx,wy]=tf.from(mid.X,mid.Y);
-      pinchRef.current={distance,world:{x:wx,y:wy}};setPanDrag(null);setDrag(null);setDragPoint(null);
+      pinchRef.current={distance,world:{x:wx,y:wy},scale:camera.scale};setPanDrag(null);setDrag(null);setDragPoint(null);
     }
   };
   const pointerCaptureMove=(e:React.PointerEvent<SVGSVGElement>)=>{
     if(e.pointerType!=='touch'||!touchesRef.current.has(e.pointerId))return;
     touchesRef.current.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(touchesRef.current.size<2||!pinchRef.current)return;
-    const [a,b]=[...touchesRef.current.values()],distance=Math.max(1,Math.hypot(b.x-a.x,b.y-a.y)),midClient={x:(a.x+b.x)/2,y:(a.y+b.y)/2},mid=screenPoint(svgRef.current,midClient.x,midClient.y),nextScale=clamp(camera.scale*(distance/pinchRef.current.distance),MIN_SCALE,MAX_SCALE),world=pinchRef.current.world;
+    const [a,b]=[...touchesRef.current.values()],distance=Math.max(1,Math.hypot(b.x-a.x,b.y-a.y)),midClient={x:(a.x+b.x)/2,y:(a.y+b.y)/2},mid=screenPoint(svgRef.current,midClient.x,midClient.y),nextScale=clamp(pinchRef.current.scale*(distance/pinchRef.current.distance),MIN_SCALE,MAX_SCALE),world=pinchRef.current.world;
     setCamera({scale:nextScale,cx:world.x-(mid.X-VIEW.w/2)/nextScale,cy:world.y+(mid.Y-VIEW.h/2)/nextScale});
-    pinchRef.current={distance,world};
   };
   const pointerCaptureUp=(e:React.PointerEvent<SVGSVGElement>)=>{if(e.pointerType==='touch')touchesRef.current.delete(e.pointerId);if(touchesRef.current.size<2)pinchRef.current=null};
 
@@ -212,12 +212,11 @@ export function ModelingCanvas({project,result,tool,selection,onSelection,onComm
   const draftEnd=cursor&&draft?tf.to(cursor.x,cursor.y):null,draftStart=draft?tf.to(draft.x,draft.y):null,zoomPercent=Math.round((camera.scale/Math.max(1e-9,fitScale))*100);
   return <div className="canvas-shell">
     <svg ref={svgRef} data-testid="model-canvas" data-camera-scale={camera.scale.toFixed(4)} data-camera-cx={camera.cx.toFixed(5)} data-camera-cy={camera.cy.toFixed(5)} className={`model-canvas modeling tool-${tool} ${panDrag?'is-panning':''}`} viewBox={`0 0 ${VIEW.w} ${VIEW.h}`} role="img" aria-label="Modelo estrutural 2D" onPointerDownCapture={pointerCaptureDown} onPointerMoveCapture={pointerCaptureMove} onPointerUpCapture={pointerCaptureUp} onPointerCancelCapture={pointerCaptureUp} onPointerDown={backgroundPointer} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onPointerLeave={e=>{if(e.buttons===0)pointerUp()}} onWheel={wheel} onContextMenu={e=>e.preventDefault()}>
-      <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z"/></marker></defs>
       <g className="grid-lines">{gridData.xs.map((x:number)=><line key={`v${x}`} x1={tf.to(x,0)[0]} y1="0" x2={tf.to(x,0)[0]} y2={VIEW.h}/>)}{gridData.ys.map((y:number)=><line key={`h${y}`} x1="0" y1={tf.to(0,y)[1]} x2={VIEW.w} y2={tf.to(0,y)[1]}/>)}</g>
       {displayProject.elements?.map((e:any)=>{const a=displayProject.nodes.find((n:any)=>n.id===e.n1),b=displayProject.nodes.find((n:any)=>n.id===e.n2);if(!a||!b)return null;const[x1,y1]=tf.to(a.x,a.y),[x2,y2]=tf.to(b.x,b.y);return <g data-entity="element" key={e.id} className="clickable" onPointerDown={ev=>{if(spacePressed.current||ev.button!==0)return;ev.stopPropagation();if(tool==='select')onSelection({kind:'element',id:e.id})}}><line className={`member ${e.type==='truss2d'?'truss':''} ${selection?.kind==='element'&&selection.id===e.id?'selected':''}`} x1={x1} y1={y1} x2={x2} y2={y2}/><text className="element-label" x={(x1+x2)/2+8} y={(y1+y2)/2-8}>{e.id}</text></g>})}
       {result&&displayProject.elements?.map((e:any)=>{const a=displayProject.nodes.find((n:any)=>n.id===e.n1),b=displayProject.nodes.find((n:any)=>n.id===e.n2),da:any=disp.get(e.n1),db:any=disp.get(e.n2);if(!a||!b||!da||!db)return null;const[x1,y1]=tf.to(a.x+(da.ux||0)*defScale,a.y+(da.uy||0)*defScale),[x2,y2]=tf.to(b.x+(db.ux||0)*defScale,b.y+(db.uy||0)*defScale);return <line key={`d-${e.id}`} className="deformed" x1={x1} y1={y1} x2={x2} y2={y2}/>})}
+      <CanvasOverlays project={project} displayProject={displayProject} result={result} activeCase={activeCase} to={tf.to}/>
       {displayProject.nodes?.map((n:any)=>{const[x,y]=tf.to(n.x,n.y);return <g data-entity="node" data-node-id={n.id} key={n.id} className="clickable" onPointerDown={e=>nodePointerDown(e,n.id)}><Support node={n} project={displayProject} to={tf.to}/><circle className={`node ${selection?.kind==='node'&&selection.id===n.id?'selected':''}`} cx={x} cy={y} r={selection?.kind==='node'&&selection.id===n.id?9:6}/><text className="node-label" x={x+10} y={y-10}>{n.id}</text></g>})}
-      {project.loads?.filter((l:any)=>l.caseId===activeCase).map((l:any)=>{const n=displayProject.nodes.find((x:any)=>x.id===l.nodeId);if(!n)return null;const[x,y]=tf.to(n.x,n.y);if(Math.abs(l.fy||0)>1e-9){const y0=y+(l.fy<0?-70:70);return <g key={l.id} className="load"><line x1={x} y1={y0} x2={x} y2={y} markerEnd="url(#arrow)"/><text x={x+10} y={y0}>{Number(l.fy).toFixed(1)} kN</text></g>}if(Math.abs(l.fx||0)>1e-9){const x0=x+(l.fx>0?-70:70);return <g key={l.id} className="load"><line x1={x0} y1={y} x2={x} y2={y} markerEnd="url(#arrow)"/><text x={x0} y={y-10}>{Number(l.fx).toFixed(1)} kN</text></g>}return null})}
       {draftStart&&draftEnd&&<line className="draft-member" x1={draftStart[0]} y1={draftStart[1]} x2={draftEnd[0]} y2={draftEnd[1]}/>} {cursor&&tool!=='select'&&<circle className={`cursor-snap ${cursor.nodeId?'node-hit':''}`} cx={tf.to(cursor.x,cursor.y)[0]} cy={tf.to(cursor.x,cursor.y)[1]} r={cursor.nodeId?8:5}/>} 
     </svg>
     <div className="canvas-nav" role="group" aria-label="Navegação do canvas"><button type="button" aria-label="Aproximar" title="Aproximar" onClick={()=>zoomBy(1.25)}>+</button><button type="button" aria-label="Afastar" title="Afastar" onClick={()=>zoomBy(.8)}>−</button><button type="button" aria-label="Ajustar à vista" title="Ajustar modelo à vista" onClick={fitView}>⌗</button><span className="zoom-readout">{zoomPercent}%</span></div>

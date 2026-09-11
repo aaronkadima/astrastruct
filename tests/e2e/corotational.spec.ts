@@ -122,3 +122,15 @@ test('co-rotational mode accepts and traces a semirigid rotational connection',a
   await openCommand(page,'Diagramas/envelopes');const post=page.getByTestId('panel-nonlinear-postprocess'),connection=page.getByTestId('connection-postprocess-note');await expect(connection).toContainText('semirrígida');await expect(connection).toContainText('kθ=10000');await expect(connection).toContainText('M=kθ(θn−θe)');await post.locator('button[aria-label="Fechar"]').click();
   await openCommand(page,'Relatório técnico');await expect(page.getByTestId('nonlinear-connection-model')).toContainText('condensação estática de Schur');await expect(page.getByTestId('panel-nonlinear-report')).toContainText('semirrígida');
 });
+
+test('co-rotational mode accepts releases and preserves zero end moments under UDL',async({page})=>{
+  await page.goto('./');await mutateProject(page,(p:any)=>{
+    const template=p.elements?.[0];p.name='E2E — duas rótulas co-rotacionais';p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:6,y:0}];
+    p.elements=[{...template,id:'E1',n1:'N1',n2:'N2',A:.15,I:.003125,sectionId:'rc_30x50',releases:{rz1:true,rz2:true},rotationalSprings:{rz1:0,rz2:0}}];
+    p.supports=[{nodeId:'N1',ux:true,uy:true,rz:false},{nodeId:'N2',ux:false,uy:true,rz:false}];p.loads=[];p.nodeSprings=[];p.settlements=[];p.elementLoads=[{id:'Q1',caseId:'LC1',elementId:'E1',kind:'uniform',qx:0,qy:-20}];
+    p.settings={...(p.settings||{}),analysisType:'linear',analysisScenarioId:'LC1',imperfection:{...(p.settings?.imperfection||{}),enabled:false}};
+  });
+  await openCommand(page,'Tipo de análise');const mode=page.getByTestId('analysis-corotational');await expect(mode).toBeEnabled();await mode.click();await expect(page.getByTestId('corotational-connection-note')).toContainText('2 rótula(s)');await page.getByTestId('analysis-apply').click();await page.getByTestId('analyze-button').click();await expect(page.getByTestId('nonlinear-result-metric')).toBeVisible();
+  await openCommand(page,'Diagramas/envelopes');const post=page.getByTestId('panel-nonlinear-postprocess'),connection=page.getByTestId('connection-postprocess-note');await expect(connection).toContainText('ext.1 rótula');await expect(connection).toContainText('ext.2 rótula');await expect(connection).toContainText('kθ=0.000');await expect(post).toContainText('90.000 kN·m');await post.locator('button[aria-label="Fechar"]').click();
+  await openCommand(page,'Relatório técnico');const report=page.getByTestId('panel-nonlinear-report');await expect(report).toContainText('rótula');await expect(page.getByTestId('nonlinear-connection-model')).toContainText('kθ=0');
+});

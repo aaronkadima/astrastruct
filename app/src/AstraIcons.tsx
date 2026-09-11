@@ -27,6 +27,7 @@ const ICONS:Record<string,React.ReactNode>={
   connection:<><path d="M3 12h6M15 12h6"/><circle cx="11" cy="12" r="2"/><circle cx="13" cy="12" r="2"/></>,
   stress:<><path d="M5 7h14M5 17h14"/><path d="M8 3v7m0 0-2-3m2 3 2-3M16 21v-7m0 0-2 3m2-3 2 3"/></>,
   analysis:<><path d="M4 18h16M6 16V8M10 16v-5M14 16V5M18 16v-8"/><path d="M5 6c4 1 6-3 9-2s3 4 5 3"/></>,
+  stability:<><path d="M5 20V4M19 20V4M5 7h14M5 17h14"/><path d="M12 6c-3 3-3 9 0 12 3-3 3-9 0-12Z"/><path d="M9 12h6"/></>,
   report:<><path d="M6 3.5h9l4 4V21H6zM15 3.5v4h4"/><path d="M9 17v-4m3 4V9m3 8v-6"/></>,
   vnl:<><rect x="3.5" y="5" width="6" height="5" rx="1"/><rect x="14.5" y="14" width="6" height="5" rx="1"/><path d="M9.5 7.5h4a4 4 0 0 1 4 4V14"/></>,
   support:<><path d="M12 5 5 16h14zM4 20h16"/><circle cx="12" cy="5" r="1.5"/></>,

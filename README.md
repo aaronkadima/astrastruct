@@ -2,13 +2,15 @@
 
 AstraStruct é uma plataforma web **assembly-first** para modelagem, análise, dimensionamento e futura verificação/detalhamento de estruturas de concreto armado e aço.
 
-> **Estado atual — v0.13.4 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
+> **Estado atual — v0.13.5 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
 
 ## Executar online
 
 **Aplicativo:** https://aaronkadima.github.io/astrastruct/
 
-A interface React/Vite é construída, testada e publicada automaticamente em `dist/` pelo GitHub Actions após cada atualização da branch `main`.
+**Diagnóstico estático:** https://aaronkadima.github.io/astrastruct/health.html
+
+A interface React/Vite é construída, testada e publicada automaticamente em `dist/` pelo GitHub Actions após cada atualização da branch `main`. Antes do deploy, o pipeline valida também a integridade do artefato do Pages e os caminhos `/astrastruct/` dos assets.
 
 ## O que já é executável
 
@@ -19,7 +21,8 @@ A interface React/Vite é construída, testada e publicada automaticamente em `d
 - cargas nodais, uniformes, pontuais em barra, peso próprio, recalques e ações térmicas no solver Linear/P‑Delta;
 - **carga uniforme, peso próprio e carga pontual em barra como dead loads da configuração de referência no solver co‑rotacional**;
 - **temperatura uniforme e gradiente térmico como deformação/curvatura iniciais no solver co‑rotacional**;
-- **força seguidora concentrada na extremidade 2 de `frame2d`, com tangente externa consistente, no co‑rotacional v0.13.4**;
+- **força seguidora concentrada na extremidade 2 de `frame2d`, com tangente externa consistente, no co‑rotacional**;
+- **rótulas e ligações rotacionais semirrígidas no co‑rotacional v0.13.5, com rotação interna de extremidade e condensação estática de Schur**;
 - molas nodais `kx`, `ky`, `kr` no solver Linear/P‑Delta;
 - casos de ação e combinações customizadas, incluindo escalonamento de `followerEnd` antes da solução não linear;
 - análise Linear, P‑Delta ou Geometricamente Não Linear co‑rotacional selecionável;
@@ -41,7 +44,7 @@ A compressão (`N < 0`) reduz a rigidez tangente por meio da matriz geométrica 
 
 A formulação P‑Delta atual aceita cargas nodais/de barra, peso próprio, temperatura, recalques, molas nodais, ligações rígidas/rotuladas/semirrígidas e imperfeição modal em modelos compatíveis. Não é análise materialmente não linear nem substitui verificação normativa de estabilidade.
 
-## Geometricamente não linear — v0.13.4 experimental
+## Geometricamente não linear — v0.13.5 experimental
 
 O terceiro modo do painel **Tipo de análise** usa formulação **co‑rotacional 2D Euler–Bernoulli**, grandes rotações globais, pequenas deformações locais e equilíbrio incremental por Newton–Raphson.
 
@@ -79,9 +82,9 @@ Temperatura não é convertida em vetor de força externo. Ela entra no sistema 
 
 Uma barra livre pode expandir/curvar sem força espúria; restrições produzem esforços correspondentes. O estado térmico é incrementado por `λ` junto ao caminho de Newton. A escala de convergência térmica usa grandezas mecanicamente dimensionais, incluindo `EA|εT|` e `EI|κT|`.
 
-### Força seguidora de extremidade — v0.13.4
+### Força seguidora de extremidade
 
-A v0.13.4 acrescenta `followerEnd`, atualmente restrita a uma **força concentrada na extremidade 2**. As componentes `(Px,Py)` permanecem constantes nos eixos locais da **corda corrente**; portanto, a força global gira com `α(q)`:
+A ação `followerEnd`, introduzida na v0.13.4, permanece restrita a uma **força concentrada na extremidade 2**. As componentes `(Px,Py)` permanecem constantes nos eixos locais da **corda corrente**; portanto, a força global gira com `α(q)`:
 
 `Fx = c Px − s Py`
 
@@ -113,6 +116,28 @@ o passo de Newton usa:
 
 A interface permite criar, editar e remover `followerEnd`, selecionando elemento e caso ativo. A presença dessa ação impede aplicar os modos Linear/P‑Delta para evitar tratamento incorreto de uma força dependente da configuração.
 
+### Rótulas e ligações semirrígidas — v0.13.5
+
+A v0.13.5 introduz uma rotação interna de extremidade `θe`, distinta da rotação nodal `θn`, e a energia da mola rotacional:
+
+`Uθ = 1/2 kθ (θn − θe)^2`.
+
+O momento transmitido é:
+
+`M = kθ (θn − θe)`.
+
+Para cada extremidade flexível, o equilíbrio interno é resolvido no estado corrente e os graus internos são eliminados da tangente por condensação estática de Schur:
+
+`Kcond = Hqq − Hqr Hrr^-1 Hrq`.
+
+Os limites são tratados explicitamente:
+
+- `kθ → ∞`: extremidade rígida, sem DOF interno;
+- `0 < kθ < ∞`: ligação semirrígida;
+- `kθ = 0`: rótula ideal.
+
+Cargas de barra e estado térmico participam do equilíbrio interno antes da condensação. O pós-processador registra `θn`, `θe`, `Δθ`, `kθ`, momento transmitido e o resíduo do equilíbrio interno da ligação.
+
 ### Geometria corrente e pós-processamento
 
 A deformada co‑rotacional é exibida por padrão em **escala física ×1**. Cada elemento é reconstruído em 41 estações, fornecendo:
@@ -123,17 +148,20 @@ A deformada co‑rotacional é exibida por padrão em **escala física ×1**. Ca
 - tensões elásticas `N/A ± Mc/I` quando a profundidade da seção é conhecida;
 - dados das cargas mortas de referência e resíduo de recuperação;
 - estado térmico `ΔT`, `ΔTg`, `α`, `εT`, `κT`;
-- follower local `Px/Py`, componentes globais atuais `Fx/Fy` e `max|Kext|`.
+- follower local `Px/Py`, componentes globais atuais `Fx/Fy` e `max|Kext|`;
+- estado das ligações flexíveis e resíduo da condensação.
 
 O pós-processador co‑rotacional trabalha por cenário. **Envelopes não lineares permanecem desabilitados**, pois respostas pertencentes a caminhos de equilíbrio distintos não são combinadas automaticamente.
 
-### Escopo estrito da v0.13.4
+### Escopo estrito da v0.13.5
 
 Aceito:
 
 - somente `frame2d` Euler–Bernoulli;
 - material elástico linear;
 - extremidades rígidas;
+- rótulas ideais `kθ=0`;
+- ligações rotacionais semirrígidas `0<kθ<∞`;
 - cargas nodais;
 - `uniform`, `selfWeight` e `point` como dead loads de referência;
 - `thermal` como deformação/curvatura inicial;
@@ -144,7 +172,6 @@ Aceito:
 Recusado explicitamente:
 
 - `truss2d` e modelos mistos;
-- releases e ligações semirrígidas;
 - follower na extremidade 1;
 - follower distribuída;
 - follower aplicada em ponto interior da barra;
@@ -154,7 +181,7 @@ Recusado explicitamente:
 - imperfeição modal inicial no kernel co‑rotacional;
 - envelopes não lineares.
 
-Ainda não há não linearidade material, plasticidade, fissuração/dano, contato ou arc-length/path-following.
+Ainda não há não linearidade material, plasticidade, fissuração/dano, contato, offsets rígidos ou arc-length/path-following.
 
 ### Validação do kernel co‑rotacional
 
@@ -173,6 +200,9 @@ A suíte automática inclui, entre outros:
 - **tangente externa follower:** erro relativo `7,63×10⁻10` contra diferença central no benchmark principal;
 - **transformação follower sob rotação:** componentes globais acompanham a corda corrente;
 - **combinação follower:** `Px=100 kN` com fator `1,4` resulta em `Px=140 kN`, `ux=0,0622222222 mm` e reação `−140 kN` no caso axial;
+- **tangente de ligação condensada:** erro relativo `2,20446×10⁻9` contra diferença central e resíduo interno `≈9,09×10⁻13`;
+- **console semirrígido:** `kθ=10000 kN·m/rad`, flecha `18,2753016 mm`, momento transmitido `≈39,999583 kN·m`, `Δθ≈0,003999958 rad`;
+- **viga com duas rótulas + UDL:** `RA=RB=60 kN`, `M1=M2=0`, `Mmax=90 kN·m`;
 - **proteção de escopo:** follower fora da extremidade 2, recalques, deslocamentos prescritos e imperfeição modal geram erro explícito.
 
 Esses benchmarks validam propriedades específicas da implementação; não constituem certificação normativa ou validação universal.
@@ -205,6 +235,8 @@ Nos solvers compatíveis, cada extremidade pode ser rígida, semirrígida ou rot
 
 `M = kθ (θn − θe)`.
 
+No co‑rotacional v0.13.5, `θe` é um DOF interno condensado; nos solvers lineares compatíveis a mesma lei é tratada pela formulação específica de ligações de extremidade.
+
 Molas nodais lineares usam `Fspring = −k u` nos solvers atualmente compatíveis.
 
 Tensões elásticas de seção:
@@ -223,11 +255,19 @@ O **Scenario Engine** resolve casos e combinações customizadas. Ele escala tam
 
 > Os fatores atuais são **Custom/User-defined**. Não representam combinações oficiais da ABNT NBR, ACI, Eurocodes ou fib Model Code.
 
-## Validação automatizada
+## Validação automatizada e confiabilidade do frontend
 
-O workflow **AstraStruct CI** verifica TypeScript, módulos do engine e regressões estruturais a cada push/PR. O workflow de Pages adiciona build Vite e Playwright em desktop, Android e tablet antes do deploy.
+O workflow **AstraStruct CI** verifica TypeScript, módulos do engine e regressões estruturais a cada push/PR. O workflow de Pages executa, nesta ordem:
 
-A cobertura co‑rotacional inclui cinemática, tangente interna, cargas mortas de referência, térmica, tangente externa follower, transformação da follower com a rotação, combinações, proteção de escopo, editor da follower, pós-processamento e relatório técnico.
+1. typecheck e validação dos módulos;
+2. regressões numéricas dos solvers;
+3. build Vite;
+4. validação do artefato `dist/`, incluindo `index.html`, `health.html`, CSS/JS e `base=/astrastruct/`;
+5. Playwright em desktop, Android e tablet;
+6. upload do artefato;
+7. deploy do GitHub Pages.
+
+O `index.html` possui watchdog de bootstrap e a rota `health.html` funciona sem React, permitindo distinguir falha do Pages de falha do bundle. A cobertura co‑rotacional inclui cinemática, tangentes interna/externa, dead loads, térmica, follower, rótulas/semirrígidas, combinações, proteção de escopo, pós-processamento e relatório técnico.
 
 ## Executar localmente
 
@@ -261,9 +301,9 @@ Pipeline não linear:
 
 ## Próximas etapas prioritárias
 
-- follower distribuída, follower em ponto interior e follower moment com tangentes externas consistentes;
-- releases, ligações semirrígidas e offsets no co‑rotacional;
 - imperfeição inicial diretamente na configuração co‑rotacional;
+- offsets rígidos e excentricidades de extremidade;
+- follower distribuída, follower em ponto interior e follower moment com tangentes externas consistentes;
 - arc-length/path-following para pontos-limite;
 - plasticidade do aço e modelos constitutivos de concreto;
 - concrete damage/cracking, bond-slip e pull-out de ancoragens;

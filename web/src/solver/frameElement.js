@@ -30,6 +30,21 @@ export function pointLoadVector(px=0,py=0,L,xi=0.5) {
   return [px*(1-r),py*h1,py*h2,px*r,py*h3,py*h4];
 }
 
+export function thermalLoadVector({E,A,I,alpha=0,dT=0,dTGradient=0,sectionHeight=0}) {
+  const eps0=(Number(alpha)||0)*(Number(dT)||0);
+  let kappa0=0;
+  const grad=Number(dTGradient)||0;
+  if(Math.abs(grad)>1e-15){
+    const h=Number(sectionHeight)||0;
+    if(!(h>0))throw new Error('Gradiente térmico requer altura/profundidade positiva da seção.');
+    // dTGradient = T_top - T_bottom. Com +y local para o topo,
+    // a curvatura térmica livre compatível com epsilon_x=-y*kappa é -alpha*ΔT/h.
+    kappa0=-(Number(alpha)||0)*grad/h;
+  }
+  const n0=E*A*eps0,m0=E*I*kappa0;
+  return {vector:[-n0,0,-m0,n0,0,m0],eps0,kappa0,n0,m0};
+}
+
 function addVectors(a,b){return a.map((v,i)=>v+b[i])}
 function zeroMatrix(n){return Array.from({length:n},()=>Array(n).fill(0))}
 function releasedDofs(releases={}){const out=[];if(releases.rz1)out.push(2);if(releases.rz2)out.push(5);return out}
@@ -50,14 +65,14 @@ function condenseReleased(kl,pOriginal,releases={}) {
   return{kEff,pEff,releaseData:{active:a,released:r,Krr,Kra,pr}};
 }
 
-export function prepareFrameElement({E,A,I,L,c,s,loads=[],releases={}}) {
+export function prepareFrameElement({E,A,I,L,c,s,loads=[],releases={},alpha=0,sectionHeight=0}) {
   if(!(E>0))throw new Error('Módulo de elasticidade E deve ser positivo.');
   if(!(A>0))throw new Error('Área A deve ser positiva.');
   if(!(I>0))throw new Error('Inércia I deve ser positiva.');
   if(!(L>1e-12))throw new Error('Comprimento do elemento deve ser positivo.');
   const kl=frameLocalStiffness(E,A,I,L),tr=frameTransform(c,s);
   let pOriginal=Array(6).fill(0);
-  const loadSummary={uniform:{qx:0,qy:0},points:[]};
+  const loadSummary={uniform:{qx:0,qy:0},points:[],thermal:{dT:0,dTGradient:0,eps0:0,kappa0:0}};
 
   for(const load of loads){
     if(load.kind==='uniform'){
@@ -71,10 +86,15 @@ export function prepareFrameElement({E,A,I,L,c,s,loads=[],releases={}}) {
     } else if(load.kind==='selfWeight'){
       const gamma=Number(load.gamma)||0, factor=Number.isFinite(Number(load.weightFactor))?Number(load.weightFactor):1;
       const w=gamma*A*factor;
-      // Gravidade global em -Y transformada para eixos locais da barra.
       const qx=-s*w,qy=-c*w;
       pOriginal=addVectors(pOriginal,uniformDistributedLoadVector(qx,qy,L));
       loadSummary.uniform.qx+=qx;loadSummary.uniform.qy+=qy;
+    } else if(load.kind==='thermal'){
+      const dT=Number(load.dT)||0,dTGradient=Number(load.dTGradient)||0;
+      const th=thermalLoadVector({E,A,I,alpha, dT,dTGradient,sectionHeight});
+      pOriginal=addVectors(pOriginal,th.vector);
+      loadSummary.thermal.dT+=dT;loadSummary.thermal.dTGradient+=dTGradient;
+      loadSummary.thermal.eps0+=th.eps0;loadSummary.thermal.kappa0+=th.kappa0;
     }
   }
 

@@ -5,24 +5,28 @@ async function visible(locator: ReturnType<Page['locator']>) {
 }
 
 async function openCommand(page: Page, label: string) {
+  const width = page.viewportSize()?.width || 1280;
+
+  if (width <= 1100) {
+    const more = page.locator('button[aria-label="Mais comandos"]:visible').first();
+    await expect(more).toBeVisible();
+    await more.click();
+    const command = page.locator(`.command-sheet button[aria-label="${label}"]:visible`).first();
+    await expect(command).toBeVisible();
+    await command.click();
+    return;
+  }
+
   const direct = page.locator(`button[aria-label="${label}"]:visible`).first();
   if (await visible(direct)) {
     await direct.click();
     return;
   }
 
-  const library = page.locator('.library-tools button:visible').filter({ hasText: label }).first();
+  const library = page.locator('.library-tools button').filter({ hasText: label }).first();
   if (await visible(library)) {
+    await library.scrollIntoViewIfNeeded();
     await library.click();
-    return;
-  }
-
-  const more = page.locator('button[aria-label="Mais comandos"]:visible').first();
-  if (await visible(more)) {
-    await more.click();
-    const command = page.locator(`.command-sheet button[aria-label="${label}"]:visible`).first();
-    await expect(command).toBeVisible();
-    await command.click();
     return;
   }
 

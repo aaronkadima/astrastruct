@@ -5,7 +5,7 @@ import { normalizeProject } from '../../web/src/core/model.js';
 const clone=<T,>(v:T):T=>JSON.parse(JSON.stringify(v));
 const num=(v:any,f=0)=>Number.isFinite(Number(v))?Number(v):f;
 const explicitSpring=(v:any)=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v));
-const supportedReferenceLoad=(kind:any)=>kind==='uniform'||kind==='selfWeight';
+const supportedReferenceLoad=(kind:any)=>kind==='uniform'||kind==='selfWeight'||kind==='point';
 
 type Props={project:any;onClose:()=>void;onCommit:(project:any)=>void};
 
@@ -15,7 +15,7 @@ function incompatibilities(project:any){
   if((project.elements||[]).some((e:any)=>e.type!=='frame2d'))issues.push('Somente elementos frame2d são aceitos nesta versão.');
   if((project.elements||[]).some((e:any)=>e.releases?.rz1||e.releases?.rz2||explicitSpring(e.rotationalSprings?.rz1)||explicitSpring(e.rotationalSprings?.rz2)))issues.push('Releases e ligações semirrígidas ainda não são aceitos.');
   const unsupported=[...new Set((project.elementLoads||[]).filter((l:any)=>!supportedReferenceLoad(l.kind)).map((l:any)=>String(l.kind||'desconhecida')))];
-  if(unsupported.length)issues.push(`Cargas de barra ainda não suportadas no co‑rotacional: ${unsupported.join(', ')}. Nesta etapa são aceitas somente carga uniforme e peso próprio como cargas mortas da configuração de referência.`);
+  if(unsupported.length)issues.push(`Cargas de barra ainda não suportadas no co‑rotacional: ${unsupported.join(', ')}. Nesta etapa são aceitas carga uniforme, peso próprio e carga pontual como cargas mortas da configuração de referência.`);
   if((project.nodeSprings||[]).length)issues.push('Molas nodais ainda não são aceitas.');
   if((project.settlements||[]).length)issues.push('Recalques/deslocamentos impostos ainda não são aceitos.');
   if((project.supports||[]).some((s:any)=>[s.baseUxValue,s.baseUyValue,s.baseRzValue,s.uxValue,s.uyValue,s.rzValue].some(v=>Math.abs(num(v))>1e-12)))issues.push('Deslocamentos prescritos diretamente nos apoios ainda não são aceitos.');
@@ -32,7 +32,9 @@ export function AnalysisPanelV13({project,onClose,onCommit}:Props){
   const [tol,setTol]=useState(project.settings?.nonlinearTolerance||1e-8);
   const [lineSearch,setLineSearch]=useState(project.settings?.nonlinearLineSearch!==false);
   const pureFrame=project.elements?.length>0&&project.elements.every((e:any)=>e.type==='frame2d');
-  const referenceLoadCount=(project.elementLoads||[]).filter((l:any)=>supportedReferenceLoad(l.kind)).length;
+  const referenceLoads=(project.elementLoads||[]).filter((l:any)=>supportedReferenceLoad(l.kind));
+  const pointCount=referenceLoads.filter((l:any)=>l.kind==='point').length;
+  const distributedCount=referenceLoads.length-pointCount;
   const issues=useMemo(()=>incompatibilities(project),[project]);
   const nonlinearOk=pureFrame&&!issues.length;
   const apply=()=>{
@@ -52,12 +54,12 @@ export function AnalysisPanelV13({project,onClose,onCommit}:Props){
       <div className="analysis-choices analysis-choices-v13">
         <button data-testid="analysis-linear" className={mode==='linear'?'active':''} onClick={()=>setMode('linear')}><b>Linear</b><span>K u = F</span><small>Pequenas deformações.</small></button>
         <button data-testid="analysis-pdelta" disabled={!pureFrame} className={mode==='pdelta'?'active':''} onClick={()=>setMode('pdelta')}><b>P‑Delta</b><span>[K + Kg(N)] u = F</span><small>Segunda ordem iterativa.</small></button>
-        <button data-testid="analysis-corotational" disabled={!nonlinearOk} className={mode==='corotational'?'active':''} onClick={()=>setMode('corotational')}><b>Geom. não linear</b><span>Co‑rotacional + Newton–Raphson</span><small>Grandes rotações · experimental v0.13.1.</small></button>
+        <button data-testid="analysis-corotational" disabled={!nonlinearOk} className={mode==='corotational'?'active':''} onClick={()=>setMode('corotational')}><b>Geom. não linear</b><span>Co‑rotacional + Newton–Raphson</span><small>Grandes rotações · experimental v0.13.2.</small></button>
       </div>
       {!pureFrame&&<div className="panel-warning">P‑Delta e co‑rotacional exigem modelos formados somente por frame2d.</div>}
       {pureFrame&&issues.length>0&&<div data-testid="corotational-incompatibilities" className="panel-warning"><b>Co‑rotacional indisponível neste modelo:</b><ul>{issues.map((x,i)=><li key={i}>{x}</li>)}</ul></div>}
       {mode==='pdelta'&&<section className="react-card"><h3>Controle P‑Delta</h3><div className="geometry-grid"><label>Máx. iterações<input data-testid="pdelta-max-iterations" type="number" min="2" max="100" value={pMaxIt} onChange={e=>setPMaxIt(num(e.target.value,30))}/></label><label>Tolerância<input data-testid="pdelta-tolerance" type="number" value={pTol} onChange={e=>setPTol(num(e.target.value,1e-8))}/></label></div></section>}
-      {mode==='corotational'&&<section className="react-card" data-testid="corotational-controls"><h3>Newton–Raphson incremental</h3><div className="geometry-grid"><label>Incrementos<input data-testid="nonlinear-steps" type="number" min="1" max="200" value={steps} onChange={e=>setSteps(num(e.target.value,20))}/></label><label>Máx. iterações<input data-testid="nonlinear-max-iterations" type="number" min="3" max="100" value={maxIt} onChange={e=>setMaxIt(num(e.target.value,35))}/></label><label>Tolerância<input data-testid="nonlinear-tolerance" type="number" value={tol} onChange={e=>setTol(num(e.target.value,1e-8))}/></label><label className="checkbox-line"><input data-testid="nonlinear-line-search" type="checkbox" checked={lineSearch} onChange={e=>setLineSearch(e.target.checked)}/><span>Line search</span></label></div><div className="panel-warning">Escopo v0.13.1: frame2d Euler–Bernoulli, extremidades rígidas, cargas nodais, carga uniforme e peso próprio como <b>cargas mortas da configuração de referência</b>. Sem não linearidade material, contato, carga pontual em barra, ação térmica, molas, recalques ou imperfeição inicial.</div>{referenceLoadCount>0&&<div data-testid="reference-dead-load-note" className="panel-note">{referenceLoadCount} carga(s) distribuída(s)/peso próprio serão congeladas na configuração inicial. Elas não são cargas seguidoras e não giram com o elemento durante Newton–Raphson.</div>}</section>}
+      {mode==='corotational'&&<section className="react-card" data-testid="corotational-controls"><h3>Newton–Raphson incremental</h3><div className="geometry-grid"><label>Incrementos<input data-testid="nonlinear-steps" type="number" min="1" max="200" value={steps} onChange={e=>setSteps(num(e.target.value,20))}/></label><label>Máx. iterações<input data-testid="nonlinear-max-iterations" type="number" min="3" max="100" value={maxIt} onChange={e=>setMaxIt(num(e.target.value,35))}/></label><label>Tolerância<input data-testid="nonlinear-tolerance" type="number" value={tol} onChange={e=>setTol(num(e.target.value,1e-8))}/></label><label className="checkbox-line"><input data-testid="nonlinear-line-search" type="checkbox" checked={lineSearch} onChange={e=>setLineSearch(e.target.checked)}/><span>Line search</span></label></div><div className="panel-warning">Escopo v0.13.2: frame2d Euler–Bernoulli, extremidades rígidas, cargas nodais, carga uniforme, peso próprio e carga pontual em barra como <b>cargas mortas da configuração de referência</b>. Sem não linearidade material, contato, ação térmica, cargas seguidoras, molas, recalques ou imperfeição inicial.</div>{referenceLoads.length>0&&<div data-testid="reference-dead-load-note" className="panel-note">{distributedCount>0?`${distributedCount} carga(s) uniforme(s)/peso próprio`:''}{distributedCount>0&&pointCount>0?' + ':''}{pointCount>0?`${pointCount} carga(s) pontual(is) em barra`:''} serão convertidas em vetores nodais equivalentes e congeladas na configuração inicial. Elas não são cargas seguidoras e não giram com o elemento durante Newton–Raphson.</div>}</section>}
       <div className="commit-bar"><span>{mode==='corotational'?'Modo experimental: valide independentemente antes de uso profissional.':'Linear permanece o padrão; P‑Delta não substitui análise de flambagem/autovalores.'}</span><div className="commit-actions"><button onClick={onClose}>Cancelar</button><button data-testid="analysis-apply" className="primary" disabled={mode==='corotational'&&!nonlinearOk} onClick={apply}>Aplicar</button></div></div>
     </section>
   </div>;

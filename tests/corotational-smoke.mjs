@@ -3,6 +3,13 @@ import { corotationalElementState, solveFrameCorotational2D } from '../web/src/s
 
 function assert(condition,message){if(!condition)throw new Error(message)}
 function near(actual,expected,tol,message){if(Math.abs(actual-expected)>tol)throw new Error(`${message}: esperado ${expected}, obtido ${actual}`)}
+function mustThrow(fn,pattern,message){let thrown=null;try{fn()}catch(e){thrown=e}assert(thrown,`${message}: era esperado erro`);assert(pattern.test(String(thrown?.message||thrown)),`${message}: mensagem inesperada: ${thrown?.message||thrown}`)}
+function simpleCantilever(){
+  const p=emptyProject();p.name='Co-rotacional — validação de escopo';
+  p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:4,y:0}];
+  p.elements=[makeFrameElement({id:'E1',n1:'N1',n2:'N2',sectionId:'rc_30x50',A:.15,I:.003125})];
+  p.supports=[{nodeId:'N1',ux:true,uy:true,rz:true}];p.loads=[{id:'P',caseId:'LC1',nodeId:'N2',fx:0,fy:-10,mz:0}];return p;
+}
 
 // 1) Objetividade: translação + rotação rígida finita não podem gerar deformação nem força interna.
 {
@@ -30,10 +37,7 @@ function near(actual,expected,tol,message){if(Math.abs(actual-expected)>tol)thro
 
 // 3) Limite de pequenas rotações: console deve reproduzir PL^3/(3EI).
 {
-  const p=emptyProject();p.name='Co-rotacional — limite linear';
-  p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:4,y:0}];
-  p.elements=[makeFrameElement({id:'E1',n1:'N1',n2:'N2',sectionId:'rc_30x50',A:.15,I:.003125})];
-  p.supports=[{nodeId:'N1',ux:true,uy:true,rz:true}];p.loads=[{id:'P',caseId:'LC1',nodeId:'N2',fx:0,fy:-10,mz:0}];
+  const p=simpleCantilever();p.name='Co-rotacional — limite linear';
   const r=solveFrameCorotational2D(p,'LC1',{steps:4,tolerance:1e-10}),tip=r.displacements.find(d=>d.nodeId==='N2'),exact=-10*4**3/(3*30e6*.003125);
   near(tip.uy,exact,2e-9,'Co-rotacional: limite linear do console');
   assert(r.nonlinear.converged,'Co-rotacional: metadado de convergência ausente');
@@ -66,6 +70,17 @@ function circularArc(ne){
   const momentError=Math.max(...a16.r.elementResponses.flatMap(e=>e.stations.map(s=>Math.abs(s.M-a16.M))));assert(momentError<2e-5,`Co-rotacional: momento puro não preservado no pós-processamento (${momentError})`);
   assert(a16.r.elementResponses.every(e=>e.stations.every(s=>Number.isFinite(s.sigmaTop)&&Number.isFinite(s.sigmaBottom))),'Co-rotacional: tensões elásticas ausentes');
   console.log('Co-rotacional — convergência/pós-processamento OK','erros [m]=',a4.error,a8.error,a16.error,'tip16=',a16.x,a16.y,'erro M=',momentError);
+}
+
+// 5) Estados iniciais ainda fora do escopo devem ser recusados, nunca ignorados.
+{
+  const settlement=simpleCantilever();settlement.settlements=[{id:'SET1',caseId:'LC1',nodeId:'N1',ux:0,uy:.001,rz:0}];
+  mustThrow(()=>solveFrameCorotational2D(settlement,'LC1'),/deslocamentos impostos|recalques/i,'Co-rotacional: recalque deve ser recusado');
+  const imperfect=simpleCantilever();imperfect.settings.imperfection={...(imperfect.settings.imperfection||{}),enabled:true,scenarioId:'LC1',mode:1,amplitudeMm:10};
+  mustThrow(()=>solveFrameCorotational2D(imperfect,'LC1'),/imperfei/i,'Co-rotacional: imperfeição modal deve ser recusada');
+  const prescribed=simpleCantilever();prescribed.supports[0].baseUxValue=.001;
+  mustThrow(()=>solveFrameCorotational2D(prescribed,'LC1'),/deslocamentos impostos/i,'Co-rotacional: deslocamento base deve ser recusado');
+  console.log('Co-rotacional — escopo protegido OK: recalques, imperfeição e deslocamento base recusados');
 }
 
 console.log('Todos os smoke tests co-rotacionais experimentais do AstraStruct v0.13 passaram.');

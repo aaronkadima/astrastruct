@@ -43,7 +43,8 @@ export function buildCorotationalResponses(project,result,samples=41){
       stations.push({xi,x:xi*L0,xCurrent:xc,N,V,M,x0,y0,xd,yd,ux:xd-x0,uy:yd-y0,uLocal:xi*(l-L0),vLocal:w,rotationRelative:slope,sigmaAxial,sigmaTop,sigmaBottom,sigmaAbs});
     }
     const end=stations.at(-1),equilibriumResidual={N:num(end?.N)-N2,V:num(end?.V)+V2,M:num(end?.M)-M2},equilibriumResidualAbs=Math.max(...Object.values(equilibriumResidual).map(Math.abs));
-    responses.push({elementId:e.id,type:'frame2d-corotational',L:L0,currentLength:l,c,s,currentGeometry:true,qx,qy,pointLoads,loadModel:load.mode,referenceLoad:{globalPerReferenceLength:{x:load.gx,y:load.gy},currentScale:load.scale,uniform:f.loadSummary?.uniform||{qx:0,qy:0},selfWeight:num(f.loadSummary?.selfWeight),points:f.loadSummary?.points||[],currentPoints:pointLoads},loadRecovery:{equilibriumResidual,equilibriumResidualAbs},stress:{available:flexuralStressAvailable,axialOnly:!flexuralStressAvailable,cY,unit:'MPa'},convention:{N:'tração positiva',V:'+y co-rotante positivo',M:'sagente positivo',stress:'tração positiva'},stations});
+    const thermal=f.loadSummary?.thermal||{dT:0,dTGradient:0,alpha:0,eps0:0,kappa0:0,sectionHeight:0,initialBasic:[0,0,0],forceScale:0};
+    responses.push({elementId:e.id,type:'frame2d-corotational',L:L0,currentLength:l,c,s,currentGeometry:true,qx,qy,pointLoads,thermal,loadModel:load.mode,referenceLoad:{globalPerReferenceLength:{x:load.gx,y:load.gy},currentScale:load.scale,uniform:f.loadSummary?.uniform||{qx:0,qy:0},selfWeight:num(f.loadSummary?.selfWeight),points:f.loadSummary?.points||[],currentPoints:pointLoads},loadRecovery:{equilibriumResidual,equilibriumResidualAbs},stress:{available:flexuralStressAvailable,axialOnly:!flexuralStressAvailable,cY,unit:'MPa'},convention:{N:'tração positiva',V:'+y co-rotante positivo',M:'sagente positivo',stress:'tração positiva'},stations});
   }
   return responses;
 }

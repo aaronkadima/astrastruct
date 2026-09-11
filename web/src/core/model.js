@@ -46,7 +46,7 @@ export function emptyProject() {
       nonlinearSteps: 20, nonlinearMaxIterations: 35, nonlinearTolerance: 1e-8, nonlinearLineSearch: true,
       imperfection: { enabled: false, source: 'bucklingMode', scenarioId: null, mode: 1, amplitudeMm: 10 }
     },
-    meta: { solverVersion: '0.13.3-exp', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+    meta: { solverVersion: '0.13.4-exp', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
   };
 }
 
@@ -78,12 +78,20 @@ export function normalizeProject(input) {
   p.settings.imperfection.scenarioId = p.settings.imperfection.scenarioId || null;
   p.settings.imperfection.mode = Math.max(1, Math.min(12, Math.round(Number(p.settings.imperfection.mode) || 1)));
   p.settings.imperfection.amplitudeMm = Number.isFinite(Number(p.settings.imperfection.amplitudeMm)) && Number(p.settings.imperfection.amplitudeMm) > 0 ? Number(p.settings.imperfection.amplitudeMm) : 10;
-  p.meta = { ...base.meta, ...(p.meta || {}), solverVersion: '0.13.3-exp' };
+  p.meta = { ...base.meta, ...(p.meta || {}), solverVersion: '0.13.4-exp' };
   p.version = 13;
 
   const firstCaseId = p.loadCases[0]?.id || 'LC1';
   p.loads = p.loads.map(l => ({ ...l, caseId: l.caseId || firstCaseId }));
-  p.elementLoads = p.elementLoads.map(l => ({ ...l, caseId: l.caseId || firstCaseId }));
+  p.elementLoads = p.elementLoads.map(l => {
+    const out={ ...l, caseId: l.caseId || firstCaseId };
+    if(out.kind==='followerEnd'){
+      out.end=Number(out.end??2);
+      out.px=Number(out.px)||0;
+      out.py=Number(out.py)||0;
+    }
+    return out;
+  });
   p.settlements = p.settlements.map(s => ({ ...s, caseId: s.caseId || firstCaseId, ux: Number(s.ux)||0, uy: Number(s.uy)||0, rz: Number(s.rz)||0 }));
   p.nodeSprings = p.nodeSprings.map(s => ({ ...s, id: s.id || uid('SPR'), kx: Math.max(0, Number(s.kx)||0), ky: Math.max(0, Number(s.ky)||0), kr: Math.max(0, Number(s.kr)||0) }));
   p.materials = p.materials.map(m => ({ ...m, alpha: Number.isFinite(Number(m.alpha)) ? Number(m.alpha) : defaultAlpha(m.type) }));

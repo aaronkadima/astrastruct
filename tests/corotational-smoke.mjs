@@ -1,4 +1,5 @@
 import { emptyProject, makeFrameElement } from '../web/src/core/model.js';
+import { solve } from '../web/src/solver/index.js';
 import { corotationalElementState, solveFrameCorotational2D } from '../web/src/solver/corotational2d.js';
 
 function assert(condition,message){if(!condition)throw new Error(message)}
@@ -99,7 +100,23 @@ function circularArc(ne){
   console.log(p.name,'OK','R=',ra.fy,rb.fy,'Mmax=',mmax,'w=',resp.referenceLoad.selfWeight);
 }
 
-// 7) Estados ainda fora do escopo devem ser recusados, nunca ignorados.
+// 7) Carga pontual em barra como dead load de referência. O limite de pequenas
+// rotações deve reproduzir o mesmo modelo discreto linear, as reações globais e
+// o salto de cortante no ponto de aplicação.
+{
+  const p=emptyProject();p.name='Co-rotacional — carga pontual de referência';
+  p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:6,y:0}];p.elements=[makeFrameElement({id:'E1',n1:'N1',n2:'N2'})];
+  p.supports=[{nodeId:'N1',ux:true,uy:true,rz:false},{nodeId:'N2',ux:false,uy:true,rz:false}];
+  p.elementLoads=[{id:'P1',caseId:'LC1',elementId:'E1',kind:'point',xi:.5,px:0,py:-100}];
+  const linear=solve(p,'LC1'),r=solveFrameCorotational2D(p,'LC1',{steps:8,maxIterations:40,tolerance:1e-10}),ra=r.reactions.find(x=>x.nodeId==='N1'),rb=r.reactions.find(x=>x.nodeId==='N2'),resp=r.elementResponses[0],mid=resp.stations[20],before=resp.stations[19],mmax=Math.max(...resp.stations.map(s=>s.M)),lr1=linear.displacements.find(d=>d.nodeId==='N1'),lr2=linear.displacements.find(d=>d.nodeId==='N2'),nr1=r.displacements.find(d=>d.nodeId==='N1'),nr2=r.displacements.find(d=>d.nodeId==='N2'),recovery=resp.loadRecovery.equilibriumResidualAbs;
+  near(ra.fy,50,2e-4,'Co-rotacional point: RA');near(rb.fy,50,2e-4,'Co-rotacional point: RB');near(ra.fy+rb.fy,100,2e-4,'Co-rotacional point: equilíbrio vertical');near(mmax,150,.15,'Co-rotacional point: Mmax');
+  near(nr1.rz,lr1.rz,2e-7,'Co-rotacional point: rotação N1 no limite linear');near(nr2.rz,lr2.rz,2e-7,'Co-rotacional point: rotação N2 no limite linear');
+  near(mid.V-before.V,-100,.15,'Co-rotacional point: salto de cortante');near(resp.referenceLoad.currentPoints[0].py,-100,.05,'Co-rotacional point: projeção transversal corrente');
+  assert(recovery<.5,`Co-rotacional point: resíduo de recuperação excessivo (${recovery})`);
+  console.log(p.name,'OK','R=',ra.fy,rb.fy,'Mmax=',mmax,'salto V=',mid.V-before.V,'resíduo=',recovery);
+}
+
+// 8) Estados ainda fora do escopo devem ser recusados, nunca ignorados.
 {
   const settlement=simpleCantilever();settlement.settlements=[{id:'SET1',caseId:'LC1',nodeId:'N1',ux:0,uy:.001,rz:0}];
   mustThrow(()=>solveFrameCorotational2D(settlement,'LC1'),/deslocamentos impostos|recalques/i,'Co-rotacional: recalque deve ser recusado');
@@ -107,9 +124,9 @@ function circularArc(ne){
   mustThrow(()=>solveFrameCorotational2D(imperfect,'LC1'),/imperfei/i,'Co-rotacional: imperfeição modal deve ser recusada');
   const prescribed=simpleCantilever();prescribed.supports[0].baseUxValue=.001;
   mustThrow(()=>solveFrameCorotational2D(prescribed,'LC1'),/deslocamentos impostos/i,'Co-rotacional: deslocamento base deve ser recusado');
-  const point=simpleCantilever();point.elementLoads=[{id:'Pbar',caseId:'LC1',elementId:'E1',kind:'point',xi:.5,px:0,py:-10}];
-  mustThrow(()=>solveFrameCorotational2D(point,'LC1'),/point|tipo/i,'Co-rotacional: carga pontual em barra deve ser recusada');
-  console.log('Co-rotacional — escopo protegido OK: recalques, imperfeição, deslocamento base e carga pontual recusados');
+  const thermal=simpleCantilever();thermal.elementLoads=[{id:'T1',caseId:'LC1',elementId:'E1',kind:'thermal',dT:20,dTGradient:0}];
+  mustThrow(()=>solveFrameCorotational2D(thermal,'LC1'),/thermal|tipo/i,'Co-rotacional: ação térmica deve ser recusada');
+  console.log('Co-rotacional — escopo protegido OK: recalques, imperfeição, deslocamento base e ação térmica recusados');
 }
 
-console.log('Todos os smoke tests co-rotacionais experimentais do AstraStruct v0.13.1 passaram.');
+console.log('Todos os smoke tests co-rotacionais experimentais do AstraStruct v0.13.2 passaram.');

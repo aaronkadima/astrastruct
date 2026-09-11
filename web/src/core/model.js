@@ -22,7 +22,7 @@ export function emptyProject() {
   return {
     id: uid('project'),
     name: 'Novo projeto',
-    version: 2,
+    version: 3,
     units: 'kN-m-MPa',
     nodes: [],
     elements: [],
@@ -32,11 +32,18 @@ export function emptyProject() {
     loads: [],
     elementLoads: [],
     loadCases: [{ id: 'LC1', name: 'Caso 1', type: 'user' }],
+    loadCombinations: [{ id: 'COMB1', name: 'Combinação customizada 1', type: 'custom', terms: [{ caseId: 'LC1', factor: 1.0 }] }],
     connections: [],
     results: null,
-    settings: { grid: 0.25, snap: true, deformationScale: 1 },
+    settings: {
+      grid: 0.25,
+      snap: true,
+      deformationScale: 1,
+      activeLoadCaseId: 'LC1',
+      analysisScenarioId: 'LC1'
+    },
     meta: {
-      solverVersion: '0.2.0',
+      solverVersion: '0.3.0',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
@@ -54,11 +61,26 @@ export function normalizeProject(input) {
   p.loads = Array.isArray(p.loads) ? p.loads : [];
   p.elementLoads = Array.isArray(p.elementLoads) ? p.elementLoads : [];
   p.loadCases = Array.isArray(p.loadCases) && p.loadCases.length ? p.loadCases : clone(base.loadCases);
+  p.loadCombinations = Array.isArray(p.loadCombinations) ? p.loadCombinations : clone(base.loadCombinations);
   p.connections = Array.isArray(p.connections) ? p.connections : [];
   p.settings = { ...base.settings, ...(p.settings || {}) };
-  p.meta = { ...base.meta, ...(p.meta || {}), solverVersion: '0.2.0' };
-  p.version = 2;
+  p.meta = { ...base.meta, ...(p.meta || {}), solverVersion: '0.3.0' };
+  p.version = 3;
+
+  const firstCaseId = p.loadCases[0]?.id || 'LC1';
+  p.loads = p.loads.map(l => ({ ...l, caseId: l.caseId || firstCaseId }));
+  p.elementLoads = p.elementLoads.map(l => ({ ...l, caseId: l.caseId || firstCaseId }));
   p.elements = p.elements.map(e => ({ ...e, releases: { rz1: false, rz2: false, ...(e.releases || {}) } }));
+
+  const validCaseIds = new Set(p.loadCases.map(c => c.id));
+  p.loadCombinations = p.loadCombinations.map(c => ({
+    ...c,
+    type: c.type || 'custom',
+    terms: (c.terms || []).filter(t => validCaseIds.has(t.caseId)).map(t => ({ caseId: t.caseId, factor: Number(t.factor) || 0 }))
+  }));
+  if (!validCaseIds.has(p.settings.activeLoadCaseId)) p.settings.activeLoadCaseId = firstCaseId;
+  const validScenarioIds = new Set([...p.loadCases.map(c => c.id), ...p.loadCombinations.map(c => c.id)]);
+  if (!validScenarioIds.has(p.settings.analysisScenarioId)) p.settings.analysisScenarioId = firstCaseId;
   return p;
 }
 
@@ -183,5 +205,28 @@ export function demoMixed() {
     { nodeId: 'N4', ux: true, uy: true, rz: true }
   ];
   p.loads = [{ id: 'L1', caseId: 'LC1', nodeId: 'N2', fx: 50, fy: 0, mz: 0 }];
+  return p;
+}
+
+export function demoLoadCases() {
+  const p = demoFrame();
+  p.name = 'Pórtico — casos e combinação';
+  p.loadCases = [
+    { id: 'G', name: 'Permanente (exemplo)', type: 'permanent' },
+    { id: 'Q', name: 'Variável (exemplo)', type: 'variable' }
+  ];
+  p.loads = [
+    { id: 'LG1', caseId: 'G', nodeId: 'N3', fx: 0, fy: -30, mz: 0 },
+    { id: 'LQ1', caseId: 'Q', nodeId: 'N2', fx: 25, fy: 0, mz: 0 }
+  ];
+  p.elementLoads = [{ id: 'EG1', caseId: 'G', elementId: 'E2', kind: 'uniform', qx: 0, qy: -8 }];
+  p.loadCombinations = [{
+    id: 'COMB1',
+    name: 'Combinação customizada demonstrativa',
+    type: 'custom',
+    terms: [{ caseId: 'G', factor: 1.2 }, { caseId: 'Q', factor: 1.5 }]
+  }];
+  p.settings.activeLoadCaseId = 'G';
+  p.settings.analysisScenarioId = 'COMB1';
   return p;
 }

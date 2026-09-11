@@ -33,7 +33,7 @@ export function sectionDepth(section) {
 
 export function emptyProject() {
   return {
-    id: uid('project'), name: 'Novo projeto', version: 12, units: 'kN-m-MPa',
+    id: uid('project'), name: 'Novo projeto', version: 13, units: 'kN-m-MPa',
     nodes: [], elements: [], materials: clone(MATERIALS), sections: clone(SECTIONS), supports: [],
     loads: [], elementLoads: [], settlements: [], nodeSprings: [],
     loadCases: [{ id: 'LC1', name: 'Caso 1', type: 'user' }],
@@ -43,9 +43,10 @@ export function emptyProject() {
       grid: 0.25, snap: true, deformationScale: 1,
       activeLoadCaseId: 'LC1', analysisScenarioId: 'LC1',
       analysisType: 'linear', pDeltaMaxIterations: 30, pDeltaTolerance: 1e-8,
+      nonlinearSteps: 20, nonlinearMaxIterations: 35, nonlinearTolerance: 1e-8, nonlinearLineSearch: true,
       imperfection: { enabled: false, source: 'bucklingMode', scenarioId: null, mode: 1, amplitudeMm: 10 }
     },
-    meta: { solverVersion: '0.12.0', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+    meta: { solverVersion: '0.13.0-exp', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
   };
 }
 
@@ -64,16 +65,21 @@ export function normalizeProject(input) {
   p.loadCombinations = Array.isArray(p.loadCombinations) ? p.loadCombinations : clone(base.loadCombinations);
   p.connections = Array.isArray(p.connections) ? p.connections : [];
   p.settings = { ...base.settings, ...(p.settings || {}), imperfection: { ...base.settings.imperfection, ...(p.settings?.imperfection || {}) } };
-  p.settings.analysisType = p.settings.analysisType === 'pdelta' ? 'pdelta' : 'linear';
+  const analysisType=String(p.settings.analysisType||'linear');
+  p.settings.analysisType = analysisType==='pdelta'||analysisType==='corotational' ? analysisType : 'linear';
   p.settings.pDeltaMaxIterations = Math.max(2, Math.min(100, Math.round(Number(p.settings.pDeltaMaxIterations) || 30)));
   p.settings.pDeltaTolerance = Math.max(1e-12, Number(p.settings.pDeltaTolerance) || 1e-8);
+  p.settings.nonlinearSteps = Math.max(1, Math.min(200, Math.round(Number(p.settings.nonlinearSteps) || 20)));
+  p.settings.nonlinearMaxIterations = Math.max(3, Math.min(100, Math.round(Number(p.settings.nonlinearMaxIterations) || 35)));
+  p.settings.nonlinearTolerance = Math.max(1e-12, Number(p.settings.nonlinearTolerance) || 1e-8);
+  p.settings.nonlinearLineSearch = p.settings.nonlinearLineSearch !== false;
   p.settings.imperfection.enabled = !!p.settings.imperfection.enabled;
   p.settings.imperfection.source = p.settings.imperfection.source === 'bucklingMode' ? 'bucklingMode' : 'bucklingMode';
   p.settings.imperfection.scenarioId = p.settings.imperfection.scenarioId || null;
   p.settings.imperfection.mode = Math.max(1, Math.min(12, Math.round(Number(p.settings.imperfection.mode) || 1)));
   p.settings.imperfection.amplitudeMm = Number.isFinite(Number(p.settings.imperfection.amplitudeMm)) && Number(p.settings.imperfection.amplitudeMm) > 0 ? Number(p.settings.imperfection.amplitudeMm) : 10;
-  p.meta = { ...base.meta, ...(p.meta || {}), solverVersion: '0.12.0' };
-  p.version = 12;
+  p.meta = { ...base.meta, ...(p.meta || {}), solverVersion: '0.13.0-exp' };
+  p.version = 13;
 
   const firstCaseId = p.loadCases[0]?.id || 'LC1';
   p.loads = p.loads.map(l => ({ ...l, caseId: l.caseId || firstCaseId }));

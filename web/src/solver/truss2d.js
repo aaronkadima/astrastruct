@@ -1,4 +1,4 @@
-import { zeros, solveLinear, mul, addSub } from './matrix.js';
+import { zeros, solveConstrained, addSub } from './matrix.js';
 
 export function solveTruss2D(project) {
   const nodes = project.nodes || [];
@@ -37,22 +37,16 @@ export function solveTruss2D(project) {
     F[2*i+1] += l.fy || 0;
   }
 
-  const fixed = new Set();
+  const prescribed = new Map();
   for (const support of project.supports || []) {
     const i = map.get(support.nodeId);
     if (i == null) continue;
-    if (support.ux) fixed.add(2*i);
-    if (support.uy) fixed.add(2*i+1);
+    if (support.ux) prescribed.set(2*i, Number(support.uxValue) || 0);
+    if (support.uy) prescribed.set(2*i+1, Number(support.uyValue) || 0);
   }
-  const free = Array.from({ length: nd }, (_, i) => i).filter(i => !fixed.has(i));
-  if (!free.length) throw new Error('Modelo sem graus de liberdade livres.');
+  if (!prescribed.size) throw new Error('Modelo sem restrições de apoio.');
 
-  const Kr = free.map(i => free.map(j => K[i][j]));
-  const Fr = free.map(i => F[i]);
-  const ur = solveLinear(Kr, Fr);
-  const u = Array(nd).fill(0);
-  free.forEach((d, i) => { u[d] = ur[i]; });
-  const R = mul(K, u).map((v, i) => v - F[i]);
+  const {u,R,free} = solveConstrained(K,F,prescribed);
 
   const axial = elements.map(e => {
     const i = map.get(e.n1), j = map.get(e.n2), a = nodes[i], b = nodes[j];
@@ -64,7 +58,7 @@ export function solveTruss2D(project) {
 
   return {
     type: 'truss2d',
-    solverVersion: '0.2.0',
+    solverVersion: '0.5.0',
     dofs: nd,
     activeDofs: free.length,
     displacements: nodes.map((n, i) => ({ nodeId: n.id, ux: u[2*i], uy: u[2*i+1], rz: 0 })),

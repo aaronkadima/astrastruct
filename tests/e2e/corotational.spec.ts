@@ -71,6 +71,20 @@ async function installThermalCantilever(page:Page){
   await page.reload();
 }
 
+async function installFollowerCantilever(page:Page){
+  await page.evaluate(()=>{
+    const raw=localStorage.getItem('astrastruct.project');if(!raw)throw new Error('Projeto inicial ausente');
+    const p=JSON.parse(raw),template=p.elements?.[0];if(!template)throw new Error('Elemento modelo ausente');
+    p.name='E2E — follower end force';
+    p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:4,y:0}];
+    p.elements=[{...template,id:'E1',n1:'N1',n2:'N2',materialId:'concrete30',A:.15,I:.003125,sectionId:'rc_30x50',releases:{rz1:false,rz2:false},rotationalSprings:{rz1:null,rz2:null}}];
+    p.supports=[{nodeId:'N1',ux:true,uy:true,rz:true}];p.loads=[];p.elementLoads=[];p.nodeSprings=[];p.settlements=[];
+    p.settings={...(p.settings||{}),analysisType:'linear',activeLoadCaseId:'LC1',analysisScenarioId:'LC1',imperfection:{...(p.settings?.imperfection||{}),enabled:false}};
+    localStorage.setItem('astrastruct.project',JSON.stringify(p));
+  });
+  await page.reload();
+}
+
 async function enableCorotational(page:Page){
   await openCommand(page,'Tipo de análise');
   const mode=page.getByTestId('analysis-corotational');await expect(mode).toBeEnabled();await mode.click();
@@ -162,7 +176,7 @@ test('co-rotational mode accepts a reference point member load and traces it in 
 
 test('co-rotational mode accepts thermal initial strain and traces the free expansion',async({page})=>{
   await page.goto('./');await installThermalCantilever(page);await enableCorotational(page);
-  await expect.poll(async()=>{const p=await persistedProject(page);return p?.meta?.solverVersion}).toBe('0.13.3-exp');
+  await expect.poll(async()=>{const p=await persistedProject(page);return p?.meta?.solverVersion}).toBe('0.13.4-exp');
   await page.getByTestId('analyze-button').click();await expect(page.getByTestId('nonlinear-result-metric')).toBeVisible();
   await openCommand(page,'Diagramas/envelopes');
   const post=page.getByTestId('panel-nonlinear-postprocess'),thermal=page.getByTestId('thermal-postprocess-note');
@@ -175,12 +189,39 @@ test('co-rotational mode accepts thermal initial strain and traces the free expa
   await post.locator('button[aria-label="Fechar"]').click();
   await openCommand(page,'Relatório técnico');
   const report=page.getByTestId('panel-nonlinear-report');await expect(report).toBeVisible();
-  await expect(report).toContainText('0.13.3-exp');
+  await expect(report).toContainText('0.13.4-exp');
   await expect(page.getByTestId('nonlinear-thermal-model')).toContainText('deformação axial e curvatura iniciais');
   await expect(report).toContainText('25.000');
   await expect(report).toContainText('1.0000');
-  await expect(page.getByTestId('nonlinear-report-limitations')).toContainText('ações térmicas uniformes/gradientes como deformação inicial');
-  await expect(page.getByTestId('nonlinear-report-limitations')).not.toContainText('ações térmicas, cargas seguidoras');
+  await expect(page.getByTestId('nonlinear-report-limitations')).toContainText('temperatura como estado inicial');
+});
+
+test('follower force is created in UI, follows current chord and uses consistent external tangent',async({page})=>{
+  await page.goto('./');await installFollowerCantilever(page);
+  await openCommand(page,'Tipo de análise');
+  await page.getByTestId('analysis-corotational').click();
+  await expect(page.getByTestId('follower-empty')).toBeVisible();
+  await page.getByTestId('follower-add').click();
+  await expect(page.getByTestId('follower-py')).toBeVisible();
+  await page.getByTestId('follower-px').fill('0');await page.getByTestId('follower-py').fill('-10');
+  await expect(page.getByTestId('follower-load-note')).toContainText('Kint − λKext');
+  await page.getByTestId('analysis-apply').click();
+  await expect.poll(async()=>{const p=await persistedProject(page);const f=p?.elementLoads?.find((l:any)=>l.kind==='followerEnd');return [p?.settings?.analysisType,f?.end,f?.px,f?.py,p?.meta?.solverVersion]}).toEqual(['corotational',2,0,-10,'0.13.4-exp']);
+
+  await openCommand(page,'Tipo de análise');
+  await page.getByTestId('analysis-linear').click();
+  await expect(page.getByTestId('follower-mode-warning')).toContainText('Força seguidora exige Geom. não linear');
+  await expect(page.getByTestId('analysis-apply')).toBeDisabled();
+  await page.getByTestId('analysis-corotational').click();await page.getByTestId('analysis-apply').click();
+
+  await page.getByTestId('analyze-button').click();await expect(page.getByTestId('nonlinear-result-metric')).toBeVisible();
+  await openCommand(page,'Diagramas/envelopes');
+  const post=page.getByTestId('panel-nonlinear-postprocess'),follower=page.getByTestId('follower-postprocess-note');
+  await expect(post).toBeVisible();await expect(post).toContainText('carga seguidora');await expect(follower).toContainText('Px=0.000 kN');await expect(follower).toContainText('Py=-10.000 kN');await expect(follower).toContainText('Kint − λKext');await expect(follower).toContainText('não simétrica');
+  await post.locator('button[aria-label="Fechar"]').click();
+  await openCommand(page,'Relatório técnico');
+  const report=page.getByTestId('panel-nonlinear-report');await expect(report).toBeVisible();
+  await expect(report).toContainText('0.13.4-exp');await expect(page.getByTestId('nonlinear-follower-model')).toContainText('Kext=dP/dq');await expect(page.getByTestId('nonlinear-follower-model')).toContainText('não simétrica');await expect(report).toContainText('ext.2');
 });
 
 test('co-rotational mode refuses a model with a rotational release',async({page})=>{

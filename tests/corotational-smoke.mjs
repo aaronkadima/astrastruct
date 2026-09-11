@@ -1,6 +1,6 @@
 import { emptyProject, makeFrameElement } from '../web/src/core/model.js';
 import { solve } from '../web/src/solver/index.js';
-import { corotationalElementState, followerEndLoadState, solveFrameCorotational2D } from '../web/src/solver/corotational2d.js';
+import { corotationalElementState, corotationalConnectedElementState, followerEndLoadState, solveFrameCorotational2D } from '../web/src/solver/corotational2d.js';
 
 function assert(condition,message){if(!condition)throw new Error(message)}
 function near(actual,expected,tol,message){if(Math.abs(actual-expected)>tol)throw new Error(`${message}: esperado ${expected}, obtido ${actual}`)}
@@ -172,7 +172,35 @@ function circularArc(ne){
   console.log(p.name,'OK','Px=',f.px,'ux [mm]=',tip.ux*1000,'R=',ra.fx);
 }
 
-// 13) Estados ainda fora do escopo devem ser recusados, nunca ignorados.
+// 13) Tangente condensada de duas ligações semirrígidas contra diferença central.
+{
+  const q=[.08,.11,.06,.31,-.07,-.04],h=1e-7,args={X1:0,Y1:0,X2:3,Y2:.8,E:30e6,A:.15,I:.003125,initialBasic:[2e-4,-1.5e-4,2.2e-4],pGlobal:[2,-3,1.1,4,-5,-1.7],loadFactor:.65,releases:{rz1:false,rz2:false},rotationalSprings:{rz1:12000,rz2:35000}};
+  const state=qq=>corotationalConnectedElementState({...args,qGlobal:qq}),base=state(q);let maxDiff=0,maxRef=0,maxAsym=0;
+  for(let j=0;j<6;j++){
+    const qp=[...q],qm=[...q];qp[j]+=h;qm[j]-=h;const gp=state(qp).gradient,gm=state(qm).gradient;
+    for(let i=0;i<6;i++){const numeric=(gp[i]-gm[i])/(2*h),analytic=base.tangent[i][j];maxDiff=Math.max(maxDiff,Math.abs(analytic-numeric));maxRef=Math.max(maxRef,Math.abs(numeric));maxAsym=Math.max(maxAsym,Math.abs(base.tangent[i][j]-base.tangent[j][i]))}
+  }
+  const relative=maxDiff/Math.max(1,maxRef);assert(relative<3e-6,`Conexão co-rotacional: tangente condensada inconsistente (${relative})`);assert(maxAsym/Math.max(1,maxRef)<1e-10,`Conexão co-rotacional: tangente conservativa perdeu simetria (${maxAsym})`);assert(base.internalConnectionResidual<1e-7,`Conexão co-rotacional: equilíbrio interno residual ${base.internalConnectionResidual}`);
+  console.log('Co-rotacional — tangente semirrígida condensada OK','erro relativo=',relative,'resíduo interno=',base.internalConnectionResidual);
+}
+
+// 14) Console com mola rotacional na base: limite linear conhecido e momento transmitido pela mola.
+{
+  const p=emptyProject();p.name='Co-rotacional — console semirrígido';p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:4,y:0}];const e=makeFrameElement({id:'E1',n1:'N1',n2:'N2',sectionId:'rc_30x50'});e.rotationalSprings={rz1:10000,rz2:null};p.elements=[e];p.supports=[{nodeId:'N1',ux:true,uy:true,rz:true}];p.loads=[{id:'P1',caseId:'LC1',nodeId:'N2',fx:0,fy:-10,mz:0}];
+  const r=solveFrameCorotational2D(p,'LC1',{steps:8,maxIterations:40,tolerance:1e-10}),tip=r.displacements.find(d=>d.nodeId==='N2'),f=r.elementForces[0],conn=f.connectionRotations.find(x=>x.end===1),expected=10*4**3/(3*30e6*.003125)+10*4**2/10000;
+  near(Math.abs(tip.uy),expected,2e-6,'Co-rotacional semirrígido: flecha');near(Math.abs(f.M1),40,.03,'Co-rotacional semirrígido: M1');near(Math.abs(conn.relativeRotation),.004,4e-6,'Co-rotacional semirrígido: rotação relativa');near(Math.abs(conn.moment),40,.03,'Co-rotacional semirrígido: momento da ligação');assert(f.connectionCondensation.internalResidual<1e-7,'Co-rotacional semirrígido: equilíbrio interno da ligação');
+  console.log(p.name,'OK','delta [mm]=',Math.abs(tip.uy)*1000,'M=',f.M1,'dtheta=',conn.relativeRotation);
+}
+
+// 15) Viga biapoiada com releases nas duas extremidades sob UDL: momentos finais nulos e carga de barra condensada corretamente.
+{
+  const p=emptyProject();p.name='Co-rotacional — UDL com duas rótulas';p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:6,y:0}];const e=makeFrameElement({id:'E1',n1:'N1',n2:'N2'});e.releases={rz1:true,rz2:true};e.rotationalSprings={rz1:0,rz2:0};p.elements=[e];p.supports=[{nodeId:'N1',ux:true,uy:true,rz:false},{nodeId:'N2',ux:false,uy:true,rz:false}];p.elementLoads=[{id:'Q1',caseId:'LC1',elementId:'E1',kind:'uniform',qx:0,qy:-20}];
+  const r=solveFrameCorotational2D(p,'LC1',{steps:8,maxIterations:40,tolerance:1e-10}),ra=r.reactions.find(x=>x.nodeId==='N1'),rb=r.reactions.find(x=>x.nodeId==='N2'),f=r.elementForces[0],resp=r.elementResponses[0],mmax=Math.max(...resp.stations.map(s=>s.M));
+  near(ra.fy,60,2e-5,'Co-rotacional release UDL: RA');near(rb.fy,60,2e-5,'Co-rotacional release UDL: RB');near(f.M1,0,2e-6,'Co-rotacional release UDL: M1');near(f.M2,0,2e-6,'Co-rotacional release UDL: M2');near(mmax,90,.08,'Co-rotacional release UDL: Mmax');assert(f.connectionRotations.length===2,'Co-rotacional release UDL: metadados das duas rótulas ausentes');assert(f.connectionRotations.every(c=>Math.abs(c.moment)<2e-6),'Co-rotacional release UDL: momento residual em rótula');assert(f.connectionCondensation.internalResidual<1e-7,'Co-rotacional release UDL: equilíbrio interno da condensação');
+  console.log(p.name,'OK','R=',ra.fy,rb.fy,'Mext=',f.M1,f.M2,'Mmax=',mmax);
+}
+
+// 16) Estados ainda fora do escopo devem ser recusados, nunca ignorados.
 {
   const settlement=simpleCantilever();settlement.settlements=[{id:'SET1',caseId:'LC1',nodeId:'N1',ux:0,uy:.001,rz:0}];
   mustThrow(()=>solveFrameCorotational2D(settlement,'LC1'),/deslocamentos impostos|recalques/i,'Co-rotacional: recalque deve ser recusado');

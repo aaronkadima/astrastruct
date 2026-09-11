@@ -1,6 +1,7 @@
 import { zeros, addSub, solveLinear } from './matrix.js';
 import { resolveScenario } from './scenario.js';
 import { buildCorotationalResponses } from './corotationalPostprocess.js';
+import { uniformDistributedLoadVector } from './frameElement.js';
 
 const EPS=1e-12;
 const normInf=v=>v.length?Math.max(...v.map(x=>Math.abs(x))):0;
@@ -11,6 +12,7 @@ const addMatrix=(A,B,scale=1)=>A.map((r,i)=>r.map((v,j)=>v+scale*B[i][j]));
 const transpose=A=>A[0].map((_,j)=>A.map(r=>r[j]));
 const mm=(A,B)=>A.map(r=>B[0].map((_,j)=>r.reduce((s,v,k)=>s+v*B[k][j],0)));
 const mv=(A,v)=>A.map(r=>r.reduce((s,x,j)=>s+x*v[j],0));
+const addVector=(a,b)=>a.map((v,i)=>v+b[i]);
 
 function hasFlexibleEnds(e){
   if(e.releases?.rz1||e.releases?.rz2)return true;
@@ -26,7 +28,8 @@ function validateModel(project){
   if(!nodes.length||!elements.length)throw new Error('Co-rotacional: modelo sem nós ou elementos.');
   if(elements.some(e=>e.type!=='frame2d'))throw new Error('Co-rotacional v0.13 experimental suporta somente elementos frame2d.');
   if(elements.some(hasFlexibleEnds))throw new Error('Co-rotacional v0.13 experimental requer extremidades rígidas.');
-  if((project.elementLoads||[]).length)throw new Error('Co-rotacional v0.13 experimental aceita somente cargas nodais; cargas de barra serão adicionadas após validação do núcleo.');
+  const unsupported=(project.elementLoads||[]).find(l=>!['uniform','selfWeight'].includes(l.kind));
+  if(unsupported)throw new Error(`Co-rotacional v0.13.1 experimental ainda não aceita carga de barra do tipo "${unsupported.kind}"; nesta etapa são aceitas apenas uniform e selfWeight como cargas mortas da configuração de referência.`);
   if((project.nodeSprings||[]).length)throw new Error('Co-rotacional v0.13 experimental ainda não aceita molas nodais.');
   if((project.settlements||[]).length)throw new Error('Co-rotacional v0.13 experimental ainda não aceita recalques/deslocamentos impostos.');
   if(project.settings?.imperfection?.enabled)throw new Error('Co-rotacional v0.13 experimental ainda não aceita imperfeição geométrica inicial; desative a imperfeição modal ou use P-Delta.');
@@ -34,6 +37,54 @@ function validateModel(project){
     const values=[s.baseUxValue,s.baseUyValue,s.baseRzValue,s.uxValue,s.uyValue,s.rzValue].map(v=>Number(v)||0);
     if(values.some(v=>Math.abs(v)>EPS))throw new Error('Co-rotacional v0.13 experimental ainda não aceita deslocamentos impostos nos apoios.');
   }
+}
+
+function localVectorToGlobal(vector,c,s){
+  return[
+    c*vector[0]-s*vector[1],s*vector[0]+c*vector[1],vector[2],
+    c*vector[3]-s*vector[4],s*vector[3]+c*vector[4],vector[5]
+  ];
+}
+
+function globalVectorToLocal(vector,c,s){
+  return[
+    c*vector[0]+s*vector[1],-s*vector[0]+c*vector[1],vector[2],
+    c*vector[3]+s*vector[4],-s*vector[3]+c*vector[4],vector[5]
+  ];
+}
+
+/**
+ * Cargas mortas da configuração de referência.
+ * - uniform: qx/qy são por unidade de L0 e referidos aos eixos locais iniciais;
+ * - selfWeight: direção global -Y, intensidade gamma*A*factor por unidade de L0.
+ * O vetor nodal equivalente global é congelado na configuração inicial e,
+ * portanto, não acrescenta tangente externa ao Newton da v0.13.1.
+ */
+function prepareReferenceElementLoads(project,e,mat,L0,c0,s0){
+  let qx=0,qy=0,pLocal=Array(6).fill(0),selfWeight=0;
+  const loads=(project.elementLoads||[]).filter(l=>l.elementId===e.id);
+  for(const load of loads){
+    let lx=0,ly=0;
+    if(load.kind==='uniform'){
+      lx=Number(load.qx)||0;ly=Number(load.qy)||0;
+    }else if(load.kind==='selfWeight'){
+      const gamma=Number(load.gamma)||Number(mat.density)||0;
+      const factor=Number.isFinite(Number(load.weightFactor))?Number(load.weightFactor):1;
+      const w=gamma*Number(e.A)*factor;
+      lx=-s0*w;ly=-c0*w;selfWeight+=w;
+    }
+    qx+=lx;qy+=ly;pLocal=addVector(pLocal,uniformDistributedLoadVector(lx,ly,L0));
+  }
+  const pGlobal=localVectorToGlobal(pLocal,c0,s0);
+  const globalPerReferenceLength={x:c0*qx-s0*qy,y:s0*qx+c0*qy};
+  return{
+    pLocal,pGlobal,
+    summary:{
+      mode:'reference-dead',uniform:{qx,qy},selfWeight,
+      reference:{L0,c0,s0,globalPerReferenceLength},
+      supportedKinds:['uniform','selfWeight']
+    }
+  };
 }
 
 /**
@@ -61,20 +112,22 @@ export function corotationalElementState({X1,Y1,X2,Y2,qGlobal,E,A,I}){
 }
 
 function prepare(project){
-  const nodes=project.nodes||[],map=new Map(nodes.map((n,i)=>[n.id,i])),elements=[];
+  const nodes=project.nodes||[],map=new Map(nodes.map((n,i)=>[n.id,i])),elements=[],nd=nodes.length*3,F=Array(nd).fill(0);
   for(const e of project.elements||[]){
     const i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Co-rotacional: elemento ${e.id} referencia nó inexistente.`);
     const mat=(project.materials||[]).find(m=>m.id===e.materialId);if(!mat)throw new Error(`Co-rotacional: material ausente em ${e.id}.`);
-    const a=nodes[i],b=nodes[j],L0=Math.hypot(b.x-a.x,b.y-a.y);if(!(L0>EPS))throw new Error(`Co-rotacional: elemento ${e.id} possui comprimento nulo.`);
+    const a=nodes[i],b=nodes[j],dx0=Number(b.x)-Number(a.x),dy0=Number(b.y)-Number(a.y),L0=Math.hypot(dx0,dy0);if(!(L0>EPS))throw new Error(`Co-rotacional: elemento ${e.id} possui comprimento nulo.`);
     const E=Number(mat.E),A=Number(e.A),I=Number(e.I);if(!(E>0&&A>0&&I>0))throw new Error(`Co-rotacional: propriedades inválidas em ${e.id}.`);
-    elements.push({e,i,j,a,b,E,A,I,idx:[3*i,3*i+1,3*i+2,3*j,3*j+1,3*j+2]});
+    const idx=[3*i,3*i+1,3*i+2,3*j,3*j+1,3*j+2],c0=dx0/L0,s0=dy0/L0,referenceLoads=prepareReferenceElementLoads(project,e,mat,L0,c0,s0);
+    referenceLoads.pGlobal.forEach((v,k)=>{F[idx[k]]+=v});
+    elements.push({e,i,j,a,b,E,A,I,idx,c0,s0,...referenceLoads});
   }
   const prescribed=new Set();
   for(const s of project.supports||[]){const i=map.get(s.nodeId);if(i==null)continue;if(s.ux)prescribed.add(3*i);if(s.uy)prescribed.add(3*i+1);if(s.rz)prescribed.add(3*i+2)}
-  const nd=nodes.length*3,free=Array.from({length:nd},(_,i)=>i).filter(i=>!prescribed.has(i));
+  const free=Array.from({length:nd},(_,i)=>i).filter(i=>!prescribed.has(i));
   if(!free.length)throw new Error('Co-rotacional: não existem graus de liberdade livres.');
   if(free.length>240)throw new Error(`Co-rotacional v0.13 experimental limita a análise a 240 DOFs livres no navegador; modelo atual: ${free.length}.`);
-  const F=Array(nd).fill(0);for(const load of project.loads||[]){const i=map.get(load.nodeId);if(i==null)continue;F[3*i]+=Number(load.fx)||0;F[3*i+1]+=Number(load.fy)||0;F[3*i+2]+=Number(load.mz)||0}
+  for(const load of project.loads||[]){const i=map.get(load.nodeId);if(i==null)continue;F[3*i]+=Number(load.fx)||0;F[3*i+1]+=Number(load.fy)||0;F[3*i+2]+=Number(load.mz)||0}
   return{nodes,map,elements,prescribed,free,nd,F};
 }
 
@@ -123,7 +176,10 @@ export function solveFrameCorotational2D(project,scenarioId,options={}){
   }
   last=residualAt(prepared,u,1);
   const reactions=prepared.nodes.map((n,i)=>({nodeId:n.id,fx:last.fint[3*i]-prepared.F[3*i],fy:last.fint[3*i+1]-prepared.F[3*i+1],mz:last.fint[3*i+2]-prepared.F[3*i+2]})),displacements=prepared.nodes.map((n,i)=>({nodeId:n.id,ux:u[3*i],uy:u[3*i+1],rz:u[3*i+2]}));
-  const elementForces=last.states.map(({item,state})=>({elementId:item.e.id,type:'frame2d',...state.endForces,basicForces:{N:state.basicForces[0],M1:state.basicForces[1],M2:state.basicForces[2]},corotational:{L0:state.L0,l:state.l,alpha:state.alpha,dAlpha:state.dAlpha,basic:state.basic}}));
-  const base={type:'frame2d-corotational-experimental',solverVersion:'0.13.0-exp',scenario:resolved.scenario,dofs:prepared.nd,activeDofs:prepared.free.length,displacements,reactions,elementForces,nonlinear:{formulation:'2D co-rotational Euler-Bernoulli',steps,maxIterations,tolerance,lineSearch,history,converged:true}};
+  const elementForces=last.states.map(({item,state})=>{
+    const endGlobal=state.internal.map((v,k)=>v-item.pGlobal[k]),endLocal=globalVectorToLocal(endGlobal,state.c,state.s);
+    return{elementId:item.e.id,type:'frame2d',N1:endLocal[0],V1:endLocal[1],M1:endLocal[2],N2:endLocal[3],V2:endLocal[4],M2:endLocal[5],basicForces:{N:state.basicForces[0],M1:state.basicForces[1],M2:state.basicForces[2]},corotational:{L0:state.L0,l:state.l,alpha:state.alpha,dAlpha:state.dAlpha,basic:state.basic},loadSummary:item.summary,equivalentNodalLoad:{referenceLocal:item.pLocal,global:item.pGlobal}};
+  });
+  const base={type:'frame2d-corotational-experimental',solverVersion:'0.13.1-exp',scenario:resolved.scenario,dofs:prepared.nd,activeDofs:prepared.free.length,displacements,reactions,elementForces,nonlinear:{formulation:'2D co-rotational Euler-Bernoulli',steps,maxIterations,tolerance,lineSearch,loadModel:'reference-dead equivalent nodal loads',history,converged:true}};
   return{...base,elementResponses:buildCorotationalResponses(p,base,41)};
 }

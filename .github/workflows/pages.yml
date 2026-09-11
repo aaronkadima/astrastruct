@@ -1,27 +1,53 @@
 name: Deploy AstraStruct to GitHub Pages
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
 permissions:
   contents: read
   pages: write
   id-token: write
+
 concurrency:
   group: pages
   cancel-in-progress: true
+
 jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck and validate engine modules
+        run: npm run check
+      - name: Run structural solver tests
+        run: npm test
+      - name: Build React/Vite application
+        run: npm run build
+      - name: Install Chromium for browser smoke tests
+        run: npx playwright install --with-deps chromium
+      - name: Run desktop, Android and tablet smoke tests
+        run: npm run test:e2e
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload built application
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ./dist
+
   deploy:
+    needs: build-and-test
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./web
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

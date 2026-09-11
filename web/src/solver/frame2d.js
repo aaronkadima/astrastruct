@@ -21,7 +21,7 @@ export function solveFrame2D(project) {
     if(!mat)throw new Error(`Material ausente em ${e.id}.`);
     const sec=(project.sections||[]).find(s=>s.id===e.sectionId);
     const loads=(project.elementLoads||[]).filter(l=>l.elementId===e.id).map(l=>l.kind==='selfWeight'?{...l,gamma:Number(l.gamma)||Number(mat.density)||0}:l);
-    const prepared=prepareFrameElement({E:mat.E,A:e.A,I:e.I,L,c:dx/L,s:dy/L,loads,releases:e.releases||{},alpha:Number(mat.alpha)||0,sectionHeight:sectionDepth(sec)});
+    const prepared=prepareFrameElement({E:mat.E,A:e.A,I:e.I,L,c:dx/L,s:dy/L,loads,releases:e.releases||{},rotationalSprings:e.rotationalSprings||{},alpha:Number(mat.alpha)||0,sectionHeight:sectionDepth(sec)});
     const idx=[3*i,3*i+1,3*i+2,3*j,3*j+1,3*j+2];
     addSub(K,prepared.kg,idx);prepared.pg.forEach((v,k)=>{F[idx[k]]+=v});cache.push({e,idx,prepared});
   }
@@ -36,11 +36,11 @@ export function solveFrame2D(project) {
   const {u,R,free}=solveConstrained(K,F,prescribed);
   const displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[3*i],uy:u[3*i+1],rz:u[3*i+2]}));
   const elementForces=cache.map(({e,idx,prepared})=>{
-    const ug=idx.map(i=>u[i]),{q,ul}=recoverFrameEndForces(prepared,ug);
-    return {elementId:e.id,type:'frame2d',N1:q[0],V1:q[1],M1:q[2],N2:q[3],V2:q[4],M2:q[5],localDisplacements:ul,loadSummary:prepared.loadSummary};
+    const ug=idx.map(i=>u[i]),{q,ul,ulNodal,connectionRotations}=recoverFrameEndForces(prepared,ug);
+    return {elementId:e.id,type:'frame2d',N1:q[0],V1:q[1],M1:q[2],N2:q[3],V2:q[4],M2:q[5],localDisplacements:ul,nodalLocalDisplacements:ulNodal,connectionRotations,loadSummary:prepared.loadSummary};
   });
 
-  return {type:'frame2d',solverVersion:'0.8.0',dofs:nd,activeDofs:free.length,
+  return {type:'frame2d',solverVersion:'0.9.0',dofs:nd,activeDofs:free.length,
     displacements,
     reactions:nodes.map((n,i)=>({nodeId:n.id,fx:R[3*i],fy:R[3*i+1],mz:R[3*i+2]})),
     springForces:recoverSpringForces(project,displacements),elementForces};

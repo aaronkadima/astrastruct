@@ -16,7 +16,7 @@ function incompatibilities(project:any){
   if((project.elementLoads||[]).length)issues.push('Cargas de barra, peso próprio e ações térmicas ainda não são aceitos; use apenas cargas nodais.');
   if((project.nodeSprings||[]).length)issues.push('Molas nodais ainda não são aceitas.');
   if((project.settlements||[]).length)issues.push('Recalques/deslocamentos impostos ainda não são aceitos.');
-  if((project.supports||[]).some((s:any)=>Math.abs(num(s.baseUxValue??s.uxValue))>1e-12||Math.abs(num(s.baseUyValue??s.uyValue))>1e-12||Math.abs(num(s.baseRzValue??s.rzValue))>1e-12))issues.push('Deslocamentos prescritos diretamente nos apoios ainda não são aceitos.');
+  if((project.supports||[]).some((s:any)=>[s.baseUxValue,s.baseUyValue,s.baseRzValue,s.uxValue,s.uyValue,s.rzValue].some(v=>Math.abs(num(v))>1e-12)))issues.push('Deslocamentos prescritos diretamente nos apoios ainda não são aceitos.');
   if(project.settings?.imperfection?.enabled)issues.push('Imperfeição modal inicial ainda não é aceita no co‑rotacional v0.13; desative-a ou use P‑Delta.');
   return issues;
 }

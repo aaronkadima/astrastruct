@@ -16,5 +16,5 @@ export function solveEnvelope(project,scenarioIds=null){
       else response.stations.forEach((st,i)=>{const target=env.stations[i];if(!target)return;for(const field of ['N','V','M','vLocal','ux','uy','sigmaAxial','sigmaTop','sigmaBottom','sigmaAbs'])target[field]=extend(target[field],st[field])});
     }
   }
-  return{type:'linear-envelope',scenarioIds:ids,scenarios:solved.map(r=>r.scenario),nodeDisplacements:[...nodeMap.values()],elementResponses:[...elementMap.values()],solverVersion:'0.8.0'};
+  return{type:'linear-envelope',scenarioIds:ids,scenarios:solved.map(r=>r.scenario),nodeDisplacements:[...nodeMap.values()],elementResponses:[...elementMap.values()],solverVersion:'0.9.0'};
 }

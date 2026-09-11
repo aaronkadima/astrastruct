@@ -10,7 +10,7 @@ function frameResponse(project,element,force,samples){
   const a=project.nodes.find(n=>n.id===element.n1),b=project.nodes.find(n=>n.id===element.n2);if(!a||!b)return null;
   const dx=b.x-a.x,dy=b.y-a.y,L=Math.hypot(dx,dy);if(!(L>0))return null;const c=dx/L,s=dy/L;
   const summary=force.loadSummary||{uniform:{qx:0,qy:0},points:[],thermal:{}},qx=summary.uniform?.qx||0,qy=summary.uniform?.qy||0,points=summary.points||[];
-  const local=force.localDisplacements||[0,0,0,0,0,0],stations=[];
+  const local=force.localDisplacementsTotal||force.localDisplacements||[0,0,0,0,0,0],stations=[];
   const section=(project.sections||[]).find(sec=>sec.id===element.sectionId),depth=sectionDepth(section),cY=depth/2,A=Number(element.A)||0,I=Number(element.I)||0;
   const flexuralStressAvailable=cY>0&&I>0;
   for(let i=0;i<samples;i++){
@@ -39,7 +39,7 @@ function trussResponse(project,element,force,samples){
 }
 
 export function buildElementResponses(project,result,samples=41){
-  const n=Math.max(2,Math.min(201,Math.round(samples))),forceMap=new Map((result.elementForces||[]).map(f=>[f.elementId,f])),enrichedProject={...project,__resultDisplacements:result.displacements||[]};
+  const n=Math.max(2,Math.min(201,Math.round(samples))),forceMap=new Map((result.elementForces||[]).map(f=>[f.elementId,f])),enrichedProject={...project,__resultDisplacements:result.totalDisplacements||result.displacements||[]};
   return(project.elements||[]).map(element=>{const force=forceMap.get(element.id);if(!force)return null;return element.type==='frame2d'?frameResponse(enrichedProject,element,force,n):trussResponse(enrichedProject,element,force,n)}).filter(Boolean);
 }
 

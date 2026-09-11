@@ -112,7 +112,9 @@ function prepareThermalInitialState(project,e,mat,section,L0){
     kappa0=-alpha*dTGradient/h;
   }
   const initialBasic=[eps0*L0,-kappa0*L0/2,kappa0*L0/2];
-  return{initialBasic,summary:{dT,dTGradient,alpha,eps0,kappa0,sectionHeight:sectionDepth(section),initialBasic}};
+  const E=Number(mat.E)||0,A=Number(e.A)||0,I=Number(e.I)||0;
+  const forceScale=Math.max(Math.abs(E*A*eps0),Math.abs(E*I*kappa0));
+  return{initialBasic,forceScale,summary:{dT,dTGradient,alpha,eps0,kappa0,sectionHeight:sectionDepth(section),initialBasic,forceScale}};
 }
 
 /**
@@ -172,6 +174,12 @@ function residualAt(prepared,u,loadFactor){
   return{...assembled,external,residual,norm:normInf(prepared.free.map(i=>residual[i]))};
 }
 
+function residualScale(prepared,current,loadFactor){
+  const mechanical=normInf(prepared.free.map(i=>current.external[i]));
+  const thermal=Math.max(0,...prepared.elements.map(e=>Math.abs(e.thermal.forceScale*loadFactor)));
+  return Math.max(1,mechanical,thermal);
+}
+
 export function solveFrameCorotational2D(project,scenarioId,options={}){
   const resolved=resolveScenario(project,scenarioId),p=resolved.project;validateModel(p);const prepared=prepare(p);
   const steps=clamp(Math.round(Number(options.steps??20)||20),1,200),maxIterations=clamp(Math.round(Number(options.maxIterations??35)||35),3,100),tolerance=Math.max(1e-12,Number(options.tolerance??1e-8)||1e-8),lineSearch=options.lineSearch!==false;
@@ -180,7 +188,7 @@ export function solveFrameCorotational2D(project,scenarioId,options={}){
   for(let step=1;step<=steps;step++){
     const lambda=step/steps;let converged=false,iteration=0;
     for(iteration=1;iteration<=maxIterations;iteration++){
-      const current=residualAt(prepared,u,lambda),thermalScale=Math.max(0,...prepared.elements.flatMap(e=>e.thermal.initialBasic.map(v=>Math.abs(v*lambda)))),scale=Math.max(1,normInf(prepared.free.map(i=>current.external[i])),thermalScale);
+      const current=residualAt(prepared,u,lambda),scale=residualScale(prepared,current,lambda);
       if(current.norm<=tolerance*scale){converged=true;last=current;break}
       const Kff=prepared.free.map(i=>prepared.free.map(j=>current.K[i][j])),rf=prepared.free.map(i=>current.residual[i]);let du;
       try{du=solveLinear(Kff,rf)}catch(e){throw new Error(`Co-rotacional: tangente singular no passo ${step}, iteração ${iteration}. ${e.message||e}`)}
@@ -196,7 +204,7 @@ export function solveFrameCorotational2D(project,scenarioId,options={}){
       if(u.some(v=>!Number.isFinite(v)||Math.abs(v)>1e4))throw new Error(`Co-rotacional: resposta não física no passo ${step}.`);
     }
     if(!converged){
-      const current=residualAt(prepared,u,lambda),thermalScale=Math.max(0,...prepared.elements.flatMap(e=>e.thermal.initialBasic.map(v=>Math.abs(v*lambda)))),scale=Math.max(1,normInf(prepared.free.map(i=>current.external[i])),thermalScale);if(current.norm<=tolerance*scale){converged=true;last=current}
+      const current=residualAt(prepared,u,lambda),scale=residualScale(prepared,current,lambda);if(current.norm<=tolerance*scale){converged=true;last=current}
     }
     if(!converged)throw new Error(`Co-rotacional não convergiu no passo ${step}/${steps} em ${maxIterations} iterações.`);
     history.push({step,loadFactor:lambda,iterations:iteration,residualNorm:last.norm});

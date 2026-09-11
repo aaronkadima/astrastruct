@@ -17,6 +17,7 @@ function pathFrom(points:[number,number][],close=false){
   if(!points.length)return'';
   return points.map((p,i)=>`${i?'L':'M'} ${p[0].toFixed(2)} ${p[1].toFixed(2)}`).join(' ')+(close?' Z':'');
 }
+function stressColor(t:number){const z=Math.max(0,Math.min(1,t)),h=215*(1-z);return`hsl(${h.toFixed(1)} 88% 60%)`}
 
 function svgPoint(e:React.PointerEvent<SVGPathElement>){
   const svg=e.currentTarget.ownerSVGElement,ctm=svg?.getScreenCTM();if(!svg||!ctm)return null;
@@ -89,6 +90,21 @@ function EnvelopeDiagram({result,envelope,to,diagram,scale}:{result:any;envelope
   return <g data-testid="envelope-diagram" data-diagram={diagram} className={`envelope-diagrams envelope-${diagram.toLowerCase()}`}>{responses.map((r:any)=>{const er=envMap.get(r.elementId);return er?<EnvelopeShape key={`${diagram}-${r.elementId}`} response={r} envResponse={er} field={diagram} to={to} maxAbs={maxAbs} scale={scale}/>:null})}</g>;
 }
 
+function StressMap({result,envelope,to,useEnvelope}:{result:any;envelope:any;to:ToScreen;useEnvelope:boolean}){
+  const responses=result?.elementResponses||[],envMap=new Map((envelope?.elementResponses||[]).map((r:any)=>[r.elementId,r]));
+  const valueAt=(r:any,i:number)=>{
+    if(useEnvelope){const er:any=envMap.get(r.elementId),v=er?.stations?.[i]?.sigmaAbs?.max;if(Number.isFinite(Number(v)))return Math.abs(Number(v))}
+    const v=r?.stations?.[i]?.sigmaAbs;return Number.isFinite(Number(v))?Math.abs(Number(v)):null;
+  };
+  const values:number[]=[];responses.forEach((r:any)=>(r.stations||[]).forEach((_:any,i:number)=>{const v=valueAt(r,i);if(v!=null)values.push(v)}));
+  const maxStress=Math.max(0,...values);if(!(maxStress>1e-12))return <g data-testid="stress-map" data-mode={useEnvelope?'envelope':'scenario'} data-max-stress="0"/>;
+  return <g data-testid="stress-map" data-mode={useEnvelope?'envelope':'scenario'} data-max-stress={maxStress.toFixed(6)} className="stress-map">
+    <defs><linearGradient id="astra-stress-gradient" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor={stressColor(0)}/><stop offset="50%" stopColor={stressColor(.5)}/><stop offset="100%" stopColor={stressColor(1)}/></linearGradient></defs>
+    {responses.map((r:any)=>{const stations=r.stations||[];return <g key={`stress-${r.elementId}`} data-element-id={r.elementId}>{stations.slice(0,-1).map((st:any,i:number)=>{const v1=valueAt(r,i),v2=valueAt(r,i+1);if(v1==null||v2==null)return null;const a=to(num(st.x0),num(st.y0)),b=to(num(stations[i+1].x0),num(stations[i+1].y0)),v=(v1+v2)/2,t=v/maxStress;return <line key={i} className="stress-segment" x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} style={{stroke:stressColor(t)}} data-stress={v.toFixed(5)}/>})}</g>})}
+    <g className="stress-legend" transform="translate(18 52)"><rect className="stress-legend-bg" x="0" y="0" width="174" height="39" rx="6"/><text x="8" y="13">|σ| elástico {useEnvelope?'· envelope':'· cenário'} [MPa]</text><rect x="8" y="19" width="112" height="8" rx="3" fill="url(#astra-stress-gradient)"/><text x="8" y="36">0</text><text x="123" y="28">{fmt(maxStress,2)}</text></g>
+  </g>;
+}
+
 function ProbeLayer({result,envelope,to,enabled,showEnvelope}:{result:any;envelope:any;to:ToScreen;enabled:boolean;showEnvelope:boolean}){
   const [probe,setProbe]=useState<Probe|null>(null);useEffect(()=>setProbe(null),[result,envelope,enabled]);
   if(!enabled||!result?.elementResponses?.length)return null;
@@ -108,11 +124,12 @@ function ProbeLayer({result,envelope,to,enabled,showEnvelope}:{result:any;envelo
   return <g data-testid="result-probe-layer" className="result-probe-layer">{result.elementResponses.map((r:any)=>{const pts=(r.stations||[]).map((s:any)=>to(num(s.x0),num(s.y0)));if(pts.length<2)return null;return <path key={`probe-${r.elementId}`} data-element-id={r.elementId} className="result-probe-hit" d={pathFrom(pts)} onPointerMove={e=>{if(e.pointerType!=='touch')setFromEvent(e,r)}} onPointerDown={e=>{e.stopPropagation();setFromEvent(e,r)}}/>})}{probe&&<><circle className="probe-point" cx={probe.screen[0]} cy={probe.screen[1]} r="5"/>{card}</>}</g>;
 }
 
-export function ResultOverlays({result,envelope,to,showDeformed,deformationScale,diagram,diagramScale,showEnvelope=false,probeEnabled=false}:{result:any;envelope?:any;to:ToScreen;showDeformed:boolean;deformationScale:number;diagram:DiagramKind;diagramScale:number;showEnvelope?:boolean;probeEnabled?:boolean}){
+export function ResultOverlays({result,envelope,to,showDeformed,deformationScale,diagram,diagramScale,showEnvelope=false,probeEnabled=false,showStressMap=false}:{result:any;envelope?:any;to:ToScreen;showDeformed:boolean;deformationScale:number;diagram:DiagramKind;diagramScale:number;showEnvelope?:boolean;probeEnabled?:boolean;showStressMap?:boolean}){
   const hasResult=!!result?.elementResponses?.length;
   const maxDisp=useMemo(()=>Math.max(0,...(result?.displacements||[]).map((d:any)=>Math.hypot(num(d.ux),num(d.uy)))),[result]);
   if(!hasResult)return null;
   return <g className="result-overlays" data-max-displacement={maxDisp}>
+    {showStressMap&&<StressMap result={result} envelope={envelope} to={to} useEnvelope={showEnvelope}/>} 
     {showDeformed&&<DeformedShape result={result} to={to} scale={deformationScale}/>} 
     {showEnvelope?<EnvelopeDiagram result={result} envelope={envelope} to={to} diagram={diagram} scale={diagramScale}/>:<ForceDiagram result={result} to={to} diagram={diagram} scale={diagramScale}/>} 
     <ProbeLayer result={result} envelope={envelope} to={to} enabled={probeEnabled} showEnvelope={showEnvelope}/>

@@ -12,10 +12,15 @@ export function resolveScenario(project,scenarioId){
   }
   const scaled=clone(project),firstCaseId=cases[0]?.id,factorFor=load=>factors.get(load.caseId||firstCaseId)||0;
   scaled.loads=(project.loads||[]).map(load=>({load,factor:factorFor(load)})).filter(x=>Math.abs(x.factor)>1e-15).map(({load,factor})=>({...clone(load),fx:(load.fx||0)*factor,fy:(load.fy||0)*factor,mz:(load.mz||0)*factor,sourceCaseId:load.caseId||firstCaseId,scenarioFactor:factor}));
-  scaled.elementLoads=(project.elementLoads||[]).map(load=>({load,factor:factorFor(load)})).filter(x=>Math.abs(x.factor)>1e-15).map(({load,factor})=>{const out={...clone(load),sourceCaseId:load.caseId||firstCaseId,scenarioFactor:factor};if(load.kind==='uniform'){out.qx=(load.qx||0)*factor;out.qy=(load.qy||0)*factor}else if(load.kind==='point'){out.px=(load.px||0)*factor;out.py=(load.py||0)*factor}else if(load.kind==='selfWeight'){out.weightFactor=factor*(Number(load.factor)||1)}return out});
+  scaled.elementLoads=(project.elementLoads||[]).map(load=>({load,factor:factorFor(load)})).filter(x=>Math.abs(x.factor)>1e-15).map(({load,factor})=>{
+    const out={...clone(load),sourceCaseId:load.caseId||firstCaseId,scenarioFactor:factor};
+    if(load.kind==='uniform'){out.qx=(load.qx||0)*factor;out.qy=(load.qy||0)*factor}
+    else if(load.kind==='point'){out.px=(load.px||0)*factor;out.py=(load.py||0)*factor}
+    else if(load.kind==='selfWeight'){out.weightFactor=factor*(Number(load.factor)||1)}
+    else if(load.kind==='thermal'){out.dT=(load.dT||0)*factor;out.dTGradient=(load.dTGradient||0)*factor}
+    return out;
+  });
 
-  // Recalques/deslocamentos impostos são ações por caso. Para combinações lineares,
-  // os valores prescritos são superpostos com os mesmos fatores do cenário.
   const settlementByNode=new Map();
   for(const st of project.settlements||[]){const factor=factorFor(st);if(Math.abs(factor)<1e-15)continue;let acc=settlementByNode.get(st.nodeId);if(!acc){acc={ux:0,uy:0,rz:0};settlementByNode.set(st.nodeId,acc)}acc.ux+=(st.ux||0)*factor;acc.uy+=(st.uy||0)*factor;acc.rz+=(st.rz||0)*factor}
   scaled.supports=(project.supports||[]).map(s=>{const st=settlementByNode.get(s.nodeId)||{ux:0,uy:0,rz:0};return{...clone(s),uxValue:(Number(s.baseUxValue)||0)+st.ux,uyValue:(Number(s.baseUyValue)||0)+st.uy,rzValue:(Number(s.baseRzValue)||0)+st.rz}});

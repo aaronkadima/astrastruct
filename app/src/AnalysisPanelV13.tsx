@@ -4,6 +4,7 @@ import { normalizeProject } from '../../web/src/core/model.js';
 
 const clone=<T,>(v:T):T=>JSON.parse(JSON.stringify(v));
 const num=(v:any,f=0)=>Number.isFinite(Number(v))?Number(v):f;
+const explicitSpring=(v:any)=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v));
 
 type Props={project:any;onClose:()=>void;onCommit:(project:any)=>void};
 
@@ -11,7 +12,7 @@ function incompatibilities(project:any){
   const issues:string[]=[];
   if(!project.elements?.length)issues.push('O modelo não possui elementos.');
   if((project.elements||[]).some((e:any)=>e.type!=='frame2d'))issues.push('Somente elementos frame2d são aceitos nesta versão.');
-  if((project.elements||[]).some((e:any)=>e.releases?.rz1||e.releases?.rz2||Number.isFinite(Number(e.rotationalSprings?.rz1))||Number.isFinite(Number(e.rotationalSprings?.rz2))))issues.push('Releases e ligações semirrígidas ainda não são aceitos.');
+  if((project.elements||[]).some((e:any)=>e.releases?.rz1||e.releases?.rz2||explicitSpring(e.rotationalSprings?.rz1)||explicitSpring(e.rotationalSprings?.rz2)))issues.push('Releases e ligações semirrígidas ainda não são aceitos.');
   if((project.elementLoads||[]).length)issues.push('Cargas de barra, peso próprio e ações térmicas ainda não são aceitos; use apenas cargas nodais.');
   if((project.nodeSprings||[]).length)issues.push('Molas nodais ainda não são aceitas.');
   if((project.settlements||[]).length)issues.push('Recalques/deslocamentos impostos ainda não são aceitos.');

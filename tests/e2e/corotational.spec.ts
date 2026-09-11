@@ -18,6 +18,35 @@ async function persistedProject(page:Page){
   return page.evaluate(()=>{const raw=localStorage.getItem('astrastruct.project');return raw?JSON.parse(raw):null});
 }
 
+async function installReferenceBeam(page:Page,kind:'uniform'|'selfWeight'){
+  await page.evaluate((loadKind)=>{
+    const raw=localStorage.getItem('astrastruct.project');if(!raw)throw new Error('Projeto inicial ausente');
+    const p=JSON.parse(raw),template=p.elements?.[0];if(!template)throw new Error('Elemento modelo ausente');
+    p.name=loadKind==='uniform'?'E2E — UDL co-rotacional':'E2E — peso próprio co-rotacional';
+    p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:3,y:0},{id:'N3',x:6,y:0}];
+    p.elements=[
+      {...template,id:'E1',n1:'N1',n2:'N2',A:.15,I:.003125,sectionId:'rc_30x50',releases:{rz1:false,rz2:false},rotationalSprings:{rz1:null,rz2:null}},
+      {...template,id:'E2',n1:'N2',n2:'N3',A:.15,I:.003125,sectionId:'rc_30x50',releases:{rz1:false,rz2:false},rotationalSprings:{rz1:null,rz2:null}}
+    ];
+    p.supports=[{nodeId:'N1',ux:true,uy:true,rz:false},{nodeId:'N3',ux:false,uy:true,rz:false}];
+    p.loads=[];p.nodeSprings=[];p.settlements=[];
+    p.elementLoads=loadKind==='uniform'
+      ?[{id:'EL1',caseId:'LC1',elementId:'E1',kind:'uniform',qx:0,qy:-20},{id:'EL2',caseId:'LC1',elementId:'E2',kind:'uniform',qx:0,qy:-20}]
+      :[{id:'SW1',caseId:'LC1',elementId:'E1',kind:'selfWeight',factor:1},{id:'SW2',caseId:'LC1',elementId:'E2',kind:'selfWeight',factor:1}];
+    p.settings={...(p.settings||{}),analysisType:'linear',analysisScenarioId:'LC1',imperfection:{...(p.settings?.imperfection||{}),enabled:false}};
+    localStorage.setItem('astrastruct.project',JSON.stringify(p));
+  },kind);
+  await page.reload();
+}
+
+async function enableCorotational(page:Page){
+  await openCommand(page,'Tipo de análise');
+  const mode=page.getByTestId('analysis-corotational');await expect(mode).toBeEnabled();await mode.click();
+  await expect(page.getByTestId('corotational-controls')).toBeVisible();
+  await page.getByTestId('analysis-apply').click();
+  await expect.poll(async()=>{const p=await persistedProject(page);return p?.settings?.analysisType}).toBe('corotational');
+}
+
 test('co-rotational mode can be configured, solved and visualized in current geometry',async({page})=>{
   await page.goto('./');
   await openCommand(page,'Tipo de análise');
@@ -63,6 +92,25 @@ test('co-rotational mode can be configured, solved and visualized in current geo
   await expect(report).toContainText('Extremos por elemento na configuração corrente');
   await expect(page.getByTestId('nonlinear-report-limitations')).toContainText('experimental e não normativa');
   await expect(page.getByTestId('nonlinear-report-limitations')).toContainText('envelopes não lineares');
+});
+
+test('co-rotational mode accepts reference UDL and reports its physical recovery',async({page})=>{
+  await page.goto('./');await installReferenceBeam(page,'uniform');await enableCorotational(page);
+  await page.getByTestId('analyze-button').click();await expect(page.getByTestId('nonlinear-result-metric')).toBeVisible();
+  await openCommand(page,'Diagramas/envelopes');
+  const post=page.getByTestId('panel-nonlinear-postprocess'),note=page.getByTestId('reference-load-postprocess-note');
+  await expect(post).toBeVisible();await expect(note).toBeVisible();
+  await expect(note).toContainText('carga uniforme/peso próprio');await expect(note).toContainText('Não é carga seguidora');await expect(note).toContainText('qy₀=-20.000 kN/m');
+  await expect(post).toContainText('90.000 kN·m');await expect(post).toContainText('carga morta de referência');
+});
+
+test('co-rotational mode accepts self-weight as a reference dead load',async({page})=>{
+  await page.goto('./');await installReferenceBeam(page,'selfWeight');await enableCorotational(page);
+  await page.getByTestId('analyze-button').click();await expect(page.getByTestId('nonlinear-result-metric')).toBeVisible();
+  await openCommand(page,'Diagramas/envelopes');
+  const post=page.getByTestId('panel-nonlinear-postprocess'),note=page.getByTestId('reference-load-postprocess-note');
+  await expect(post).toBeVisible();await expect(note).toBeVisible();
+  await expect(note).toContainText('peso próprio=3.750 kN/m');await expect(note).toContainText('qy₀=-3.750 kN/m');await expect(post).toContainText('16.875 kN·m');
 });
 
 test('co-rotational mode refuses a model with a rotational release',async({page})=>{

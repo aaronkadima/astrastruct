@@ -12,8 +12,10 @@ import './modern.css';
 import './modern-layout-fix.css';
 import './unified-toolbar.css';
 import './scientific-export.css';
+import './workspaceChrome.css';
 import './modernShell';
 import './scientificExportPanel';
+import './workspaceChrome';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('AstraStruct: elemento #root não encontrado.');

@@ -13,13 +13,9 @@ assert(local[5].maxEquivalentPlasticStrain>0,'cyclic hinge should retain plastic
 assert(local[5].maxReversalCount>=2,'reversal counter should accumulate');
 assert(local[2].moment<0,'return to zero rotation should exhibit residual moment under kinematic hardening');
 
-const project={
- nodes:[{id:'N1',x:0,y:0},{id:'N2',x:2,y:0}],
- elements:[{id:'E1',type:'frame2d',n1:'N1',n2:'N2',materialId:'S355',sectionId:'R',A:section.A,I:section.I,releases:{rz1:false,rz2:false},rotationalSprings:{rz1:null,rz2:null},fiberHinges:{rz1:{enabled:true,hingeLength:.35,nFibers:80,hardeningRatio:.01,cyclic:true,kinematicFraction:1},rz2:{enabled:false}}}],
- materials:[material],sections:[section],supports:[{nodeId:'N1',ux:true,uy:true,rz:true}],
- loads:[{id:'P',caseId:'LC1',nodeId:'N2',fx:0,fy:-900,mz:0}],elementLoads:[],nodeSprings:[],settlements:[],loadCases:[{id:'LC1',name:'Cyclic hinge',type:'user'}],loadCombinations:[],settings:{activeLoadCaseId:'LC1'}
-};
-const result=solveFrameCorotationalFiberHinges2D(project,'LC1',{controlMode:'displacement',steps:20,maxIterations:80,tolerance:1e-8,absoluteTolerance:1e-9,lineSearch:true,displacementTolerance:1e-7,displacementControl:{nodeId:'N2',dof:'uy',targetDisplacement:-.04},cyclicProtocol:{enabled:true,targets:[-.04,.04,-.04,0],stepsPerSegment:5},materialMaxIterations:45,materialTolerance:1e-5,materialRelaxation:.75});
+const project={nodes:[{id:'N1',x:0,y:0},{id:'N2',x:2,y:0}],elements:[{id:'E1',type:'frame2d',n1:'N1',n2:'N2',materialId:'S355',sectionId:'R',A:section.A,I:section.I,releases:{rz1:false,rz2:false},rotationalSprings:{rz1:null,rz2:null},fiberHinges:{rz1:{enabled:true,hingeLength:.35,nFibers:80,hardeningRatio:.01,cyclic:true,kinematicFraction:1},rz2:{enabled:false}}}],materials:[material],sections:[section],supports:[{nodeId:'N1',ux:true,uy:true,rz:true}],loads:[{id:'P',caseId:'LC1',nodeId:'N2',fx:0,fy:-900,mz:0}],elementLoads:[],nodeSprings:[],settlements:[],loadCases:[{id:'LC1',name:'Cyclic hinge',type:'user'}],loadCombinations:[],settings:{activeLoadCaseId:'LC1'}};
+const result=solveFrameCorotationalFiberHinges2D(project,'LC1',{controlMode:'displacement',steps:20,maxIterations:80,tolerance:1e-8,absoluteTolerance:1e-9,lineSearch:true,displacementTolerance:1e-7,displacementControl:{nodeId:'N2',dof:'uy',targetDisplacement:-.08},cyclicProtocol:{enabled:true,targets:[-.08,.08,-.08,0],stepsPerSegment:5},materialMaxIterations:45,materialTolerance:1e-5,materialRelaxation:.75});
+console.log('v0.22 demand diagnostic',JSON.stringify({solverVersion:result.solverVersion,material:result.materialNonlinearity,finalDisplacement:result.displacements.find(d=>d.nodeId==='N2')},null,2));
 assert.equal(result.solverVersion,'0.22.0-exp');
 assert.equal(result.materialNonlinearity.cyclic,true);
 assert(result.materialNonlinearity.cumulativeDissipatedEnergy>0,'global cyclic hinge should dissipate energy');

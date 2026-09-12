@@ -22,6 +22,16 @@ jobs:
           else
             python tools/v018_patch.py
           fi
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('web/src/solver/corotational2d.js'); t=p.read_text()
+          old="const mode=modeGeneralized.map((v,i)=>v/scales[i]),im=modeGeneralized.reduce((best,_,i)=>Math.abs(modeGeneralized[i])>Math.abs(modeGeneralized[best])?i:best,0),globalDof=prepared.free[im],nodeIndex=Math.floor(globalDof/3),dof=['ux','uy','rz'][globalDof%3];"
+          new="const mode=modeGeneralized.map((v,i)=>v/scales[i]),translationCandidates=prepared.free.map((d,i)=>({d,i})).filter(x=>x.d%3!==2),pool=translationCandidates.length?translationCandidates:prepared.free.map((d,i)=>({d,i})),pick=pool.reduce((best,x)=>Math.abs(modeGeneralized[x.i])>Math.abs(modeGeneralized[best.i])?x:best,pool[0]),im=pick.i,globalDof=prepared.free[im],nodeIndex=Math.floor(globalDof/3),dof=['ux','uy','rz'][globalDof%3];"
+          if old in t:
+              p.write_text(t.replace(old,new,1))
+          elif 'translationCandidates=prepared.free.map' not in t:
+              raise SystemExit('critical-mode descriptor anchor missing')
+          PY
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Validate modules

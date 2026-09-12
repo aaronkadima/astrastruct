@@ -23,9 +23,17 @@ p=Path('web/src/solver/materialNonlinear2d.js'); t=p.read_text()
 t=t.replace("solverVersion: options.controlMode === 'arc-length' ? '0.18.0-exp' : '0.16.0-exp'","solverVersion: options.controlMode === 'arc-length' ? '0.19.0-exp' : '0.16.0-exp'",1)
 p.write_text(t)
 
-# package test suite
+# existing arc-length/stability regression expectations move with the arc solver version
+for name in ['tests/arc-length-smoke.mjs','tests/stability-bifurcation-smoke.mjs']:
+    p=Path(name); t=p.read_text(); t=t.replace("'0.18.0-exp'","'0.19.0-exp'"); p.write_text(t)
+
+# package test/check suites
 p=Path('package.json'); t=p.read_text()
 old="node tests/stability-bifurcation-smoke.mjs\""
 new="node tests/stability-bifurcation-smoke.mjs && node tests/multimode-stability-smoke.mjs\""
 if old not in t: raise SystemExit('package test anchor missing')
+t=t.replace(old,new,1)
+old="node --check web/src/solver/corotational2d.js && node --check web/src/solver/corotationalPostprocess.js"
+new="node --check web/src/solver/corotational2d.js && node --check web/src/solver/stabilityMultimode2d.js && node --check web/src/solver/corotationalPostprocess.js"
+if old not in t: raise SystemExit('package check anchor missing')
 t=t.replace(old,new,1);p.write_text(t)

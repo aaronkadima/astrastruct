@@ -1,5 +1,5 @@
 import { solveFrameCorotational2D, solveFrameCorotationalDisplacementControl2D, solveFrameCorotationalArcLength2D } from './corotational2d.js';
-import { fiberHingeSectionState, sectionFibersFromModel, sectionFiberFamily } from './fiberSection2d.js';
+import { fiberHingeSectionState, fiberHingeCyclicSectionState, sectionFibersFromModel, sectionFiberFamily } from './fiberSection2d.js';
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const finite = (name, value) => {
@@ -15,7 +15,9 @@ function hingeConfig(raw) {
     enabled: true,
     hingeLength: finite('Lp', raw.hingeLength ?? raw.Lp ?? 0.35),
     nFibers: Math.max(8, Math.min(400, Math.round(Number(raw.nFibers) || 40))),
-    hardeningRatio: clamp(Number(raw.hardeningRatio ?? 0.01), 1e-6, 0.25)
+    hardeningRatio: clamp(Number(raw.hardeningRatio ?? 0.01), 1e-6, 0.25),
+    cyclic: !!raw.cyclic,
+    kinematicFraction: clamp(Number.isFinite(Number(raw.kinematicFraction)) ? Number(raw.kinematicFraction) : 1, 0, 1)
   };
 }
 
@@ -64,18 +66,11 @@ function dataFor(project, h) {
   return { ...h, e, material, section };
 }
 
-function constitutiveState(project, h, rotation, targetAxialForce) {
-  const d = dataFor(project, h);
-  const cfg = d.config;
-  return fiberHingeSectionState({
-    rotation,
-    hingeLength: cfg.hingeLength,
-    targetAxialForce,
-    section: d.section,
-    material: d.material,
-    nFibers: cfg.nFibers,
-    hardeningRatio: cfg.hardeningRatio
-  });
+function hingeHistoryKey(h){return `${h.elementId}:${h.key}`}
+function constitutiveState(project, h, rotation, targetAxialForce, options={}) {
+  const d = dataFor(project, h),cfg=d.config;
+  if(cfg.cyclic)return fiberHingeCyclicSectionState({rotation,hingeLength:cfg.hingeLength,targetAxialForce,section:d.section,material:d.material,nFibers:cfg.nFibers,hardeningRatio:cfg.hardeningRatio,kinematicFraction:cfg.kinematicFraction,committedHistory:options.hingeHistoryStore?.[hingeHistoryKey(h)]||null});
+  return fiberHingeSectionState({rotation,hingeLength:cfg.hingeLength,targetAxialForce,section:d.section,material:d.material,nFibers:cfg.nFibers,hardeningRatio:cfg.hardeningRatio});
 }
 
 function hingeMap(hinges) {
@@ -107,7 +102,7 @@ function embeddedConnectionResolver(project, hinges, options = {}) {
     const rotationalSpringMoments = { ...(item.e.rotationalSpringMoments || {}) };
 
     for (const h of local) {
-      const initial = constitutiveState(project, h, 0, 0);
+      const initial = constitutiveState(project, h, 0, 0, options);
       releases[h.key] = false;
       rotationalSprings[h.key] = Math.max(1e-9, initial.rotationalTangent);
       rotationalSpringMoments[h.key] = 0;
@@ -128,7 +123,7 @@ function embeddedConnectionResolver(project, hinges, options = {}) {
         if (!c) throw new Error(`Rótula de fibras ${h.elementId}/${h.key}: rotação interna não foi recuperada no Newton local.`);
 
         const rotation = Number(c.relativeRotation) || 0;
-        const state = constitutiveState(project, h, rotation, targetAxialForce);
+        const state = constitutiveState(project, h, rotation, targetAxialForce, options);
         const constitutiveMoment = Number(state.moment) || 0;
         const elementMoment = Number(c.moment) || 0;
         const momentResidual = elementMoment - constitutiveMoment;
@@ -169,6 +164,14 @@ function embeddedConnectionResolver(project, hinges, options = {}) {
           fiberCount: state.fiberCount,
           sectionFamily: state.sectionFamily,
           hardeningRatio: h.config.hardeningRatio,
+          cyclic: !!h.config.cyclic,
+          kinematicFraction: h.config.kinematicFraction,
+          historyTrial: state.historyTrial || null,
+          cumulativeDissipatedEnergy: Number(state.cumulativeDissipatedEnergy)||0,
+          maxEquivalentPlasticStrain: Number(state.maxEquivalentPlasticStrain)||0,
+          meanEquivalentPlasticStrain: Number(state.meanEquivalentPlasticStrain)||0,
+          maxBackstress: Number(state.maxBackstress)||0,
+          maxReversalCount: Number(state.maxReversalCount)||0,
           localIterations: iteration
         });
       }
@@ -194,7 +197,8 @@ function embeddedConnectionResolver(project, hinges, options = {}) {
             fiberCount: r.fiberCount,
             sectionFamily: r.sectionFamily,
             hardeningRatio: r.hardeningRatio,
-            materialModel: 'bilinear-steel-monotonic',
+            cyclic: r.cyclic, kinematicFraction:r.kinematicFraction, historyTrial:r.historyTrial, cumulativeDissipatedEnergy:r.cumulativeDissipatedEnergy, maxEquivalentPlasticStrain:r.maxEquivalentPlasticStrain, meanEquivalentPlasticStrain:r.meanEquivalentPlasticStrain, maxBackstress:r.maxBackstress, maxReversalCount:r.maxReversalCount,
+            materialModel: r.cyclic ? 'bilinear-steel-cyclic-combined-hardening' : 'bilinear-steel-monotonic',
             materialLinearization: 'embedded-tangent-affine',
             materialCoupling: 'embedded-local-newton',
             localIterations: iteration,
@@ -246,7 +250,7 @@ function decorateEmbeddedResult(result, hinges, options = {}) {
         yieldedFibers: c.yieldedFibers,
         fiberCount: c.fiberCount,
         sectionFamily: c.sectionFamily,
-        hardeningRatio: c.hardeningRatio,
+        hardeningRatio: c.hardeningRatio, cyclic:!!c.cyclic, kinematicFraction:c.kinematicFraction, cumulativeDissipatedEnergy:Number(c.cumulativeDissipatedEnergy)||0, maxEquivalentPlasticStrain:Number(c.maxEquivalentPlasticStrain)||0, meanEquivalentPlasticStrain:Number(c.meanEquivalentPlasticStrain)||0, maxBackstress:Number(c.maxBackstress)||0, maxReversalCount:Number(c.maxReversalCount)||0,
         localIterations: c.localIterations
       }))
   );
@@ -256,7 +260,7 @@ function decorateEmbeddedResult(result, hinges, options = {}) {
   const materialNonlinearity = {
     enabled: true,
     model: 'concentrated-steel-fiber-hinges',
-    constitutiveLaw: 'monotonic bilinear steel fibers with local N-M equilibrium',
+    constitutiveLaw: hinges.some(h=>h.config.cyclic)?'incremental cyclic bilinear steel fibers with combined hardening and local N-M equilibrium':'monotonic bilinear steel fibers with local N-M equilibrium',
     supportedSectionFamilies: ['rect', 'i', 'rhs'],
     hingeCount: hinges.length,
     coupling: 'embedded-local-newton',
@@ -266,14 +270,17 @@ function decorateEmbeddedResult(result, hinges, options = {}) {
     maxMomentResidual,
     globalStrategy: 'single global co-rotational Newton with constitutive hinge Newton embedded in every residual/tangent evaluation',
     linearization: 'tangent-affine embedded',
-    historyDependent: false,
-    cyclic: false,
+    historyDependent: hinges.some(h=>h.config.cyclic),
+    cyclic: hinges.some(h=>h.config.cyclic),
+    cumulativeDissipatedEnergy: records.reduce((a,r)=>a+(Number(r.cumulativeDissipatedEnergy)||0),0),
+    maxEquivalentPlasticStrain: Math.max(0,...records.map(r=>Number(r.maxEquivalentPlasticStrain)||0)),
+    maxReversalCount: Math.max(0,...records.map(r=>Number(r.maxReversalCount)||0)),
     records
   };
   return {
     ...result,
     type: 'frame2d-corotational-fiber-hinge-experimental',
-    solverVersion: result?.distributedPlasticity?.enabled ? '0.20.0-exp' : (options.controlMode === 'arc-length' ? '0.19.0-exp' : '0.16.0-exp'),
+    solverVersion: hinges.some(h=>h.config.cyclic)?'0.22.0-exp':(result?.distributedPlasticity?.enabled ? '0.21.0-exp' : (options.controlMode === 'arc-length' ? '0.19.0-exp' : '0.16.0-exp')), 
     materialNonlinearity,
     nonlinear: {
       ...(result.nonlinear || {}),
@@ -334,7 +341,7 @@ function decorateOuterResult(result, records, outerIterations, tolerance) {
         fiberCount: r.fiberCount,
         sectionFamily: r.sectionFamily,
         hardeningRatio: r.hardeningRatio,
-        materialModel: 'bilinear-steel-monotonic',
+        materialModel: r.cyclic ? 'bilinear-steel-cyclic-combined-hardening' : 'bilinear-steel-monotonic',
         materialLinearization: 'outer-tangent-affine',
         materialCoupling: 'outer-compatibility',
         nextLinearization: { k: r.nextStiffness, offsetMoment: r.nextOffsetMoment }
@@ -398,7 +405,7 @@ function solveOuterCompatibility(project, scenarioId, hinges, options = {}) {
       const { force, connection } = findConnection(result, h);
       const rotation = Number(connection.relativeRotation) || 0;
       const targetAxialForce = Number(force.basicForces?.N) || 0;
-      const state = constitutiveState(project, h, rotation, targetAxialForce);
+      const state = constitutiveState(project, h, rotation, targetAxialForce, options);
       const constitutiveMoment = state.moment;
       const elementMoment = Number(connection.moment) || 0;
       const momentResidual = elementMoment - constitutiveMoment;
@@ -475,6 +482,9 @@ function solveOuterCompatibility(project, scenarioId, hinges, options = {}) {
 export function solveFrameCorotationalFiberHinges2D(project, scenarioId, options = {}) {
   const hinges = activeFiberHinges(project);
   const displacementControl = options.controlMode === 'displacement', arcLength = options.controlMode === 'arc-length', pathControl = displacementControl || arcLength;
+  const cyclicHinges=hinges.filter(h=>h.config.cyclic);if(cyclicHinges.length&&(!displacementControl||!options.cyclicProtocol?.enabled))throw new Error('Rótulas cíclicas v0.22 requerem controle de deslocamento com protocolo cíclico ativo.');
+  const hingeHistoryStore={};const commitMaterialHistory=(states)=>{for(const entry of states||[])for(const c of entry.connected?.connectionRotations||[]){if(c.type!=='fiber-hinge'||!c.cyclic||!c.historyTrial)continue;hingeHistoryStore[`${entry.item.e.id}:${Number(c.end)===1?'rz1':'rz2'}`]=c.historyTrial}};
+  const effectiveOptions=cyclicHinges.length?{...options,hingeHistoryStore,commitMaterialHistory}:options;
   const solveGlobal = arcLength ? solveFrameCorotationalArcLength2D : (displacementControl ? solveFrameCorotationalDisplacementControl2D : solveFrameCorotational2D);
   if (!hinges.length) return solveGlobal(project, scenarioId, options);
   validateHinges(project, hinges);
@@ -482,7 +492,7 @@ export function solveFrameCorotationalFiberHinges2D(project, scenarioId, options
   if (options.materialCoupling === 'outer') return solveOuterCompatibility(project, scenarioId, hinges, options);
   const connectionResolver = embeddedConnectionResolver(project, hinges, options);
   const result = solveGlobal(project, scenarioId, { ...options, connectionResolver });
-  return decorateEmbeddedResult(result, hinges, options);
+  return decorateEmbeddedResult(result, hinges, effectiveOptions);
 }
 
 export const MATERIAL_NONLINEAR_VERSION = '0.17.0-exp';

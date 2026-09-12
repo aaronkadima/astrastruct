@@ -1,4 +1,4 @@
-import { bilinearSteelState, bilinearSteelFromModelMaterial } from './material1d.js';
+import { bilinearSteelState, bilinearSteelFromModelMaterial, cyclicSteelFromModelMaterial } from './material1d.js';
 
 const finite=(name,value)=>{const n=Number(value);if(!Number.isFinite(n))throw new Error(`Seção de fibras: ${name} deve ser finito.`);return n};
 const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
@@ -150,4 +150,26 @@ export function fiberHingeSectionState({rotation,hingeLength,targetAxialForce=0,
   return{type:'fiber-hinge-steel-nm',rotation:theta,hingeLength:Lp,curvature,targetAxialForce:targetN,epsilon0,moment:state.M,rotationalTangent,flexuralTangentAtConstantN,axialResidual:residual,axialIterations:iteration,sectionFamily,sectionState:{...state,sectionFamily},yieldedFibers:state.yieldedFibers,fiberCount:state.fiberCount};
 }
 
-export const FIBER_SECTION_VERSION='0.14.2-exp';
+
+/** v0.22 concentrated cyclic steel fiber hinge with committed/trial material history. */
+export function fiberHingeCyclicSectionState({rotation,hingeLength,targetAxialForce=0,section,material,nFibers=40,hardeningRatio=0.01,kinematicFraction=1,committedHistory=null,maxIterations=30,tolerance=1e-9,initialEpsilon0=null}){
+  const theta=finite('rotação cíclica da rótula',rotation),Lp=finite('comprimento da rótula',hingeLength),targetN=finite('esforço normal alvo',targetAxialForce);if(!(Lp>0))throw new Error('Rótula cíclica de fibras: comprimento deve ser positivo.');
+  if(!material)throw new Error('Rótula cíclica de fibras: material ausente.');const E=finite('E',material.E);if(!(E>0))throw new Error('Rótula cíclica de fibras: E deve ser positivo.');
+  const sectionFamily=sectionFiberFamily(section),fibers=sectionFibersFromModel({section,nFibers}),area=fibers.reduce((a,f)=>a+f.area,0),curvature=theta/Lp,committedFibers=committedHistory?.fibers||[];
+  let epsilon0=initialEpsilon0==null?targetN/(E*area):finite('epsilon0 inicial',initialEpsilon0),state=null,residual=Infinity,iteration=0;
+  const fyScale=Math.abs(Number(material.fy)||0)*1000*area,forceScale=Math.max(1,Math.abs(targetN),fyScale),tol=Math.max(1e-12,Number(tolerance)||1e-9)*forceScale,maxIt=Math.max(3,Math.min(80,Math.round(Number(maxIterations)||30)));
+  for(iteration=1;iteration<=maxIt;iteration++){
+    state=fiberSectionState({fibers,epsilon0,kappa:curvature,materialLaw:(strain,fiber,index)=>cyclicSteelFromModelMaterial(material,strain,{hardeningRatio,kinematicFraction,committed:committedFibers[index]||null})});residual=state.N-targetN;
+    if(Math.abs(residual)<=tol)break;const K11=state.tangent[0][0];if(!(Math.abs(K11)>1e-12))throw new Error('Rótula cíclica de fibras: rigidez axial tangente degenerada.');epsilon0-=residual/K11;if(!Number.isFinite(epsilon0)||Math.abs(epsilon0)>.5)throw new Error('Rótula cíclica de fibras: equilíbrio axial divergiu.');
+  }
+  if(!state||Math.abs(residual)>tol)throw new Error(`Rótula cíclica de fibras: equilíbrio axial não convergiu em ${maxIt} iterações.`);
+  // Re-evaluate once at converged epsilon0 so fiber history corresponds exactly to accepted local state.
+  const finalStates=fibers.map((fiber,index)=>{const strain=epsilon0-curvature*fiber.y,law=cyclicSteelFromModelMaterial(material,strain,{hardeningRatio,kinematicFraction,committed:committedFibers[index]||null});return{...fiber,strain,stress:law.stress,tangent:law.tangent,yielded:!!law.yielded,branch:law.branch||null,history:law.history,plasticMultiplier:Number(law.plasticMultiplier)||0,equivalentPlasticStrain:Number(law.equivalentPlasticStrain)||0,backstress:Number(law.backstress)||0,dissipatedEnergyDensity:Number(law.dissipatedEnergyDensity)||0};});
+  let N=0,M=0,K11=0,K12=0,K22=0,yieldedFibers=0;for(const f of finalStates){N+=f.stress*f.area;M-=f.stress*f.area*f.y;K11+=f.tangent*f.area;K12-=f.tangent*f.area*f.y;K22+=f.tangent*f.area*f.y*f.y;if(f.yielded)yieldedFibers++;}
+  if(!(Math.abs(K11)>1e-12))throw new Error('Rótula cíclica de fibras: K11 tangente degenerado.');const D=K22-K12*K12/K11,rotationalTangent=D/Lp;
+  const cumulativeDissipatedEnergy=finalStates.reduce((sum,f)=>sum+f.dissipatedEnergyDensity*f.area*Lp,0),maxEquivalentPlasticStrain=Math.max(0,...finalStates.map(f=>Math.abs(f.equivalentPlasticStrain))),meanEquivalentPlasticStrain=finalStates.reduce((sum,f)=>sum+Math.abs(f.equivalentPlasticStrain)*f.area,0)/Math.max(area,1e-18),maxBackstress=Math.max(0,...finalStates.map(f=>Math.abs(f.backstress))),maxReversalCount=Math.max(0,...finalStates.map(f=>Number(f.history?.reversalCount)||0));
+  const historyTrial={version:'0.22.0-exp',rotation:theta,epsilon0,fibers:finalStates.map(f=>f.history),cumulativeDissipatedEnergy,maxEquivalentPlasticStrain,meanEquivalentPlasticStrain,maxBackstress,maxReversalCount};
+  return{type:'fiber-hinge-steel-nm-cyclic',rotation:theta,hingeLength:Lp,curvature,targetAxialForce:targetN,epsilon0,moment:M,rotationalTangent,flexuralTangentAtConstantN:D,axialResidual:N-targetN,axialIterations:iteration,sectionFamily,sectionState:{type:'fiber-section-2d-cyclic',epsilon0,kappa:curvature,N,M,tangent:[[K11,K12],[K12,K22]],yieldedFibers,fiberCount:finalStates.length,fibers:finalStates},yieldedFibers,fiberCount:finalStates.length,historyTrial,cumulativeDissipatedEnergy,maxEquivalentPlasticStrain,meanEquivalentPlasticStrain,maxBackstress,maxReversalCount};
+}
+
+export const FIBER_SECTION_VERSION='0.22.0-exp';

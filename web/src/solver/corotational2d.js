@@ -449,6 +449,7 @@ export function solveFrameCorotationalDisplacementControl2D(project,scenarioId,o
     for(const h of yielded){const key=`${h.elementId}:${h.end}`;if(!yieldedKeys.has(key)){yieldedKeys.add(key);newlyYielded.push(h)}}
     if(!firstYield&&newlyYielded.length)firstYield={step,loadFactor:lambda,controlledDisplacement:u[control.index],hinges:newlyYielded};
     if(cyclicMaterial){commitDistributedPlasticityHistory(last.states,analysisOptions.distributedPlasticityHistory);last=residualAt(prepared,u,lambda,analysisOptions)}
+    if(typeof analysisOptions.commitMaterialHistory==='function'){analysisOptions.commitMaterialHistory(last.states,{step,loadFactor:lambda,controlledDisplacement:u[control.index]});last=residualAt(prepared,u,lambda,analysisOptions)}
     const distributedStep=distributedPlasticityResult(last.states);
     history.push({step,loadFactor:lambda,controlledDisplacement:u[control.index],targetDisplacement:target,baseReaction:baseReactionAt(prepared,last,control.dof),iterations:iteration,residualNorm:last.norm,controlResidual:target-u[control.index],materialLocalIterations,yieldedHingeCount:yielded.length,yieldedHinges:yielded,newlyYieldedHinges:newlyYielded,distributedYieldedPointCount:distributedStep.yieldedPointCount,distributedDissipatedEnergy:cyclicMaterial?cyclicHistoryEnergy(analysisOptions.distributedPlasticityHistory):distributedStep.cumulativeDissipatedEnergy});
   }

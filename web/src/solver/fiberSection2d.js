@@ -1,4 +1,4 @@
-import { bilinearSteelState, bilinearSteelFromModelMaterial } from './material1d.js';
+import { bilinearSteelState, bilinearSteelFromModelMaterial, bilinearSteelKinematicFromModelMaterial } from './material1d.js';
 
 const finite=(name,value)=>{const n=Number(value);if(!Number.isFinite(n))throw new Error(`Seção de fibras: ${name} deve ser finito.`);return n};
 const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
@@ -86,7 +86,7 @@ export function fiberSectionState({fibers,epsilon0=0,kappa=0,materialLaw}){
     const strain=eps0-curvature*y,state=materialLaw(strain,fiber,index),stress=finite(`tensão da fibra ${index+1}`,state?.stress),Et=finite(`tangente da fibra ${index+1}`,state?.tangent);
     N+=stress*area;M-=stress*area*y;k11+=Et*area;k12-=Et*area*y;k22+=Et*area*y*y;if(state?.yielded)yieldedFibers++;
     minStress=Math.min(minStress,stress);maxStress=Math.max(maxStress,stress);minStrain=Math.min(minStrain,strain);maxStrain=Math.max(maxStrain,strain);
-    return{...fiber,strain,stress,tangent:Et,yielded:!!state?.yielded,branch:state?.branch||null};
+    return{...fiber,strain,stress,tangent:Et,yielded:!!state?.yielded,plastic:!!state?.plastic,branch:state?.branch||null,plasticStrain:Number(state?.plasticStrain)||0,backstress:Number(state?.backstress)||0,cumulativePlasticStrain:Number(state?.cumulativePlasticStrain)||0,dissipatedEnergy:Number(state?.dissipatedEnergy)||0,dissipationIncrement:Number(state?.dissipationIncrement)||0,reversal:!!state?.reversal,reversalCount:Number(state?.reversalCount)||0,history:state?.history||null};
   });
   return{type:'fiber-section-2d',epsilon0:eps0,kappa:curvature,N,M,tangent:[[k11,k12],[k12,k22]],yieldedFibers,fiberCount:states.length,minStress,maxStress,minStrain,maxStrain,fibers:states};
 }
@@ -108,6 +108,12 @@ export function steelFiberSectionFromModel({section,material,nFibers=40,epsilon0
   return{...state,sectionFamily:family,geometricArea:fibers.reduce((s,f)=>s+f.area,0),discreteSecondMoment:fibers.reduce((s,f)=>s+f.area*f.y*f.y,0)};
 }
 
+export function steelFiberSectionHistoryFromModel({section,material,nFibers=40,epsilon0=0,kappa=0,hardeningRatio=0.01,committedHistories=[]}){
+  const family=sectionFiberFamily(section),fibers=sectionFibersFromModel({section,nFibers}),history=Array.isArray(committedHistories)?committedHistories:[],state=fiberSectionState({fibers,epsilon0,kappa,materialLaw:(strain,_fiber,index)=>bilinearSteelKinematicFromModelMaterial(material,strain,{hardeningRatio,committedState:history[index]})});
+  const histories=state.fibers.map(f=>f.history),maxPlasticStrain=Math.max(0,...state.fibers.map(f=>Math.abs(Number(f.plasticStrain)||0))),reversalFiberCount=state.fibers.filter(f=>f.reversal).length,maxReversalCount=Math.max(0,...state.fibers.map(f=>Number(f.reversalCount)||0));
+  return{...state,sectionFamily:family,geometricArea:fibers.reduce((s,f)=>s+f.area,0),discreteSecondMoment:fibers.reduce((s,f)=>s+f.area*f.y*f.y,0),histories,maxPlasticStrain,reversalFiberCount,maxReversalCount};
+}
+
 /** Pure-bending helper retained as an exact local benchmark. */
 export function fiberHingePureBendingState({rotation,hingeLength,section,material,nFibers=40,hardeningRatio=0.01}){
   const theta=finite('rotação da rótula',rotation),Lp=finite('comprimento da rótula',hingeLength);if(!(Lp>0))throw new Error('Rótula de fibras: comprimento deve ser positivo.');
@@ -123,11 +129,9 @@ export function fiberHingePureBendingState({rotation,hingeLength,section,materia
  * The flexural tangent at constant N is the Schur complement
  * D_Mk|N = K22 - K12²/K11, converted to dM/dtheta by division by Lp.
  *
- * Supported strong-axis meshes in v0.14.2: rectangular, I/H and RHS. The I/H
- * web and flanges and the RHS walls are integrated as vertical strips; fibers at
- * the same y are combined by width because their uniaxial strain is identical.
- * The constitutive law is still the monotonic bilinear envelope; no cyclic
- * history/unloading is implied by this local equilibrium solve.
+ * Concentrated hinges remain monotonic in v0.21; cyclic history is introduced
+ * first for distributed steel fiber elements, where state variables exist at
+ * every Lobatto section and fiber.
  */
 export function fiberHingeSectionState({rotation,hingeLength,targetAxialForce=0,section,material,nFibers=40,hardeningRatio=0.01,maxIterations=30,tolerance=1e-9,initialEpsilon0=null}){
   const theta=finite('rotação da rótula',rotation),Lp=finite('comprimento da rótula',hingeLength),targetN=finite('esforço normal alvo',targetAxialForce);if(!(Lp>0))throw new Error('Rótula de fibras: comprimento deve ser positivo.');
@@ -150,4 +154,4 @@ export function fiberHingeSectionState({rotation,hingeLength,targetAxialForce=0,
   return{type:'fiber-hinge-steel-nm',rotation:theta,hingeLength:Lp,curvature,targetAxialForce:targetN,epsilon0,moment:state.M,rotationalTangent,flexuralTangentAtConstantN,axialResidual:residual,axialIterations:iteration,sectionFamily,sectionState:{...state,sectionFamily},yieldedFibers:state.yieldedFibers,fiberCount:state.fiberCount};
 }
 
-export const FIBER_SECTION_VERSION='0.14.2-exp';
+export const FIBER_SECTION_VERSION='0.21.0-exp';

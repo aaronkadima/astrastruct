@@ -12,9 +12,9 @@ p=Path('web/src/core/model.js'); s=p.read_text()
 if "./migrations.js" not in s:
     s="import { migrateProject } from './migrations.js';\nimport { analysisConfigFromSettings } from './analysisConfig.js';\nimport { PRODUCT_VERSION, PROJECT_SCHEMA_VERSION, productMetadata } from './version.js';\n\n"+s
 s=s.replace("id: uid('project'), name: 'Novo projeto', version: 13, units: 'kN-m-MPa',","id: uid('project'), name: 'Novo projeto', version: 13, schemaVersion: PROJECT_SCHEMA_VERSION, units: 'kN-m-MPa',",1)
-s=s.replace("meta: { solverVersion: '0.13.6-exp', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }","meta: { solverVersion: PRODUCT_VERSION, productVersion: PRODUCT_VERSION, schemaVersion: PROJECT_SCHEMA_VERSION, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }",1)
+s=s.replace("meta: { solverVersion: '0.13.6-exp', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }","meta: { solverVersion: '0.13.6-exp', productVersion: PRODUCT_VERSION, schemaVersion: PROJECT_SCHEMA_VERSION, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }",1)
 s=s.replace("const base = emptyProject(), p = { ...base, ...(input || {}) };","const base = emptyProject(), p = { ...base, ...migrateProject(input || {}) };",1)
-s=s.replace("p.meta = { ...base.meta, ...(p.meta || {}), solverVersion: '0.13.6-exp' };\n  p.version = 13;","p.analysis = analysisConfigFromSettings(p.settings);\n  p.schemaVersion = PROJECT_SCHEMA_VERSION;\n  p.meta = productMetadata({ ...base.meta, ...(p.meta || {}), solverVersion: PRODUCT_VERSION, updatedAt: new Date().toISOString() });\n  p.version = 13; // legacy compatibility marker; schemaVersion is authoritative.\n",1)
+s=s.replace("p.meta = { ...base.meta, ...(p.meta || {}), solverVersion: '0.13.6-exp' };\n  p.version = 13;","p.analysis = analysisConfigFromSettings(p.settings);\n  p.schemaVersion = PROJECT_SCHEMA_VERSION;\n  p.meta = productMetadata({ ...base.meta, ...(p.meta || {}), solverVersion: '0.13.6-exp', updatedAt: new Date().toISOString() });\n  p.version = 13; // legacy compatibility marker; schemaVersion is authoritative.\n",1)
 p.write_text(s)
 
 # solver dispatcher: use registries for linear selection and attach stable result contract around every path.
@@ -54,4 +54,4 @@ p.write_text(s)
 
 print('v0.25.1 patch applied')
 
-# validation-trigger: 2026-09-12
+# validation-trigger: preserve-product-vs-kernel-provenance

@@ -1,0 +1,119 @@
+name: AstraStruct v0.15 UI validate
+
+on:
+  push:
+    branches: [feat/v015-embedded-material-newton]
+
+permissions:
+  contents: write
+
+jobs:
+  ui:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/v015-embedded-material-newton
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Align UI, defaults and reports
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # Project defaults / normalization.
+          p=Path('web/src/core/model.js');s=p.read_text()
+          old="""      nonlinearSteps: 20, nonlinearMaxIterations: 35, nonlinearTolerance: 1e-8, nonlinearLineSearch: true,\n      imperfection: { enabled: false, source: 'bucklingMode', scenarioId: null, mode: 1, amplitudeMm: 10 }"""
+          new="""      nonlinearSteps: 20, nonlinearMaxIterations: 35, nonlinearTolerance: 1e-8, nonlinearLineSearch: true,\n      materialMaxIterations: 30, materialTolerance: 1e-6, materialRelaxation: 1, materialCoupling: 'embedded',\n      imperfection: { enabled: false, source: 'bucklingMode', scenarioId: null, mode: 1, amplitudeMm: 10 }"""
+          if old not in s: raise SystemExit('model defaults anchor missing')
+          s=s.replace(old,new,1)
+          old="""  p.settings.nonlinearLineSearch = p.settings.nonlinearLineSearch !== false;\n  p.settings.imperfection.enabled = !!p.settings.imperfection.enabled;"""
+          new="""  p.settings.nonlinearLineSearch = p.settings.nonlinearLineSearch !== false;\n  p.settings.materialMaxIterations = Math.max(3, Math.min(80, Math.round(Number(p.settings.materialMaxIterations) || 30)));\n  p.settings.materialTolerance = Math.max(1e-10, Number(p.settings.materialTolerance) || 1e-6);\n  p.settings.materialRelaxation = Math.max(.2, Math.min(1, Number(p.settings.materialRelaxation) || 1));\n  p.settings.materialCoupling = p.settings.materialCoupling === 'outer' ? 'outer' : 'embedded';\n  p.settings.imperfection.enabled = !!p.settings.imperfection.enabled;"""
+          if old not in s: raise SystemExit('model normalize anchor missing')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+
+          # Analysis panel: fix v0.14.2 family mismatch and expose coupling mode.
+          p=Path('app/src/AnalysisPanelV13.tsx');s=p.read_text()
+          anchor="""const activeFiberHinges=(project:any)=>(project.elements||[]).flatMap((e:any)=>(['rz1','rz2'] as const).filter(key=>!!e.fiberHinges?.[key]?.enabled).map(key=>({element:e,key,config:e.fiberHinges[key]})));\n"""
+          helper="""const fiberFamily=(sec:any)=>String(sec?.family||'').toLowerCase();\nconst fiberSectionEligible=(sec:any)=>{const f=fiberFamily(sec),h=num(sec?.h??sec?.depth),b=num(sec?.b??sec?.width);if(!(h>0&&b>0))return false;if(['rect','rectangle','retangular'].includes(f))return true;if(['i','h','ih','i/h','wide-flange','wideflange'].includes(f))return num(sec?.tw??sec?.webThickness)>0&&num(sec?.tf??sec?.flangeThickness)>0;if(['rhs','box','hss-rect','hss_rect','tube-rect'].includes(f))return num(sec?.t??sec?.thickness)>0;return false};\n"""
+          if 'const fiberSectionEligible=' not in s:
+              if anchor not in s: raise SystemExit('analysis helper anchor missing')
+              s=s.replace(anchor,anchor+helper,1)
+          old="""    if(!(Number(sec?.b??sec?.width)>0&&Number(sec?.h??sec?.depth)>0))issues.push(`Rótula de fibras ${e.id}/${key}: a seção deve ser retangular e possuir b e h positivos.`);"""
+          new="""    if(!fiberSectionEligible(sec))issues.push(`Rótula de fibras ${e.id}/${key}: use seção de aço paramétrica retangular, I/H ou RHS com dimensões válidas.`);"""
+          if old in s:s=s.replace(old,new,1)
+          s=s.replace('v0.14 aceita somente material steel.','v0.15 aceita somente material steel.',1)
+          old="  const [materialRelaxation,setMaterialRelaxation]=useState(project.settings?.materialRelaxation||.65);"
+          new="""  const [materialRelaxation,setMaterialRelaxation]=useState(project.settings?.materialRelaxation??1);\n  const [materialCoupling,setMaterialCoupling]=useState(project.settings?.materialCoupling||'embedded');"""
+          if old not in s: raise SystemExit('analysis material state anchor missing')
+          s=s.replace(old,new,1)
+          old="    p.settings.materialMaxIterations=Math.max(3,Math.min(60,Math.round(num(materialMaxIt,30))));p.settings.materialTolerance=Math.max(1e-9,num(materialTol,1e-5));p.settings.materialRelaxation=Math.max(.1,Math.min(1,num(materialRelaxation,.65)));"
+          new="    p.settings.materialMaxIterations=Math.max(3,Math.min(80,Math.round(num(materialMaxIt,30))));p.settings.materialTolerance=Math.max(1e-10,num(materialTol,1e-6));p.settings.materialRelaxation=Math.max(.2,Math.min(1,num(materialRelaxation,1)));p.settings.materialCoupling=materialCoupling==='outer'?'outer':'embedded';"
+          if old not in s: raise SystemExit('analysis apply anchor missing')
+          s=s.replace(old,new,1)
+          s=s.replace('Núcleo geom. v0.13.6 · material v0.14.','Núcleo geom. v0.13.6 · material v0.15.',1)
+          s=s.replace('Rótula de fibras v0.14 exige Geom. não linear.','Rótula de fibras v0.15 exige Geom. não linear.',1)
+          s=s.replace('A v0.14 acrescenta <b>rótulas concentradas de fibras de aço bilinear monotônico</b> com equilíbrio local N–M.','A v0.15 acrescenta <b>rótulas concentradas de fibras de aço bilinear monotônico</b> em seções retangulares, I/H e RHS, com Newton constitutivo local embutido no equilíbrio global.',1)
+          s=s.replace('<h3>Material não linear · v0.14</h3>','<h3>Material não linear · v0.15</h3>',1)
+          old="""<div className="geometry-grid"><label>Máx. iterações externas<input data-testid="material-max-iterations" type="number" min="3" max="60" value={materialMaxIt} onChange={e=>setMaterialMaxIt(num(e.target.value,30))}/></label><label>Tolerância M relativa<input data-testid="material-tolerance" type="number" min="1e-9" step="1e-5" value={materialTol} onChange={e=>setMaterialTol(num(e.target.value,1e-5))}/></label><label>Relaxação da secante<input data-testid="material-relaxation" type="number" min="0.1" max="1" step="0.05" value={materialRelaxation} onChange={e=>setMaterialRelaxation(num(e.target.value,.65))}/></label></div><div className="panel-note">Estratégia v0.14: o equilíbrio global co‑rotacional é resolvido, cada rótula recebe Δθ e N, a seção de fibras resolve N–M e atualiza a rigidez secante M/Δθ. O ciclo externo repete até compatibilizar os momentos. Não é uma tangente material global consistente e não possui memória cíclica.</div>"""
+          new="""<div className="geometry-grid"><label>Acoplamento<select data-testid="material-coupling" value={materialCoupling} onChange={e=>setMaterialCoupling(e.target.value)}><option value="embedded">Newton local embutido · v0.15</option><option value="outer">Compatibilidade externa · v0.14</option></select></label><label>{materialCoupling==='outer'?'Máx. iterações externas':'Máx. iterações locais'}<input data-testid="material-max-iterations" type="number" min="3" max="80" value={materialMaxIt} onChange={e=>setMaterialMaxIt(num(e.target.value,30))}/></label><label>Tolerância M relativa<input data-testid="material-tolerance" type="number" min="1e-10" step="1e-6" value={materialTol} onChange={e=>setMaterialTol(num(e.target.value,1e-6))}/></label><label>Relaxação constitutiva<input data-testid="material-relaxation" type="number" min="0.2" max="1" step="0.05" value={materialRelaxation} onChange={e=>setMaterialRelaxation(num(e.target.value,1))}/></label></div><div className="panel-note">{materialCoupling==='outer'?<>Modo de compatibilidade v0.14: repete soluções globais para atualizar a linearização da rótula.</>:<>Estratégia v0.15: em <b>cada avaliação do resíduo/tangente global</b>, a rotação interna da extremidade e a seção de fibras são compatibilizadas por Newton local com M≈kt·Δθ+M0. Não há iteração material global externa. A interação N–M é atualizada em cada estado de tentativa; resposta cíclica ainda não é representada.</>}</div>"""
+          if old not in s: raise SystemExit('analysis controls anchor missing')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+
+          # Post-processing.
+          p=Path('app/src/NonlinearPostprocessPanel.tsx');s=p.read_text()
+          s=s.replace('<b>Não linearidade material v0.14:</b>','<b>Não linearidade material v0.15:</b>',1)
+          old="{material.outerIterations} iteração(ões) externa(s), resíduo máximo de momento"
+          new="acoplamento {material.coupling||'—'}, Newton local máx. {material.maxLocalIterations??'—'} it., iterações externas {material.outerIterations??0}, resíduo máximo de momento"
+          if old in s:s=s.replace(old,new,1)
+          s=s.replace('Na rótula de fibras, a rigidez secante é atualizada pela relação constitutiva M–Δθ.','Na rótula de fibras v0.15, a tangente constitutiva e o termo afim M0 são atualizados pelo Newton local e condensados por Schur.',1)
+          s=s.replace("<small>Iterações material</small><b>{material.outerIterations??'—'}</b>","<small>Newton material local</small><b>{material.maxLocalIterations??material.outerIterations??'—'}</b>",1)
+          p.write_text(s)
+
+          # Technical report.
+          p=Path('app/src/NonlinearReportPanel.tsx');s=p.read_text()
+          s=s.replace('com rótulas de fibras v0.14','com rótulas de fibras v0.15',1)
+          s=s.replace("<small>Iterações material</small><b>{material?.outerIterations??'—'}</b>","<small>Newton material local</small><b>{material?.maxLocalIterations??material?.outerIterations??'—'}</b>",1)
+          s=s.replace('Modelo concentrado v0.14: seção retangular discretizada em fibras de aço bilinear monotônico.','Modelo concentrado v0.15: seções retangulares, I/H e RHS discretizadas em fibras de aço bilinear monotônico.',1)
+          s=s.replace("O equilíbrio global usa <b>{material?.globalStrategy||'iteração secante externa'}</b>; não há alegação de história cíclica ou tangente material global consistente.","O equilíbrio global usa <b>{material?.globalStrategy||'Newton constitutivo embutido'}</b>. No modo padrão, a compatibilização M–Δθ ocorre dentro de cada avaliação global; não há história cíclica e a derivada cruzada axial-material ainda é congelada em cada avaliação da tangente.",1)
+          s=s.replace("<small>Iterações externas</small><b>{material?.outerIterations??'—'}</b>","<small>Newton local máx.</small><b>{material?.maxLocalIterations??material?.outerIterations??'—'}</b>",1)
+          p.write_text(s)
+
+          # Browser regression expectations.
+          p=Path('tests/e2e/material-nonlinear.spec.ts');s=p.read_text()
+          s=s.replace('0.14.2-exp','0.15.0-exp').replace('Não linearidade material v0.14','Não linearidade material v0.15')
+          anchor="  await page.getByTestId('material-max-iterations').fill('32');"
+          if anchor not in s: raise SystemExit('E2E material controls anchor missing')
+          s=s.replace(anchor,"  await expect(page.getByTestId('material-coupling')).toHaveValue('embedded');\n"+anchor,1)
+          p.write_text(s)
+
+          # README state and capability.
+          p=Path('README.md');s=p.read_text()
+          s=s.replace('**Estado atual — v0.14.2 experimental:**','**Estado atual — v0.15.0 experimental:**',1)
+          s=s.replace('- **rótulas concentradas de fibras de aço v0.14.2 para seções retangulares, I/H e RHS, com equilíbrio local N–M e linearização tangente-afim**;','- **rótulas concentradas de fibras de aço v0.15 para seções retangulares, I/H e RHS, com equilíbrio local N–M, linearização tangente-afim e Newton constitutivo embutido em cada avaliação do equilíbrio global**;',1)
+          p.write_text(s)
+          PY
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Validate modules
+        run: npm run check
+      - name: Run structural tests
+        run: npm test
+      - name: Build application
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run material nonlinear browser regression
+        run: npx playwright test tests/e2e/material-nonlinear.spec.ts
+      - name: Commit validated UI
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add web/src/core/model.js app/src/AnalysisPanelV13.tsx app/src/NonlinearPostprocessPanel.tsx app/src/NonlinearReportPanel.tsx tests/e2e/material-nonlinear.spec.ts README.md
+          git commit -m "feat: expose v0.15 embedded material coupling in UI" || exit 0
+          git push origin HEAD:feat/v015-embedded-material-newton

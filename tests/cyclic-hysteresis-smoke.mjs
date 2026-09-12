@@ -31,7 +31,7 @@ const project={
   loads:[{id:'L1',caseId:'LC1',nodeId:'N2',fx:0,fy:-1000,mz:0}],elementLoads:[],nodeSprings:[],settlements:[],
   loadCases:[{id:'LC1',name:'Cyclic',type:'user'}],loadCombinations:[],settings:{activeLoadCaseId:'LC1'}
 };
-const result=solveFrameCorotationalDisplacementControl2D(project,'LC1',{steps:12,maxIterations:70,tolerance:1e-8,absoluteTolerance:1e-9,lineSearch:true,displacementTolerance:1e-7,displacementControl:{nodeId:'N2',dof:'uy',targetDisplacement:0},cyclicProtocol:{enabled:true,targets:[-.03,.03,-.03,0],stepsPerSegment:5}});
+const result=solveFrameCorotationalDisplacementControl2D(project,'LC1',{steps:12,maxIterations:70,tolerance:1e-8,absoluteTolerance:1e-9,lineSearch:true,displacementTolerance:1e-7,displacementControl:{nodeId:'N2',dof:'uy',targetDisplacement:-.03},cyclicProtocol:{enabled:true,targets:[-.03,.03,-.03,0],stepsPerSegment:5}});
 assert.equal(result.solverVersion,'0.21.0-exp');
 assert.equal(result.pushover.cyclicProtocol.enabled,true);
 assert.equal(result.pushover.curve.length,20);

@@ -39,15 +39,14 @@ function cantilever({P=0,fy=-H,fz=0}={}){
   const p=cantilever({P:500}),r=solve(p);
   assert.equal(r.dimension,'3d');
   assert.equal(r.analysisType,'pdelta');
-  assert.equal(r.solverVersion,'0.28.0');
+  assert.match(r.solverVersion,/^0\.(28|29)\.0$/);
   assert.equal(r.pDelta?.converged,true);
 }
 
-// 5) O escopo protegido rejeita truss3d/mistos e imperfeição modal 3D nesta versão.
+// 5) O escopo protegido continua rejeitando truss3d/mistos.
 {
   const p=cantilever({P:100});
   assert.throws(()=>solveFramePDelta3D({...p,elements:[{...p.elements[0],type:'truss3d'}]}),/somente.*frame3d/i);
-  assert.throws(()=>solveFramePDelta3D({...p,settings:{...p.settings,imperfection:{enabled:true}}}),/imperfei/i);
 }
 
-console.log('v0.28 P-Delta 3D smoke: OK');
+console.log('v0.28 P-Delta 3D baseline smoke: OK');

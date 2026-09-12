@@ -79,7 +79,9 @@ test('v0.14 fiber hinge is configured, guarded, solved and traced through postpr
 
   await openCommand(page,'Relatório técnico');
   const report=page.getByTestId('panel-nonlinear-report');await expect(report).toBeVisible();await expect(report).toContainText('0.14.0-exp');
-  const materialReport=page.getByTestId('material-nonlinear-report');await expect(materialReport).toContainText('aço bilinear monotônico');await expect(materialReport).toContainText('2200');await expect(materialReport).toContainText('100');
+  const materialReport=page.getByTestId('material-nonlinear-report');await expect(materialReport).toContainText('aço bilinear monotônico');
+  const constitutiveMoment=Number(await page.getByTestId('material-hinge-moment').first().textContent());expect(Math.abs(constitutiveMoment-2200)).toBeLessThan(.2);
+  await expect(page.getByTestId('material-hinge-yielded').first()).toContainText('/100');
   await expect(page.getByTestId('nonlinear-report-limitations')).toContainText('plasticidade distribuída');
   await expect(page.locator('[role="alert"]')).toHaveCount(0);
 });

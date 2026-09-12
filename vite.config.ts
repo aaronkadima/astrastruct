@@ -16,7 +16,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          const normalized = id.replaceAll('\\', '/');
+          const normalized = id.split('\\').join('/');
           if (normalized.includes('/node_modules/react/') || normalized.includes('/node_modules/react-dom/')) return 'react-vendor';
           if (normalized.includes('/web/src/solver/')) return 'structural-solver';
           if (

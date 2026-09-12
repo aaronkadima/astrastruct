@@ -7,3 +7,4 @@ if old not in s:
     raise SystemExit('v0.26 JSX fix anchor not found')
 p.write_text(s.replace(old,new,1))
 print('v0.26 JSX fix applied')
+# rerun after explicit local-axis benchmark correction

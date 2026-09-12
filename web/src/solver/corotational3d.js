@@ -87,7 +87,7 @@ export function corotationalFrame3DInternalForce(project,e,a,b,elementDisplaceme
 function validateGlobalScope(project){
   if(!(project.nodes||[]).length||!(project.elements||[]).length)throw new Error('Co-rotacional 3D: modelo vazio.');
   if((project.elements||[]).some(e=>e.type!=='frame3d'))throw new Error('Co-rotacional 3D v0.30 experimental suporta somente elementos frame3d.');
-  if((project.elementLoads||[]).length)throw new Error('Co-rotacional 3D v0.30 experimental: cargas de barra ainda não são suportadas; use cargas nodais.');
+  if((project.elementLoads||[]).length)throw new Error('Co-rotacional 3D v0.30 experimental: cargas de barra devem ser preparadas como cargas mortas equivalentes antes da solução.');
   if((project.nodeSprings||[]).length||(project.settlements||[]).length)throw new Error('Co-rotacional 3D v0.30 experimental: molas nodais e recalques ainda não são suportados.');
   for(const e of project.elements||[])if(e.releases&&Object.values(e.releases).some(Boolean))throw new Error(`Co-rotacional 3D v0.30 experimental: releases ainda não suportados em ${e.id}.`);
   for(const s of project.supports||[])for(const key of ['ux','uy','uz','rx','ry','rz'])if(s[key]&&Math.abs(Number(s[`${key}Value`])||0)>1e-12)throw new Error('Co-rotacional 3D v0.30 experimental: apoios devem possuir deslocamentos prescritos nulos.');
@@ -100,32 +100,45 @@ function modelAssembly(project,u){
 }
 function externalVector(project,map){const F=Array((project.nodes||[]).length*6).fill(0);for(const l of project.loads||[]){const i=map.get(l.nodeId);if(i==null)continue;const vals=[l.fx,l.fy,l.fz,l.mx,l.my,l.mz];for(let k=0;k<6;k++)F[6*i+k]+=Number(vals[k])||0}return F}
 function prescribedDofs(project,map){const p=new Map(),keys=['ux','uy','uz','rx','ry','rz'];for(const s of project.supports||[]){const i=map.get(s.nodeId);if(i==null)continue;keys.forEach((k,d)=>{if(s[k])p.set(6*i+d,0)})}return p}
-function numericalTangent(project,u,base,fdStep){const nd=u.length,K=zeros(nd),char=Math.max(1,...(project.elements||[]).map(e=>{const a=(project.nodes||[]).find(n=>n.id===e.n1),b=(project.nodes||[]).find(n=>n.id===e.n2);return a&&b?spatialAxes(a,b,e).L:1}));for(let j=0;j<nd;j++){const rotational=j%6>=3,h=Math.max(1e-9,fdStep*Math.max(1,rotational?Math.abs(u[j]):char,Math.abs(u[j]))),up=[...u];up[j]+=h;const fp=modelAssembly(project,up).Fint;for(let i=0;i<nd;i++)K[i][j]=(fp[i]-base[i])/h}return K}
+function characteristicLength(project){return Math.max(1,...(project.elements||[]).map(e=>{const a=(project.nodes||[]).find(n=>n.id===e.n1),b=(project.nodes||[]).find(n=>n.id===e.n2);return a&&b?spatialAxes(a,b,e).L:1}))}
+function tangentAsymmetry(K,free){let maxA=0,maxD=0;for(const i of free)for(const j of free){maxA=Math.max(maxA,Math.abs(K[i][j]),Math.abs(K[j][i]));maxD=Math.max(maxD,Math.abs(K[i][j]-K[j][i]))}return maxD/Math.max(EPS,maxA)}
+
+/** Centered numerical Jacobian of the spatial resisting-force vector. */
+export function numericalCorotational3DTangent(project,u,{fdStep=2e-7,scheme='central',base=null}={}){
+  const nd=u.length,K=zeros(nd),char=characteristicLength(project),mode=scheme==='forward'?'forward':'central',f0=base||modelAssembly(project,u).Fint;
+  for(let j=0;j<nd;j++){
+    const rotational=j%6>=3,h=Math.max(1e-9,fdStep*Math.max(1,rotational?Math.abs(u[j]):char,Math.abs(u[j]))),up=[...u];up[j]+=h;const fp=modelAssembly(project,up).Fint;
+    if(mode==='forward'){for(let i=0;i<nd;i++)K[i][j]=(fp[i]-f0[i])/h;continue}
+    const um=[...u];um[j]-=h;const fm=modelAssembly(project,um).Fint;for(let i=0;i<nd;i++)K[i][j]=(fp[i]-fm[i])/(2*h);
+  }
+  return K;
+}
 
 /**
  * Experimental global elastic co-rotational frame3d solver (v0.30 foundation).
- * Uses a numerically differentiated tangent so kinematic correctness can be
- * validated before replacing it with a closed-form consistent tangent.
+ * The default tangent is a centered numerical approximation of the consistent
+ * Jacobian. This is intentionally retained until the closed-form SO(3) tangent
+ * is independently benchmarked.
  */
 export function solveFrameCorotational3D(project,options={}){
   validateGlobalScope(project);const nodes=project.nodes||[],nd=nodes.length*6,map=new Map(nodes.map((n,i)=>[n.id,i])),prescribed=prescribedDofs(project,map),free=Array.from({length:nd},(_,i)=>i).filter(i=>!prescribed.has(i)),Fref=externalVector(project,map);
   if(!free.length)throw new Error('Co-rotacional 3D: modelo sem graus de liberdade livres.');
-  const steps=Math.max(1,Math.min(100,Math.round(Number(options.steps??project.settings?.nonlinearSteps??10)))),maxIterations=Math.max(3,Math.min(80,Math.round(Number(options.maxIterations??project.settings?.nonlinearMaxIterations??30)))),tolerance=Math.max(1e-10,Number(options.tolerance??project.settings?.nonlinearTolerance??1e-7)),fdStep=Math.max(1e-9,Math.min(1e-4,Number(options.fdStep??2e-7))),lineSearch=options.lineSearch??true;
+  const steps=Math.max(1,Math.min(100,Math.round(Number(options.steps??project.settings?.nonlinearSteps??10)))),maxIterations=Math.max(3,Math.min(80,Math.round(Number(options.maxIterations??project.settings?.nonlinearMaxIterations??30)))),tolerance=Math.max(1e-10,Number(options.tolerance??project.settings?.nonlinearTolerance??1e-7)),fdStep=Math.max(1e-9,Math.min(1e-4,Number(options.fdStep??2e-7))),lineSearch=options.lineSearch??true,tangentScheme=options.tangentScheme==='forward'?'forward':'central';
   let u=Array(nd).fill(0),last=null;const history=[];
   for(let step=1;step<=steps;step++){
-    const lambda=step/steps;let converged=false,residualNorm=Infinity,iterations=0;
+    const lambda=step/steps;let converged=false,residualNorm=Infinity,iterations=0,lastAsymmetry=null;
     for(let iteration=1;iteration<=maxIterations;iteration++){
       iterations=iteration;const assembled=modelAssembly(project,u),target=Fref.map(v=>lambda*v),residual=target.map((v,i)=>v-assembled.Fint[i]);residualNorm=maxFree(residual,free);const scaleR=Math.max(1,maxFree(target,free));
       if(residualNorm<=tolerance*scaleR){converged=true;last=assembled;break}
-      const K=numericalTangent(project,u,assembled.Fint,fdStep),du=solveConstrained(K,residual,prescribed).u;if(du.some(v=>!Number.isFinite(v)))throw new Error(`Co-rotacional 3D: incremento não finito no passo ${step}.`);
+      const K=numericalCorotational3DTangent(project,u,{fdStep,scheme:tangentScheme,base:assembled.Fint});lastAsymmetry=tangentAsymmetry(K,free);const du=solveConstrained(K,residual,prescribed).u;if(du.some(v=>!Number.isFinite(v)))throw new Error(`Co-rotacional 3D: incremento não finito no passo ${step}.`);
       let alpha=1,best=u.map((v,i)=>v+du[i]),bestNorm=Infinity;
       if(lineSearch){for(let cut=0;cut<8;cut++){const trial=u.map((v,i)=>v+alpha*du[i]),fi=modelAssembly(project,trial).Fint,rr=target.map((v,i)=>v-fi[i]),n=maxFree(rr,free);if(n<bestNorm){bestNorm=n;best=trial}if(n<residualNorm)break;alpha*=.5}}
       u=best;if(Math.max(...u.map(Math.abs))>1e4)throw new Error('Co-rotacional 3D divergiu: deslocamentos/rotações não físicos.');
     }
     if(!converged){const a=modelAssembly(project,u),target=Fref.map(v=>lambda*v),r=target.map((v,i)=>v-a.Fint[i]);residualNorm=maxFree(r,free);if(residualNorm<=tolerance*Math.max(1,maxFree(target,free))){converged=true;last=a}}
     if(!converged)throw new Error(`Co-rotacional 3D não convergiu no passo ${step}/${steps} após ${maxIterations} iterações (‖r‖∞=${residualNorm.toExponential(3)}).`);
-    history.push({step,lambda,iterations,residualNorm});
+    history.push({step,lambda,iterations,residualNorm,tangentAsymmetry:lastAsymmetry});
   }
   last=last||modelAssembly(project,u);const reactions=last.Fint.map((v,i)=>v-Fref[i]),displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[6*i],uy:u[6*i+1],uz:u[6*i+2],rx:u[6*i+3],ry:u[6*i+4],rz:u[6*i+5]}));
-  return{type:'frame3d-corotational',dimension:'3d',analysisType:'corotational',solverVersion:'0.30.0-exp',dofs:nd,activeDofs:free.length,displacements,reactions:nodes.map((n,i)=>({nodeId:n.id,fx:reactions[6*i],fy:reactions[6*i+1],fz:reactions[6*i+2],mx:reactions[6*i+3],my:reactions[6*i+4],mz:reactions[6*i+5]})),elementForces:last.responses,nonlinear:{formulation:'spatial co-rotational Euler-Bernoulli frame; numerical consistent tangent foundation',steps,maxIterations,tolerance,fdStep,lineSearch,history,converged:true}};
+  return{type:'frame3d-corotational',dimension:'3d',analysisType:'corotational',solverVersion:'0.30.0-exp',dofs:nd,activeDofs:free.length,displacements,reactions:nodes.map((n,i)=>({nodeId:n.id,fx:reactions[6*i],fy:reactions[6*i+1],fz:reactions[6*i+2],mx:reactions[6*i+3],my:reactions[6*i+4],mz:reactions[6*i+5]})),elementForces:last.responses,nonlinear:{formulation:'spatial co-rotational Euler-Bernoulli frame; centered numerical consistent-Jacobian approximation',steps,maxIterations,tolerance,fdStep,lineSearch,tangentScheme,history,converged:true}};
 }

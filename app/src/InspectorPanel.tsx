@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 // @ts-ignore
 import { uid, normalizeProject } from '../../web/src/core/model.js';
 import type { Selection } from './ModelingCanvas';
+import { SpatialInspectorPanel } from './SpatialInspectorPanel';
 
 const clone=(v:any)=>JSON.parse(JSON.stringify(v));const num=(v:any,f=0)=>Number.isFinite(Number(v))?Number(v):f;
 const defaultFiberHinge={enabled:false,hingeLength:.35,nFibers:80,hardeningRatio:.01,cyclic:false,kinematicFraction:1};
@@ -10,6 +11,7 @@ const defaultDistributedPlasticity={enabled:false,integrationPoints:5,nFibers:80
 export function InspectorPanel({project,selection,onCommit}:{project:any;selection:Selection;onCommit:(p:any)=>void}){
   const activeCase=project.settings?.activeLoadCaseId||project.loadCases?.[0]?.id;
   const entity=useMemo(()=>selection?.kind==='node'?project.nodes.find((n:any)=>n.id===selection.id):selection?.kind==='element'?project.elements.find((e:any)=>e.id===selection.id):null,[project,selection]);
+  const spatial=useMemo(()=>project.elements?.some((e:any)=>e.type==='frame3d'||e.type==='truss3d')||project.nodes?.some((n:any)=>Number.isFinite(Number(n.z))&&Math.abs(Number(n.z))>1e-12),[project]);
   const [draft,setDraft]=useState<any>(null);
   useEffect(()=>{
     if(!entity){setDraft(null);return}
@@ -24,6 +26,7 @@ export function InspectorPanel({project,selection,onCommit}:{project:any;selecti
     }
   },[entity?.id,selection?.kind,activeCase,project]);
   if(!entity||!draft)return <div className="empty-state">Selecione um nó ou elemento no modelo.</div>;
+  if(spatial)return <SpatialInspectorPanel project={project} selection={selection} onCommit={onCommit}/>;
 
   const applyNode=()=>{const p=clone(project),n=p.nodes.find((x:any)=>x.id===entity.id);n.x=num(draft.x);n.y=num(draft.y);p.supports=p.supports.filter((s:any)=>s.nodeId!==entity.id);if(draft.support.ux||draft.support.uy||draft.support.rz)p.supports.push({...draft.support,nodeId:entity.id});p.loads=p.loads.filter((l:any)=>!(l.caseId===activeCase&&l.nodeId===entity.id));if(Math.abs(num(draft.load.fx))+Math.abs(num(draft.load.fy))+Math.abs(num(draft.load.mz))>1e-12)p.loads.push({...draft.load,id:draft.load.id||uid('L'),caseId:activeCase,nodeId:entity.id,fx:num(draft.load.fx),fy:num(draft.load.fy),mz:num(draft.load.mz)});p.nodalMasses=(p.nodalMasses||[]).filter((m:any)=>m.nodeId!==entity.id);const mx=Math.max(0,num(draft.nodalMass?.mx)),my=Math.max(0,num(draft.nodalMass?.my)),mr=Math.max(0,num(draft.nodalMass?.mr));if(mx>0||my>0||mr>0)p.nodalMasses.push({...draft.nodalMass,id:draft.nodalMass?.id||uid('MASS'),nodeId:entity.id,mx,my,mr});onCommit(normalizeProject(p))};
   const normalizedHinge=(raw:any)=>({enabled:!!raw?.enabled,hingeLength:Math.max(1e-4,num(raw?.hingeLength,.35)),nFibers:Math.max(8,Math.min(400,Math.round(num(raw?.nFibers,80)))),hardeningRatio:Math.max(1e-6,Math.min(.25,num(raw?.hardeningRatio,.01))),cyclic:!!raw?.cyclic,kinematicFraction:Math.max(0,Math.min(1,num(raw?.kinematicFraction,1)))});

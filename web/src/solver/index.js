@@ -38,8 +38,8 @@ function solveStructuralModel(sourceProject,resolvedProject,scenarioId) {
 export function solve(project, scenarioId) {
   const analysisType=project.settings?.analysisType||'linear';
   if(analysisType==='corotational'){
-    const s=project.settings||{};
-    const result=solveFrameCorotational2D(project,scenarioId,{steps:s.nonlinearSteps,maxIterations:s.nonlinearMaxIterations,tolerance:s.nonlinearTolerance,lineSearch:s.nonlinearLineSearch});
+    const s=project.settings||{},initialImperfection=buildModalImperfection(project,scenarioId);
+    const result=solveFrameCorotational2D(project,scenarioId,{steps:s.nonlinearSteps,maxIterations:s.nonlinearMaxIterations,tolerance:s.nonlinearTolerance,lineSearch:s.nonlinearLineSearch,initialImperfection});
     return{...result,analysisType:'corotational',solverVersion:'0.13.5-exp'};
   }
   const resolved = resolveScenario(project, scenarioId);

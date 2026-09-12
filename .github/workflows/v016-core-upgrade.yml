@@ -1,0 +1,314 @@
+name: AstraStruct v0.16 displacement-control core
+
+on:
+  push:
+    branches: [feat/v016-displacement-control-pushover]
+
+permissions:
+  contents: write
+
+jobs:
+  core:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/v016-displacement-control-pushover
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Implement displacement-control pushover core
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p=Path('web/src/solver/corotational2d.js')
+          s=p.read_text()
+          if 'solveFrameCorotationalDisplacementControl2D' not in s:
+              s += r'''
+
+function resolveDisplacementControl(prepared, raw={}){
+  const nodeId=String(raw.nodeId||'');
+  const dof=String(raw.dof||'uy').toLowerCase();
+  const offsets={ux:0,uy:1,rz:2};
+  if(!(dof in offsets))throw new Error(`Pushover: grau de liberdade controlado inválido "${dof}".`);
+  const nodePosition=prepared.map.get(nodeId);
+  if(nodePosition==null)throw new Error(`Pushover: nó de controle ${nodeId||'(não definido)'} inexistente.`);
+  const index=3*nodePosition+offsets[dof];
+  if(prepared.prescribed.has(index)||!prepared.free.includes(index))throw new Error(`Pushover: ${nodeId}/${dof} é restringido ou não possui rigidez ativa; escolha um DOF livre.`);
+  const freePosition=prepared.free.indexOf(index);
+  const targetDisplacement=Number(raw.targetDisplacement);
+  if(!(Number.isFinite(targetDisplacement)&&Math.abs(targetDisplacement)>1e-12))throw new Error('Pushover: deslocamento alvo deve ser finito e diferente de zero.');
+  return{nodeId,dof,index,freePosition,targetDisplacement,unit:dof==='rz'?'rad':'m'};
+}
+
+function residualLoadDerivative(prepared,u,loadFactor,options={}){
+  const h=Math.max(1e-7,1e-6*Math.max(1,Math.abs(loadFactor)));
+  const plus=residualAt(prepared,u,loadFactor+h,options),minus=residualAt(prepared,u,loadFactor-h,options);
+  return plus.residual.map((v,i)=>(v-minus.residual[i])/(2*h));
+}
+
+function displacementControlMerit(prepared,current,controlError,loadFactor,targetDisplacement){
+  const forceScale=residualScale(prepared,current,loadFactor),dispScale=Math.max(1e-8,Math.abs(targetDisplacement));
+  return Math.hypot(current.norm/forceScale,Math.abs(controlError)/dispScale);
+}
+
+function fiberYieldSnapshot(states=[]){
+  const rows=[];
+  for(const entry of states){
+    for(const c of entry.connected?.connectionRotations||[]){
+      if(c.type!=='fiber-hinge')continue;
+      rows.push({elementId:entry.item.e.id,end:Number(c.end),key:Number(c.end)===1?'rz1':'rz2',yieldedFibers:Number(c.yieldedFibers)||0,fiberCount:Number(c.fiberCount)||0,rotation:Number(c.relativeRotation)||0,moment:Number(c.constitutiveMoment??c.moment)||0,sectionFamily:c.sectionFamily||null});
+    }
+  }
+  return rows;
+}
+
+function baseReactionAt(prepared,current,dof){
+  const offset=dof==='ux'?0:dof==='uy'?1:2,key=dof==='ux'?'ux':dof==='uy'?'uy':'rz';
+  let sum=0;
+  for(const support of prepared.supports||[]){
+    if(!support?.[key])continue;
+    const pos=prepared.map.get(support.nodeId);if(pos==null)continue;
+    const i=3*pos+offset;sum+=current.fint[i]-current.external[i];
+  }
+  return sum;
+}
+
+/**
+ * v0.16 displacement-controlled equilibrium path.
+ *
+ * Unknowns at each Newton correction are the free displacement vector and the
+ * scalar load-pattern multiplier lambda. With residual R=Pext-fint and the
+ * existing tangent convention K*du=R at fixed lambda, the augmented correction
+ * is K du - (dR/dlambda) dlambda = R with c^T du = uTarget-uControl.
+ * The complete dR/dlambda is evaluated by a centered finite difference so dead,
+ * thermal, follower and embedded constitutive effects remain inside the path.
+ */
+export function solveFrameCorotationalDisplacementControl2D(project,scenarioId,options={}){
+  const resolved=resolveScenario(project,scenarioId),p=resolved.project;
+  validateModel(p,{initialImperfection:options.initialImperfection});
+  const prepared=prepare(p,options.initialImperfection);prepared.supports=p.supports||[];
+  const control=resolveDisplacementControl(prepared,options.displacementControl||{}),steps=clamp(Math.round(Number(options.steps??20)||20),1,300),maxIterations=clamp(Math.round(Number(options.maxIterations??40)||40),3,120),tolerance=Math.max(1e-12,Number(options.tolerance??1e-8)||1e-8),controlTolerance=Math.max(1e-10,Number(options.displacementTolerance??1e-7)||1e-7),lineSearch=options.lineSearch!==false;
+  const u=Array(prepared.nd).fill(0),history=[];let last=null,lambda=0;const yieldedKeys=new Set();let firstYield=null;
+  for(let step=1;step<=steps;step++){
+    const target=control.targetDisplacement*step/steps,controlScale=Math.max(1e-8,Math.abs(control.targetDisplacement)),controlTolAbs=controlTolerance*controlScale;let converged=false,iteration=0;
+    for(iteration=1;iteration<=maxIterations;iteration++){
+      const current=residualAt(prepared,u,lambda,options),scale=residualScale(prepared,current,lambda),controlError=target-u[control.index];
+      if(current.norm<=tolerance*scale&&Math.abs(controlError)<=controlTolAbs){converged=true;last=current;break}
+      const Kff=prepared.free.map(i=>prepared.free.map(j=>current.K[i][j])),rf=prepared.free.map(i=>current.residual[i]),dRdl=residualLoadDerivative(prepared,u,lambda,options),pf=prepared.free.map(i=>dRdl[i]);let a,b;
+      try{a=solveLinear(Kff,rf);b=solveLinear(Kff,pf)}catch(e){throw new Error(`Pushover: tangente singular no passo ${step}, iteração ${iteration}. ${e.message||e}`)}
+      const influence=b[control.freePosition];
+      if(!(Number.isFinite(influence)&&Math.abs(influence)>1e-14))throw new Error(`Pushover: o padrão de carga possui influência praticamente nula em ${control.nodeId}/${control.dof}.`);
+      const dLambda=(controlError-a[control.freePosition])/influence,du=a.map((v,i)=>v+b[i]*dLambda),currentMerit=displacementControlMerit(prepared,current,controlError,lambda,control.targetDisplacement);let eta=1,next=null;
+      if(lineSearch){
+        for(let ls=0;ls<8;ls++){
+          const trial=[...u];prepared.free.forEach((d,k)=>{trial[d]+=eta*du[k]});const trialLambda=lambda+eta*dLambda,candidate=residualAt(prepared,trial,trialLambda,options),trialError=target-trial[control.index],merit=displacementControlMerit(prepared,candidate,trialError,trialLambda,control.targetDisplacement);
+          if(merit<currentMerit||eta<=1/128){next={trial,trialLambda,candidate};break}eta*=.5;
+        }
+      }
+      if(!next){const trial=[...u];prepared.free.forEach((d,k)=>{trial[d]+=du[k]});const trialLambda=lambda+dLambda;next={trial,trialLambda,candidate:residualAt(prepared,trial,trialLambda,options)}}
+      next.trial.forEach((v,i)=>{u[i]=v});lambda=next.trialLambda;last=next.candidate;
+      if(!Number.isFinite(lambda)||Math.abs(lambda)>1e7||u.some(v=>!Number.isFinite(v)||Math.abs(v)>1e4))throw new Error(`Pushover: resposta não física no passo ${step}.`);
+    }
+    if(!converged){const current=residualAt(prepared,u,lambda,options),scale=residualScale(prepared,current,lambda),controlError=target-u[control.index];if(current.norm<=tolerance*scale&&Math.abs(controlError)<=controlTolAbs){converged=true;last=current}}
+    if(!converged)throw new Error(`Pushover não convergiu no passo ${step}/${steps} em ${maxIterations} iterações.`);
+    const materialLocalIterations=Math.max(0,...(last.states||[]).map(x=>Number(x.connected?.materialLocalIterations)||0)),hinges=fiberYieldSnapshot(last.states),yielded=hinges.filter(h=>h.yieldedFibers>0),newlyYielded=[];
+    for(const h of yielded){const key=`${h.elementId}:${h.end}`;if(!yieldedKeys.has(key)){yieldedKeys.add(key);newlyYielded.push(h)}}
+    if(!firstYield&&newlyYielded.length)firstYield={step,loadFactor:lambda,controlledDisplacement:u[control.index],hinges:newlyYielded};
+    history.push({step,loadFactor:lambda,controlledDisplacement:u[control.index],targetDisplacement:target,baseReaction:baseReactionAt(prepared,last,control.dof),iterations:iteration,residualNorm:last.norm,controlResidual:target-u[control.index],materialLocalIterations,yieldedHingeCount:yielded.length,yieldedHinges:yielded,newlyYieldedHinges:newlyYielded});
+  }
+  last=residualAt(prepared,u,lambda,options);
+  const reactions=prepared.nodes.map((n,i)=>({nodeId:n.id,fx:last.fint[3*i]-last.external[3*i],fy:last.fint[3*i+1]-last.external[3*i+1],mz:last.fint[3*i+2]-last.external[3*i+2]})),displacements=prepared.nodes.map((n,i)=>({nodeId:n.id,ux:u[3*i],uy:u[3*i+1],rz:u[3*i+2]}));
+  const initialDisplacements=prepared.imperfection?prepared.nominalNodes.map((n,i)=>({nodeId:n.id,ux:prepared.imperfection.vector[3*i],uy:prepared.imperfection.vector[3*i+1],rz:prepared.imperfection.vector[3*i+2]})):null;
+  const totalDisplacements=prepared.imperfection?prepared.nominalNodes.map((n,i)=>({nodeId:n.id,ux:prepared.imperfection.vector[3*i]+u[3*i],uy:prepared.imperfection.vector[3*i+1]+u[3*i+1],rz:prepared.imperfection.vector[3*i+2]+u[3*i+2]})):null;
+  const initialGeometry=prepared.imperfection?prepared.nominalNodes.map((n,i)=>({nodeId:n.id,nominal:{x:Number(n.x),y:Number(n.y)},reference:{x:Number(prepared.nodes[i].x),y:Number(prepared.nodes[i].y)},offset:{ux:prepared.imperfection.vector[3*i],uy:prepared.imperfection.vector[3*i+1],rz:prepared.imperfection.vector[3*i+2]}})):null;
+  const elementForces=last.states.map(({item,state,connected,followerStates})=>{
+    const endGlobal=state.internal.map((v,k)=>v-lambda*item.pGlobal[k]),endLocal=globalVectorToLocal(endGlobal,state.c,state.s);
+    const followerEnds=followerStates.map(({load,current})=>({id:load.id,end:2,px:load.px,py:load.py,currentGlobal:{fx:current.fx,fy:current.fy},appliedGlobal:{fx:lambda*current.fx,fy:lambda*current.fy},loadFactor:lambda,alpha:state.alpha,tangentMaxAbs:current.tangentMaxAbs,consistentExternalTangent:true}));
+    return{elementId:item.e.id,type:'frame2d',N1:endLocal[0],V1:endLocal[1],M1:endLocal[2],N2:endLocal[3],V2:endLocal[4],M2:endLocal[5],basicForces:{N:state.basicForces[0],M1:state.basicForces[1],M2:state.basicForces[2]},connectionRotations:connected.connectionRotations,connectionCondensation:{internalResidual:connected.internalConnectionResidual,stiffnesses:connected.stiffnesses,materialLocalIterations:Number(connected.materialLocalIterations)||0,materialResidual:Number(connected.materialResidual)||0,materialMeta:connected.materialConnectionMeta||null},corotational:{L0:state.L0,l:state.l,alpha:state.alpha,dAlpha:state.dAlpha,basic:state.basic,initialBasic:state.initialBasic,elasticBasic:state.elasticBasic,referenceImperfection:prepared.imperfection?{enabled:true}:null},loadSummary:{...item.summary,appliedLoadFactor:lambda,thermal:{...item.thermal.summary,appliedFactor:lambda,dTApplied:lambda*Number(item.thermal.summary.dT||0),dTGradientApplied:lambda*Number(item.thermal.summary.dTGradient||0)},followerEnds},equivalentNodalLoad:{referenceLocal:item.pLocal,referenceGlobal:item.pGlobal,appliedGlobal:item.pGlobal.map(v=>lambda*v)}};
+  });
+  const followerCount=prepared.elements.reduce((n,e)=>n+e.followers.length,0),flexibleEndCount=prepared.elements.reduce((n,item)=>n+connectionStiffnesses(item.e.releases||{},item.e.rotationalSprings||{}).filter(Number.isFinite).length,0),imperfectionMeta=prepared.imperfection?{enabled:true,source:prepared.imperfection.source||'explicit',mode:prepared.imperfection.mode||null,referenceScenarioId:prepared.imperfection.referenceScenarioId||null,criticalFactor:prepared.imperfection.criticalFactor||null,amplitude:prepared.imperfection.maxTranslation,amplitudeMm:prepared.imperfection.maxTranslation*1000,reference:'stress-free imperfect geometry',rotations:'stored as initial nodal orientation metadata'}:null;
+  const curve=history.map(h=>({step:h.step,controlledDisplacement:h.controlledDisplacement,loadFactor:h.loadFactor,baseReaction:h.baseReaction,yieldedHingeCount:h.yieldedHingeCount,newlyYieldedHinges:h.newlyYieldedHinges})),peak=curve.reduce((best,row)=>!best||Math.abs(row.loadFactor)>Math.abs(best.loadFactor)?row:best,null),pushover={enabled:true,method:'displacement-control',control,finalLoadFactor:lambda,curve,peakLoadFactor:peak?.loadFactor??lambda,peakControlledDisplacement:peak?.controlledDisplacement??u[control.index],firstYield,loadFactorDerivative:'centered finite difference of complete residual',arcLength:false};
+  const base={type:'frame2d-corotational-displacement-control-experimental',solverVersion:'0.16.0-exp',scenario:resolved.scenario,dofs:prepared.nd,activeDofs:prepared.free.length,displacements,initialDisplacements,totalDisplacements,initialGeometry,reactions,elementForces,imperfection:imperfectionMeta,pushover,nonlinear:{formulation:'2D co-rotational Euler-Bernoulli',controlMode:'displacement',steps,maxIterations,tolerance,controlTolerance,lineSearch,finalLoadFactor:lambda,loadModel:'scaled reference load pattern + thermal initial strain/curvature + follower end forces',followerLoads:{count:followerCount,externalTangent:'consistent',supported:'element end 2 concentrated force'},endConnections:{flexibleEndCount,method:'internal end rotations + Schur condensation',customResolver:typeof options.connectionResolver==='function',experimental:true},imperfection:imperfectionMeta,pushover,history,converged:true}};
+  return{...base,elementResponses:buildCorotationalResponses(p,base,41)};
+}
+'''
+          p.write_text(s)
+
+          p=Path('web/src/solver/materialNonlinear2d.js');s=p.read_text()
+          s=s.replace("import { solveFrameCorotational2D } from './corotational2d.js';","import { solveFrameCorotational2D, solveFrameCorotationalDisplacementControl2D } from './corotational2d.js';",1)
+          s=s.replace('v0.15 aceita apenas material do tipo steel.','v0.16 aceita apenas material do tipo steel.')
+          s=s.replace('Rótulas de fibras v0.15: Newton constitutivo local','Rótulas de fibras v0.16: Newton constitutivo local')
+          s=s.replace("solverVersion: '0.15.0-exp'","solverVersion: '0.16.0-exp'")
+          old="""export function solveFrameCorotationalFiberHinges2D(project, scenarioId, options = {}) {
+  const hinges = activeFiberHinges(project);
+  if (!hinges.length) return solveFrameCorotational2D(project, scenarioId, options);
+  validateHinges(project, hinges);
+  if (options.materialCoupling === 'outer') return solveOuterCompatibility(project, scenarioId, hinges, options);
+  const connectionResolver = embeddedConnectionResolver(project, hinges, options);
+  const result = solveFrameCorotational2D(project, scenarioId, { ...options, connectionResolver });
+  return decorateEmbeddedResult(result, hinges, options);
+}
+
+export const MATERIAL_NONLINEAR_VERSION = '0.15.0-exp';"""
+          new="""export function solveFrameCorotationalFiberHinges2D(project, scenarioId, options = {}) {
+  const hinges = activeFiberHinges(project);
+  const displacementControl = options.controlMode === 'displacement';
+  const solveGlobal = displacementControl ? solveFrameCorotationalDisplacementControl2D : solveFrameCorotational2D;
+  if (!hinges.length) return solveGlobal(project, scenarioId, options);
+  validateHinges(project, hinges);
+  if (displacementControl && options.materialCoupling === 'outer') throw new Error('Pushover v0.16 com rótulas de fibras requer acoplamento material embutido; o modo externo v0.14 permanece apenas para controle de carga.');
+  if (options.materialCoupling === 'outer') return solveOuterCompatibility(project, scenarioId, hinges, options);
+  const connectionResolver = embeddedConnectionResolver(project, hinges, options);
+  const result = solveGlobal(project, scenarioId, { ...options, connectionResolver });
+  return decorateEmbeddedResult(result, hinges, options);
+}
+
+export const MATERIAL_NONLINEAR_VERSION = '0.16.0-exp';"""
+          if old not in s: raise SystemExit('material solver export anchor not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+
+          p=Path('web/src/solver/index.js');s=p.read_text()
+          s=s.replace("import { solveFrameCorotational2D } from './corotational2d.js';","import { solveFrameCorotational2D, solveFrameCorotationalDisplacementControl2D } from './corotational2d.js';",1)
+          s=s.replace('Rótulas de fibras v0.15 exigem','Rótulas de fibras v0.16 exigem')
+          old="""const s=project.settings||{},initialImperfection=buildModalImperfection(project,scenarioId),options={steps:s.nonlinearSteps,maxIterations:s.nonlinearMaxIterations,tolerance:s.nonlinearTolerance,lineSearch:s.nonlinearLineSearch,initialImperfection,materialMaxIterations:s.materialMaxIterations,materialTolerance:s.materialTolerance,materialRelaxation:s.materialRelaxation,materialCoupling:s.materialCoupling};
+    const result=fiberHinges.length?solveFrameCorotationalFiberHinges2D(project,scenarioId,options):solveFrameCorotational2D(project,scenarioId,options);"""
+          new="""const s=project.settings||{},initialImperfection=buildModalImperfection(project,scenarioId),controlMode=s.nonlinearControlMode==='displacement'?'displacement':'load',options={steps:s.nonlinearSteps,maxIterations:s.nonlinearMaxIterations,tolerance:s.nonlinearTolerance,lineSearch:s.nonlinearLineSearch,initialImperfection,controlMode,displacementTolerance:s.displacementControlTolerance,displacementControl:{nodeId:s.displacementControlNodeId,dof:s.displacementControlDof,targetDisplacement:s.displacementControlTarget},materialMaxIterations:s.materialMaxIterations,materialTolerance:s.materialTolerance,materialRelaxation:s.materialRelaxation,materialCoupling:s.materialCoupling};
+    const result=fiberHinges.length?solveFrameCorotationalFiberHinges2D(project,scenarioId,options):(controlMode==='displacement'?solveFrameCorotationalDisplacementControl2D(project,scenarioId,options):solveFrameCorotational2D(project,scenarioId,options));"""
+          if old not in s: raise SystemExit('index corotational dispatch anchor not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+
+          p=Path('web/src/core/model.js');s=p.read_text()
+          old="""nonlinearSteps: 20, nonlinearMaxIterations: 35, nonlinearTolerance: 1e-8, nonlinearLineSearch: true,"""
+          new="""nonlinearSteps: 20, nonlinearMaxIterations: 35, nonlinearTolerance: 1e-8, nonlinearLineSearch: true,
+      nonlinearControlMode: 'load', displacementControlNodeId: null, displacementControlDof: 'uy', displacementControlTarget: -0.05, displacementControlTolerance: 1e-7,
+      materialMaxIterations: 30, materialTolerance: 1e-6, materialRelaxation: 1, materialCoupling: 'embedded',"""
+          if old not in s: raise SystemExit('model nonlinear defaults anchor not found')
+          s=s.replace(old,new,1)
+          anchor="""  p.settings.nonlinearLineSearch = p.settings.nonlinearLineSearch !== false;
+"""
+          extra=anchor+"""  p.settings.nonlinearControlMode = p.settings.nonlinearControlMode === 'displacement' ? 'displacement' : 'load';
+  p.settings.displacementControlNodeId = p.settings.displacementControlNodeId || null;
+  p.settings.displacementControlDof = ['ux','uy','rz'].includes(p.settings.displacementControlDof) ? p.settings.displacementControlDof : 'uy';
+  p.settings.displacementControlTarget = Number.isFinite(Number(p.settings.displacementControlTarget)) && Math.abs(Number(p.settings.displacementControlTarget)) > 1e-12 ? Number(p.settings.displacementControlTarget) : -0.05;
+  p.settings.displacementControlTolerance = Math.max(1e-10, Number(p.settings.displacementControlTolerance) || 1e-7);
+  p.settings.materialMaxIterations = Math.max(3, Math.min(80, Math.round(Number(p.settings.materialMaxIterations) || 30)));
+  p.settings.materialTolerance = Math.max(1e-10, Number(p.settings.materialTolerance) || 1e-6);
+  p.settings.materialRelaxation = Math.max(.2, Math.min(1, Number(p.settings.materialRelaxation) || 1));
+  p.settings.materialCoupling = p.settings.materialCoupling === 'outer' ? 'outer' : 'embedded';
+"""
+          if anchor not in s: raise SystemExit('model normalization anchor not found')
+          s=s.replace(anchor,extra,1)
+          p.write_text(s)
+
+          p=Path('web/src/solver/corotationalPostprocess.js');s=p.read_text()
+          s=s.replace('function currentUniformLoad(force,L0,l,c,s){','function currentUniformLoad(force,L0,l,c,s,loadFactor=1){',1)
+          s=s.replace("  const gx=num(global.x),gy=num(global.y),scale=L0/l;\n  return{qx:(c*gx+s*gy)*scale,qy:(-s*gx+c*gy)*scale,gx,gy,scale,mode:force.loadSummary?.mode||'reference-dead'};","  const gx=num(global.x),gy=num(global.y),scale=L0/l,appliedScale=scale*loadFactor;\n  return{qx:(c*gx+s*gy)*appliedScale,qy:(-s*gx+c*gy)*appliedScale,gx,gy,scale,appliedScale,loadFactor,mode:force.loadSummary?.mode||'reference-dead'};",1)
+          s=s.replace('function currentPointLoads(force,l,c,s){','function currentPointLoads(force,l,c,s,loadFactor=1){',1)
+          s=s.replace("const xi=clamp(num(p.xi,.5),0,1),gx=num(p.global?.x),gy=num(p.global?.y);","const xi=clamp(num(p.xi,.5),0,1),gx=num(p.global?.x)*loadFactor,gy=num(p.global?.y)*loadFactor;",1)
+          old="""export function buildCorotationalResponses(project,result,samples=41){
+  const count=Math.max(2,Math.min(201,Math.round(samples))),incremental="""
+          new="""export function buildCorotationalResponses(project,result,samples=41){
+  const loadFactor=num(result?.nonlinear?.finalLoadFactor??result?.pushover?.finalLoadFactor??1,1);
+  const count=Math.max(2,Math.min(201,Math.round(samples))),incremental="""
+          if old not in s: raise SystemExit('postprocess start anchor not found')
+          s=s.replace(old,new,1)
+          s=s.replace("load=currentUniformLoad(f,L0,l,c,s),pointLoads=currentPointLoads(f,l,c,s)","load=currentUniformLoad(f,L0,l,c,s,loadFactor),pointLoads=currentPointLoads(f,l,c,s,loadFactor)",1)
+          s=s.replace("currentScale:load.scale,uniform:","currentScale:load.scale,appliedScale:load.appliedScale,loadFactor,uniform:",1)
+          s=s.replace("responses.push({elementId:e.id,type:'frame2d-corotational'","responses.push({elementId:e.id,type:'frame2d-corotational',loadFactor",1)
+          p.write_text(s)
+
+          p=Path('package.json');s=p.read_text()
+          s=s.replace('node tests/material-global-smoke.mjs\"','node tests/material-global-smoke.mjs && node tests/pushover-smoke.mjs\"',1)
+          p.write_text(s)
+
+          Path('tests/pushover-smoke.mjs').write_text(r'''import { emptyProject } from '../web/src/core/model.js';
+import { solve } from '../web/src/solver/index.js';
+
+const assert=(condition,message)=>{if(!condition)throw new Error(message)};
+const near=(actual,expected,tol,message)=>{if(Math.abs(actual-expected)>tol)throw new Error(`${message}: esperado ${expected}, obtido ${actual}`)};
+
+function elasticCantilever(){
+  const p=emptyProject();
+  p.materials=[{id:'S',name:'Steel',type:'steel',E:200e6,nu:.3,density:78.5,alpha:12e-6,fy:355}];
+  p.sections=[{id:'SEC',name:'sec',family:'rect',b:.1,h:.2,A:.02,I:.00006666666666666667}];
+  p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:2,y:0}];
+  p.elements=[{id:'E1',type:'frame2d',n1:'N1',n2:'N2',materialId:'S',sectionId:'SEC',A:.02,I:.00006666666666666667,releases:{rz1:false,rz2:false},rotationalSprings:{rz1:null,rz2:null}}];
+  p.supports=[{nodeId:'N1',ux:true,uy:true,rz:true}];
+  p.loads=[{id:'L',caseId:'LC1',nodeId:'N2',fx:0,fy:-10,mz:0}];p.elementLoads=[];p.nodeSprings=[];p.settlements=[];
+  p.settings={...p.settings,analysisType:'corotational',analysisScenarioId:'LC1',nonlinearControlMode:'displacement',displacementControlNodeId:'N2',displacementControlDof:'uy',displacementControlTarget:-0.0005,displacementControlTolerance:1e-7,nonlinearSteps:5,nonlinearMaxIterations:30,nonlinearTolerance:1e-10,nonlinearLineSearch:true};
+  return p;
+}
+
+// 1) Elastic benchmark: lambda should recover the analytical small-displacement relation.
+{
+  const p=elasticCantilever(),r=solve(p,'LC1'),tip=r.displacements.find(x=>x.nodeId==='N2'),reaction=r.reactions.find(x=>x.nodeId==='N1'),EI=200e6*.00006666666666666667,L=2,P=10,unitDisp=P*L**3/(3*EI),expectedLambda=.0005/unitDisp;
+  assert(r.solverVersion==='0.16.0-exp',`pushover: solverVersion inesperada ${r.solverVersion}`);
+  assert(r.pushover?.enabled&&r.pushover.method==='displacement-control','pushover: metadados ausentes');
+  near(tip.uy,-.0005,2e-9,'pushover elástico: deslocamento controlado');
+  near(r.pushover.finalLoadFactor,expectedLambda,Math.max(5e-4,Math.abs(expectedLambda)*3e-3),'pushover elástico: fator de carga');
+  near(reaction.fy,10*r.pushover.finalLoadFactor,Math.max(1e-4,Math.abs(reaction.fy)*2e-4),'pushover elástico: reação');
+  assert(r.pushover.curve.length===5,'pushover elástico: número de pontos da curva');
+  assert(r.pushover.curve.every((x,i,a)=>i===0||Math.abs(x.controlledDisplacement)>=Math.abs(a[i-1].controlledDisplacement)-1e-12),'pushover elástico: caminho de deslocamento não monotônico');
+  console.log('v0.16 — pushover elástico OK','lambda=',r.pushover.finalLoadFactor,'uy [mm]=',tip.uy*1000);
+}
+
+function fiberCantilever(){
+  const p=emptyProject(),b=.2,h=.4,A=b*h,I=b*h**3/12;
+  p.materials=[{id:'S355',name:'S355',type:'steel',E:200e6,nu:.3,density:78.5,alpha:12e-6,fy:355,fu:510}];
+  p.sections=[{id:'R',name:'R200x400',family:'rect',b,h,A,I}];
+  p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:2,y:0}];
+  p.elements=[{id:'E1',type:'frame2d',n1:'N1',n2:'N2',materialId:'S355',sectionId:'R',A,I,releases:{rz1:false,rz2:false},rotationalSprings:{rz1:null,rz2:null},fiberHinges:{rz1:{enabled:true,hingeLength:.35,nFibers:100,hardeningRatio:.01},rz2:{enabled:false}}}];
+  p.supports=[{nodeId:'N1',ux:true,uy:true,rz:true}];
+  p.loads=[{id:'L',caseId:'LC1',nodeId:'N2',fx:0,fy:-1000,mz:0}];p.elementLoads=[];p.nodeSprings=[];p.settlements=[];
+  p.settings={...p.settings,analysisType:'corotational',analysisScenarioId:'LC1',nonlinearControlMode:'displacement',displacementControlNodeId:'N2',displacementControlDof:'uy',displacementControlTarget:-.04,displacementControlTolerance:1e-6,nonlinearSteps:20,nonlinearMaxIterations:50,nonlinearTolerance:1e-8,nonlinearLineSearch:true,materialCoupling:'embedded',materialMaxIterations:50,materialTolerance:2e-5,materialRelaxation:.7};
+  return p;
+}
+
+// 2) Fiber-hinge path: detect first yielding and preserve equilibrium on the controlled path.
+{
+  const p=fiberCantilever(),r=solve(p,'LC1'),tip=r.displacements.find(x=>x.nodeId==='N2'),rec=r.materialNonlinearity.records[0];
+  assert(r.solverVersion==='0.16.0-exp','pushover material: versão incorreta');
+  near(tip.uy,-.04,5e-7,'pushover material: deslocamento final');
+  assert(r.pushover.firstYield?.step>0,'pushover material: primeira plastificação não detectada');
+  assert(r.pushover.curve.some(x=>x.yieldedHingeCount>0),'pushover material: curva não registrou rótula plastificada');
+  assert(rec.yieldedFibers>0,'pushover material: estado final deveria possuir fibras escoadas');
+  assert(r.materialNonlinearity.coupling==='embedded-local-newton'&&r.materialNonlinearity.outerIterations===0,'pushover material: acoplamento embutido ausente');
+  assert(Number.isFinite(r.pushover.finalLoadFactor)&&r.pushover.finalLoadFactor>0,'pushover material: fator final inválido');
+  console.log('v0.16 — pushover com rótula de fibras OK','lambda=',r.pushover.finalLoadFactor,'firstYield=',r.pushover.firstYield.step,'yielded=',rec.yieldedFibers);
+}
+
+// 3) A restrained control DOF must fail explicitly.
+{
+  const p=elasticCantilever();p.settings.displacementControlNodeId='N1';p.settings.displacementControlDof='uy';let failed=false;
+  try{solve(p,'LC1')}catch(e){failed=String(e?.message||e).includes('DOF livre')||String(e?.message||e).includes('restringido')}
+  assert(failed,'pushover: DOF restringido deveria ser recusado');
+  console.log('v0.16 — validação do DOF controlado OK');
+}
+
+console.log('Todos os smoke tests de pushover por controle de deslocamento do AstraStruct v0.16 passaram.');
+''')
+          PY
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Validate modules
+        run: npm run check
+      - name: Run structural regression suite
+        run: npm test
+      - name: Build application
+        run: npm run build
+      - name: Commit validated core
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/src/solver/corotational2d.js web/src/solver/materialNonlinear2d.js web/src/solver/index.js web/src/core/model.js web/src/solver/corotationalPostprocess.js tests/pushover-smoke.mjs package.json
+          if ! git diff --cached --quiet; then
+            git commit -m "feat: add displacement-control pushover core"
+            git push origin HEAD:feat/v016-displacement-control-pushover
+          fi

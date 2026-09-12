@@ -15,6 +15,7 @@ export const SECTIONS = [
   { id: 'rc_30x50', name: 'RC retangular 30 × 50 cm', family: 'rect', b: 0.30, h: 0.50, A: 0.150, I: 0.003125 },
   { id: 'rc_30x60', name: 'RC retangular 30 × 60 cm', family: 'rect', b: 0.30, h: 0.60, A: 0.180, I: 0.005400 },
   { id: 'steel_generic', name: 'Aço — seção genérica', family: 'steel', A: 0.012, I: 0.000220 },
+  { id: 'steel_space_demo', name: 'Aço — seção espacial demonstrativa', family: 'steel3d', A: 0.012, Iy: 0.000180, Iz: 0.000220, J: 0.000030, I: 0.000220 },
   { id: 'steel_i_400x200_demo', name: 'Aço — perfil I 400 × 200 mm (exemplo)', family: 'i', h: 0.400, b: 0.200, tw: 0.010, tf: 0.016, A: 0.010080, I: 0.00027759616 },
   { id: 'truss_generic', name: 'Barra axial — seção genérica', family: 'truss', A: 0.004, I: 0 }
 ];
@@ -174,7 +175,7 @@ export function normalizeProject(input) {
     }
     return out;
   });
-  p.settlements = p.settlements.map(s => ({ ...s, caseId: s.caseId || firstCaseId, ux: Number(s.ux)||0, uy: Number(s.uy)||0, rz: Number(s.rz)||0 }));
+  p.settlements = p.settlements.map(s => ({ ...s, caseId: s.caseId || firstCaseId, ux: Number(s.ux)||0, uy: Number(s.uy)||0, uz: Number(s.uz)||0, rx: Number(s.rx)||0, ry: Number(s.ry)||0, rz: Number(s.rz)||0 }));
   p.nodeSprings = p.nodeSprings.map(s => ({ ...s, id: s.id || uid('SPR'), kx: Math.max(0, Number(s.kx)||0), ky: Math.max(0, Number(s.ky)||0), kr: Math.max(0, Number(s.kr)||0) }));
   p.nodalMasses = p.nodalMasses.map(m => ({ ...m, id: m.id || uid('MASS'), mx: Math.max(0, Number(m.mx)||0), my: Math.max(0, Number(m.my)||0), mr: Math.max(0, Number(m.mr)||0) })).filter(m=>m.nodeId&&(m.mx>0||m.my>0||m.mr>0));
   p.materials = p.materials.map(m => ({ ...m, alpha: Number.isFinite(Number(m.alpha)) ? Number(m.alpha) : defaultAlpha(m.type) }));
@@ -195,6 +196,9 @@ export function normalizeProject(input) {
     ...s,
     baseUxValue: Number(s.baseUxValue) || 0,
     baseUyValue: Number(s.baseUyValue) || 0,
+    baseUzValue: Number(s.baseUzValue) || 0,
+    baseRxValue: Number(s.baseRxValue) || 0,
+    baseRyValue: Number(s.baseRyValue) || 0,
     baseRzValue: Number(s.baseRzValue) || 0
   }));
 
@@ -223,6 +227,16 @@ export function makeFrameElement({ id = uid('E'), n1, n2, materialId = 'concrete
 export function makeTrussElement({ id = uid('E'), n1, n2, materialId = 'steel355', sectionId = 'truss_generic', label = 'Treliça 2D', A } = {}) {
   const section = SECTIONS.find(s => s.id === sectionId) || SECTIONS.find(s => s.id === 'truss_generic');
   return { id, type: 'truss2d', n1, n2, materialId, sectionId, A: A ?? section.A, I: 0, releases: { rz1: true, rz2: true }, rotationalSprings: { rz1: 0, rz2: 0 }, label };
+}
+
+export function makeFrame3DElement({ id = uid('E'), n1, n2, materialId = 'steel355', sectionId = 'steel_space_demo', label = 'Frame 3D', A, Iy, Iz, J, orientation } = {}) {
+  const section = SECTIONS.find(s => s.id === sectionId) || SECTIONS.find(s => s.id === 'steel_space_demo') || SECTIONS[0];
+  return { id, type: 'frame3d', n1, n2, materialId, sectionId, A: A ?? section.A, Iy: Iy ?? section.Iy ?? section.I, Iz: Iz ?? section.Iz ?? section.I, J: J ?? section.J, orientation: orientation || undefined, label };
+}
+
+export function makeTruss3DElement({ id = uid('E'), n1, n2, materialId = 'steel355', sectionId = 'truss_generic', label = 'Treliça 3D', A } = {}) {
+  const section = SECTIONS.find(s => s.id === sectionId) || SECTIONS.find(s => s.id === 'truss_generic') || SECTIONS[0];
+  return { id, type: 'truss3d', n1, n2, materialId, sectionId, A: A ?? section.A, label };
 }
 
 export function demoFrame() {
@@ -264,4 +278,18 @@ export function demoLoadCases() {
   p.elementLoads=[{id:'EG1',caseId:'G',elementId:'E2',kind:'uniform',qx:0,qy:-8}];
   p.loadCombinations=[{id:'COMB1',name:'Combinação customizada demonstrativa',type:'custom',terms:[{caseId:'G',factor:1.2},{caseId:'Q',factor:1.5}]}];
   p.settings.activeLoadCaseId='G';p.settings.analysisScenarioId='COMB1';return p;
+}
+
+
+export function demoSpatialFrame() {
+  const p=emptyProject();p.name='Pórtico espacial 3D demonstrativo';
+  p.nodes=[{id:'N1',x:0,y:0,z:0},{id:'N2',x:0,y:0,z:3},{id:'N3',x:4,y:0,z:3},{id:'N4',x:4,y:2.5,z:3}];
+  p.elements=[
+    makeFrame3DElement({id:'E1',n1:'N1',n2:'N2',label:'Pilar espacial'}),
+    makeFrame3DElement({id:'E2',n1:'N2',n2:'N3',label:'Viga X'}),
+    makeFrame3DElement({id:'E3',n1:'N3',n2:'N4',label:'Viga Y',orientation:{up:[0,0,1]}})
+  ];
+  p.supports=[{nodeId:'N1',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}];
+  p.loads=[{id:'L3D',caseId:'LC1',nodeId:'N4',fx:12,fy:-8,fz:-25,mx:2,my:0,mz:1}];
+  p.settings.analysisType='linear';p.settings.analysisScenarioId='LC1';return normalizeProject(p);
 }

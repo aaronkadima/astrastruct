@@ -36,6 +36,9 @@ export function classifyElementSet(project = {}) {
   if (types.size === 1 && types.has('truss2d')) return 'truss2d';
   if (types.size === 1 && types.has('frame2d')) return 'frame2d';
   if ([...types].every(t => t === 'frame2d' || t === 'truss2d')) return 'mixed2d';
+  if (types.size === 1 && types.has('truss3d')) return 'truss3d';
+  if (types.size === 1 && types.has('frame3d')) return 'frame3d';
+  if ([...types].every(t => t === 'frame3d' || t === 'truss3d')) return 'mixed3d';
   return 'unsupported';
 }
 
@@ -55,4 +58,23 @@ registerElementType({
   dofsPerNode: ['ux','uy','rz'],
   nodeCount: 2,
   capabilities: { linear: true, pdelta: true, corotational: true, dynamics: true },
+});
+
+
+registerElementType({
+  type: 'truss3d',
+  label: 'Treliça 3D',
+  dimension: '3d',
+  dofsPerNode: ['ux','uy','uz'],
+  nodeCount: 2,
+  capabilities: { linear: true, pdelta: false, corotational: false, dynamics: false },
+});
+
+registerElementType({
+  type: 'frame3d',
+  label: 'Frame 3D Euler–Bernoulli',
+  dimension: '3d',
+  dofsPerNode: ['ux','uy','uz','rx','ry','rz'],
+  nodeCount: 2,
+  capabilities: { linear: true, pdelta: false, corotational: false, dynamics: false },
 });

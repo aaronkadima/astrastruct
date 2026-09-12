@@ -48,7 +48,7 @@ function saveNz(){
 function exportJson(){const p=currentProject();if(p)download(`${slug(p.name)}.json`,JSON.stringify(p,null,2),'application/json')}
 function openFile(file:File){const r=new FileReader();r.onload=()=>{try{const raw=JSON.parse(String(r.result||''));const project=raw?.format==='AstraStruct NZ'&&raw.project?raw.project:raw;if(!project||!Array.isArray(project.nodes)||!Array.isArray(project.elements))throw new Error('estrutura de projeto inválida');localStorage.setItem(STORAGE_KEY,JSON.stringify(project));location.reload()}catch(e:any){alert(`Não foi possível abrir o arquivo: ${e?.message||e}`)}};r.readAsText(file)}
 
-function visible<T extends Element>(nodes:NodeListOf<T>|T[]){return [...nodes].find(el=>{const r=(el as HTMLElement|SVGElement).getBoundingClientRect();const s=getComputedStyle(el);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'})||null}
+function visible<T extends Element>(nodes:NodeListOf<T>|T[]){return [...nodes].find(el=>{const r=el.getBoundingClientRect();const s=getComputedStyle(el);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'})||null}
 function inlineSvgStyles(source:Element,clone:Element){
   const props=['fill','stroke','stroke-width','stroke-dasharray','stroke-linecap','stroke-linejoin','opacity','font-family','font-size','font-weight','font-style','text-anchor','paint-order'];
   const walk=(s:Element,c:Element)=>{const cs=getComputedStyle(s);for(const p of props){const v=cs.getPropertyValue(p);if(v)c.setAttribute(p,v)}const sa=[...s.children],ca=[...c.children];for(let i=0;i<Math.min(sa.length,ca.length);i++)walk(sa[i],ca[i])};walk(source,clone)

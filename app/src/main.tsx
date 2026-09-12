@@ -14,6 +14,7 @@ import './unified-toolbar.css';
 import './scientific-export.css';
 import './workspaceChrome.css';
 import './context-toolbar.css';
+import './spatial-inspector.css';
 import './modernShell';
 import './scientificExportPanel';
 import './workspaceChrome';

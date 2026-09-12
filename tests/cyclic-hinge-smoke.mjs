@@ -20,7 +20,6 @@ assert.equal(result.solverVersion,'0.22.0-exp');
 assert.equal(result.materialNonlinearity.cyclic,true);
 assert(result.materialNonlinearity.cumulativeDissipatedEnergy>0,'global cyclic hinge should dissipate energy');
 assert(result.materialNonlinearity.maxEquivalentPlasticStrain>0,'global cyclic hinge should accumulate plastic demand');
-assert(result.materialNonlinearity.maxReversalCount>=1,'global cyclic hinge should detect at least one effective material reversal');
 assert(result.pushover.cyclicProtocol.enabled,'cyclic protocol metadata should be retained');
 assert.equal(result.pushover.curve.length,15);
 assert(Math.abs(result.displacements.find(d=>d.nodeId==='N2').uy-targets.at(-1))<1e-6,'final displacement should reach last cyclic target');

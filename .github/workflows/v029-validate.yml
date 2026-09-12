@@ -6,6 +6,7 @@ on:
     paths:
       - web/src/solver/corotational3d.js
       - tests/corotational3d-v029-smoke.mjs
+      - tests/spatial3d-integration-v026-smoke.mjs
       - scripts/tmp_v029_patch.py
       - .github/workflows/v029-validate.yml
   workflow_dispatch:

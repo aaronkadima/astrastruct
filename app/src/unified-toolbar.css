@@ -43,7 +43,7 @@
 .canvas-white .grid-lines line{stroke:#e1e4e8!important}
 .canvas-white .node-label,.canvas-white .element-label,.canvas-white .model-canvas text{paint-order:stroke;stroke:#fff!important;stroke-width:3px!important}
 .canvas-white .node-label{fill:#243b50!important}.canvas-white .element-label{fill:#315f83!important}
-.canvas-white .spatial3d-shell,.canvas-white .spatial3d-canvas{background:#fff!important}
+.canvas-white .spatial3d-shell,.canvas-white .spatial3d-canvas{background:#fff!important;filter:none!important}
 
 .canvas-black .viewport,.canvas-black .model-canvas{background:#101113!important}
 .canvas-black .viewport{box-shadow:inset 0 0 0 1px #34373b!important}
@@ -55,6 +55,7 @@
 .canvas-black .load line{stroke:#ff7681!important}.canvas-black .load path{fill:#ff7681!important}.canvas-black .load text{fill:#ffadb4!important}
 .canvas-black .support{stroke:#b5c0c9!important;fill:#b5c0c9!important}.canvas-black .deformed{stroke:#6fe0c7!important}
 .canvas-black .spatial3d-shell,.canvas-black .spatial3d-canvas{background:#101113!important}
+.canvas-black .spatial3d-canvas{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(1.05)!important}
 
 @media(max-width:1100px){
   :root{--toolbar-h:50px}

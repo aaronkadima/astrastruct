@@ -11,7 +11,9 @@ import './buckling.css';
 import './modern.css';
 import './modern-layout-fix.css';
 import './unified-toolbar.css';
+import './scientific-export.css';
 import './modernShell';
+import './scientificExportPanel';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('AstraStruct: elemento #root não encontrado.');

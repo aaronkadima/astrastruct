@@ -4,7 +4,7 @@ import { solve } from '../../web/src/solver/index.js';
 
 type Props={project:any;result:any;onClose:()=>void};
 const fmt=(v:any,d=4)=>{const n=Number(v);if(!Number.isFinite(n))return'—';const a=Math.abs(n);return a>=1e4||(a>0&&a<1e-4)?n.toExponential(3):n.toFixed(d)};
-const maxTranslation=(rows:any[]=[])=>(Math.max(0,...rows.map(d=>Math.hypot(Number(d.ux)||0,Number(d.uy)||0)))*1000);
+const maxTranslation=(rows:any[]|null|undefined)=>Math.max(0,...(Array.isArray(rows)?rows:[]).map(d=>Math.hypot(Number(d.ux)||0,Number(d.uy)||0)))*1000;
 function extrema(stations:any[],field:string){const values=stations.map(s=>Number(s[field])).filter(Number.isFinite);return values.length?{min:Math.min(...values),max:Math.max(...values),abs:Math.max(...values.map(Math.abs))}:{min:NaN,max:NaN,abs:NaN}}
 function pointSummary(e:any){const pts=e.referenceLoad?.points||[];return pts.length?pts.map((p:any)=>`x/L=${fmt(p.xi,3)}: (${fmt(p.px,2)}, ${fmt(p.py,2)}) kN`).join('; '):'—'}
 function hasThermal(e:any){const t=e?.thermal||{};return Math.abs(Number(t.dT)||0)+Math.abs(Number(t.dTGradient)||0)>1e-12}

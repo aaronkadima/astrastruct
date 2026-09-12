@@ -4,6 +4,17 @@ async function storedProject(page:Page){
   return page.evaluate(()=>{const raw=localStorage.getItem('astrastruct.project');return raw?JSON.parse(raw):null});
 }
 
+async function openCommand(page:Page,label:string){
+  const width=page.viewportSize()?.width||1280;
+  if(width<=1100){
+    const more=page.locator('button[aria-label="Mais comandos"]:visible').first();await expect(more).toBeVisible();await more.click();
+    const command=page.locator(`.command-sheet button[aria-label="${label}"]:visible`).first();await expect(command).toBeVisible();await command.click();return;
+  }
+  const direct=page.locator(`button[aria-label="${label}"]:visible`).first();
+  if(await direct.isVisible().catch(()=>false)){await direct.click();return}
+  const library=page.locator('.library-tools button').filter({hasText:label}).first();await expect(library).toBeVisible();await library.click();
+}
+
 async function installSteelCantilever(page:Page){
   await page.goto('./');
   await page.evaluate(()=>{
@@ -30,7 +41,7 @@ async function openInspector(page:Page){
   await editor.scrollIntoViewIfNeeded();await expect(editor).toBeVisible();
 }
 
-test('v0.14 fiber hinge is configured in Inspector and solved by material nonlinear kernel',async({page})=>{
+test('v0.14 fiber hinge is configured, solved and traced through postprocess/report',async({page})=>{
   await installSteelCantilever(page);
   await expect(page.getByTestId('astra-app')).toBeVisible();
   const canvas=page.getByTestId('model-canvas');await expect(canvas).toBeVisible();const box=await canvas.boundingBox();if(!box)throw new Error('Canvas sem geometria');await page.mouse.click(box.x+box.width/2,box.y+box.height/2);
@@ -50,5 +61,16 @@ test('v0.14 fiber hinge is configured in Inspector and solved by material nonlin
   await expect(results).toContainText('frame2d-corotational-fiber-hinge-experimental');
   await expect(page.getByTestId('nonlinear-result-metric')).toContainText('convergiu');
   await expect(page.getByTestId('deformed-overlay')).toBeVisible();
+  await expect(page.locator('[role="alert"]')).toHaveCount(0);
+
+  await openCommand(page,'Diagramas/envelopes');
+  const post=page.getByTestId('panel-nonlinear-postprocess');await expect(post).toBeVisible();
+  const materialNote=page.getByTestId('material-postprocess-note');await expect(materialNote).toContainText('Não linearidade material v0.14');await expect(materialNote).toContainText('fibras escoadas=');await expect(materialNote).toContainText('equilíbrio local N–M');await expect(post).toContainText('0.14.0-exp');
+  await post.locator('button[aria-label="Fechar"]').click();
+
+  await openCommand(page,'Relatório técnico');
+  const report=page.getByTestId('panel-nonlinear-report');await expect(report).toBeVisible();await expect(report).toContainText('0.14.0-exp');
+  const materialReport=page.getByTestId('material-nonlinear-report');await expect(materialReport).toContainText('aço bilinear monotônico');await expect(materialReport).toContainText('2200');await expect(materialReport).toContainText('100');
+  await expect(page.getByTestId('nonlinear-report-limitations')).toContainText('plasticidade distribuída');
   await expect(page.locator('[role="alert"]')).toHaveCount(0);
 });

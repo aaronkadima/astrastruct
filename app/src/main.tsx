@@ -8,6 +8,8 @@ import './analysis-v13.css';
 import './modeling.css';
 import './results.css';
 import './buckling.css';
+import './modern.css';
+import './modernShell';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('AstraStruct: elemento #root não encontrado.');

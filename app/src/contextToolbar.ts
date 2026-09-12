@@ -1,3 +1,5 @@
+export {};
+
 const ROOT='.inspector-panel';
 
 type InspectorEntity={panel:HTMLElement;id:string;type:string;isNode:boolean;is3d:boolean};

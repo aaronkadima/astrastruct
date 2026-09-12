@@ -41,7 +41,7 @@ async function newProject(page:Page){
   if(await visible(direct)) await direct.click();
   else {
     await page.getByRole('button',{name:'Arquivo',exact:true}).click();
-    await page.getByRole('menuitem',{name:'Novo projeto',exact:true}).click();
+    await page.getByRole('menuitem',{name:'Novo projeto'}).click();
   }
   await expect.poll(async()=>(await storedCounts(page)).nodes).toBe(0);
   await expect.poll(async()=>(await storedCounts(page)).elements).toBe(0);

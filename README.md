@@ -1,10 +1,10 @@
 # AstraStruct
 
 
-> **v0.22 experimental:** história constitutiva cíclica agora também nas rótulas concentradas de fibras de aço, com retorno plástico, endurecimento combinado, efeito Bauschinger, commit/rollback e demanda plástica acumulada.
+> **v0.23 experimental:** fundação de dinâmica estrutural linear com massas consistente/concentrada, análise modal, participação de massa, amortecimento de Rayleigh e integração temporal Newmark-β.
 AstraStruct é uma plataforma web **assembly-first** para modelagem, análise, dimensionamento e futura verificação/detalhamento de estruturas de concreto armado e aço.
 
-> **Estado atual — v0.22.0 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
+> **Estado atual — v0.23.0 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
 
 ## Executar online
 
@@ -35,6 +35,8 @@ A interface React/Vite é construída, testada e publicada automaticamente em `d
 - documentação metodológica da plasticidade distribuída em `docs/distributed-plasticity-v020.md`;
 - documentação da história constitutiva cíclica, Bauschinger e commit/rollback distribuídos em `docs/cyclic-hysteresis-v021.md`;
 - documentação das rótulas concentradas cíclicas e demanda acumulada em `docs/cyclic-hinges-v022.md`;
+- **dinâmica estrutural linear v0.23 com Kφ=ω²Mφ, massas modais efetivas, Rayleigh e Newmark average-acceleration**;
+- documentação do núcleo dinâmico em `docs/structural-dynamics-v023.md`;
 - molas nodais `kx`, `ky`, `kr` no solver Linear/P‑Delta;
 - casos de ação e combinações customizadas, incluindo escalonamento de `followerEnd` antes da solução não linear;
 - análise Linear, P‑Delta ou Geometricamente Não Linear co‑rotacional selecionável;

@@ -19,6 +19,7 @@ jobs:
           from pathlib import Path
           for name in ['app/src/AnalysisPanelV13.tsx','app/src/DynamicsPostprocessPanel.tsx']:
               p=Path(name);p.write_text(p.read_text().replace('\\"','"'))
+          p=Path('tests/dynamics-smoke.mjs');p.write_text(p.read_text().replace("'0.23.0-exp'","'0.24.0-exp'"))
           PY
       - run: npm install
       - name: Typecheck and module validation
@@ -37,7 +38,7 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add web/src/core/model.js web/src/solver/dynamics2d.js web/src/solver/index.js app/src/AnalysisPanelV13.tsx app/src/App.tsx app/src/DynamicsPostprocessPanel.tsx tests/seismic-spectrum-smoke.mjs tests/e2e/seismic-spectrum.spec.ts tests/e2e/dynamics.spec.ts package.json README.md docs/seismic-spectrum-v024.md
+          git add web/src/core/model.js web/src/solver/dynamics2d.js web/src/solver/index.js app/src/AnalysisPanelV13.tsx app/src/App.tsx app/src/DynamicsPostprocessPanel.tsx tests/dynamics-smoke.mjs tests/seismic-spectrum-smoke.mjs tests/e2e/seismic-spectrum.spec.ts tests/e2e/dynamics.spec.ts package.json README.md docs/seismic-spectrum-v024.md
           if ! git diff --cached --quiet; then
             git commit -m "feat: add AstraStruct v0.24 seismic spectrum"
             git push

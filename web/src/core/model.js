@@ -36,7 +36,7 @@ export function emptyProject() {
   return {
     id: uid('project'), name: 'Novo projeto', version: 13, units: 'kN-m-MPa',
     nodes: [], elements: [], materials: clone(MATERIALS), sections: clone(SECTIONS), supports: [],
-    loads: [], elementLoads: [], settlements: [], nodeSprings: [],
+    loads: [], elementLoads: [], settlements: [], nodeSprings: [], nodalMasses: [],
     loadCases: [{ id: 'LC1', name: 'Caso 1', type: 'user' }],
     loadCombinations: [{ id: 'COMB1', name: 'Combinação customizada 1', type: 'custom', terms: [{ caseId: 'LC1', factor: 1.0 }] }],
     connections: [], results: null,
@@ -50,6 +50,7 @@ export function emptyProject() {
       arcLengthMonitorNodeId: null, arcLengthMonitorDof: 'uy', arcLengthInitialLoadIncrement: 0.05, arcLengthInitialSign: 1, arcLengthTargetIterations: 6, arcLengthMaxCutbacks: 8, arcLengthMinRadiusFactor: 0.02, arcLengthMaxRadiusFactor: 4, arcLengthConstraintTolerance: 1e-6,
       stabilityTracking: true, stabilityEigenTolerance: 0.05, stabilityAsymmetryTolerance: 1e-6, stabilityMaxDofs: 120, stabilityModeCount: 4, stabilityClusterTolerance: 0.03, stabilityMacThreshold: 0.25, branchExploreEnabled: false, branchExploreAmplitude: 0.08, branchExploreMaxIterations: 30, branchExploreMaxEvents: 3, branchSwitchEnabled: false, branchSwitchSign: 1, branchSwitchAmplitude: 0.08,
       materialMaxIterations: 30, materialTolerance: 1e-6, materialRelaxation: 1, materialCoupling: 'embedded',
+      dynamicMassFormulation: 'consistent', modalModes: 6, dynamicDampingRatio: 0.02, dynamicRayleighMode1: 1, dynamicRayleighMode2: 2, dynamicTimeStep: 0.01, dynamicDuration: 1, dynamicMonitorNodeId: null, dynamicMonitorDof: 'uy', dynamicHistoryPoints: [{t:0,scale:0},{t:0.1,scale:1},{t:1,scale:0}],
       imperfection: { enabled: false, source: 'bucklingMode', scenarioId: null, mode: 1, amplitudeMm: 10 }
     },
     meta: { solverVersion: '0.13.6-exp', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
@@ -67,12 +68,13 @@ export function normalizeProject(input) {
   p.elementLoads = Array.isArray(p.elementLoads) ? p.elementLoads : [];
   p.settlements = Array.isArray(p.settlements) ? p.settlements : [];
   p.nodeSprings = Array.isArray(p.nodeSprings) ? p.nodeSprings : [];
+  p.nodalMasses = Array.isArray(p.nodalMasses) ? p.nodalMasses : [];
   p.loadCases = Array.isArray(p.loadCases) && p.loadCases.length ? p.loadCases : clone(base.loadCases);
   p.loadCombinations = Array.isArray(p.loadCombinations) ? p.loadCombinations : clone(base.loadCombinations);
   p.connections = Array.isArray(p.connections) ? p.connections : [];
   p.settings = { ...base.settings, ...(p.settings || {}), imperfection: { ...base.settings.imperfection, ...(p.settings?.imperfection || {}) } };
   const analysisType=String(p.settings.analysisType||'linear');
-  p.settings.analysisType = analysisType==='pdelta'||analysisType==='corotational' ? analysisType : 'linear';
+  p.settings.analysisType = ['pdelta','corotational','modal','time-history'].includes(analysisType) ? analysisType : 'linear';
   p.settings.pDeltaMaxIterations = Math.max(2, Math.min(100, Math.round(Number(p.settings.pDeltaMaxIterations) || 30)));
   p.settings.pDeltaTolerance = Math.max(1e-12, Number(p.settings.pDeltaTolerance) || 1e-8);
   p.settings.nonlinearSteps = Math.max(1, Math.min(200, Math.round(Number(p.settings.nonlinearSteps) || 20)));
@@ -115,6 +117,17 @@ export function normalizeProject(input) {
   p.settings.materialTolerance = Math.max(1e-10, Number(p.settings.materialTolerance) || 1e-6);
   p.settings.materialRelaxation = Math.max(.2, Math.min(1, Number(p.settings.materialRelaxation) || 1));
   p.settings.materialCoupling = p.settings.materialCoupling === 'outer' ? 'outer' : 'embedded';
+  p.settings.dynamicMassFormulation = p.settings.dynamicMassFormulation === 'lumped' ? 'lumped' : 'consistent';
+  p.settings.modalModes = Math.max(1, Math.min(20, Math.round(Number(p.settings.modalModes) || 6)));
+  p.settings.dynamicDampingRatio = Math.max(0, Math.min(.30, Number(p.settings.dynamicDampingRatio) || 0));
+  p.settings.dynamicRayleighMode1 = Math.max(1, Math.min(20, Math.round(Number(p.settings.dynamicRayleighMode1) || 1)));
+  p.settings.dynamicRayleighMode2 = Math.max(1, Math.min(20, Math.round(Number(p.settings.dynamicRayleighMode2) || 2)));
+  p.settings.dynamicTimeStep = Math.max(1e-5, Number(p.settings.dynamicTimeStep) || .01);
+  p.settings.dynamicDuration = Math.max(p.settings.dynamicTimeStep, Number(p.settings.dynamicDuration) || 1);
+  p.settings.dynamicMonitorNodeId = p.settings.dynamicMonitorNodeId || null;
+  p.settings.dynamicMonitorDof = ['ux','uy','rz'].includes(p.settings.dynamicMonitorDof) ? p.settings.dynamicMonitorDof : 'uy';
+  p.settings.dynamicHistoryPoints = (Array.isArray(p.settings.dynamicHistoryPoints)?p.settings.dynamicHistoryPoints:[]).map(x=>({t:Number(x?.t),scale:Number(x?.scale)})).filter(x=>Number.isFinite(x.t)&&Number.isFinite(x.scale)).sort((a,b)=>a.t-b.t).slice(0,200);
+  if(p.settings.dynamicHistoryPoints.length<2)p.settings.dynamicHistoryPoints=[{t:0,scale:0},{t:.1,scale:1},{t:1,scale:0}];
   p.settings.imperfection.enabled = !!p.settings.imperfection.enabled;
   p.settings.imperfection.source = p.settings.imperfection.source === 'bucklingMode' ? 'bucklingMode' : 'bucklingMode';
   p.settings.imperfection.scenarioId = p.settings.imperfection.scenarioId || null;
@@ -136,6 +149,7 @@ export function normalizeProject(input) {
   });
   p.settlements = p.settlements.map(s => ({ ...s, caseId: s.caseId || firstCaseId, ux: Number(s.ux)||0, uy: Number(s.uy)||0, rz: Number(s.rz)||0 }));
   p.nodeSprings = p.nodeSprings.map(s => ({ ...s, id: s.id || uid('SPR'), kx: Math.max(0, Number(s.kx)||0), ky: Math.max(0, Number(s.ky)||0), kr: Math.max(0, Number(s.kr)||0) }));
+  p.nodalMasses = p.nodalMasses.map(m => ({ ...m, id: m.id || uid('MASS'), mx: Math.max(0, Number(m.mx)||0), my: Math.max(0, Number(m.my)||0), mr: Math.max(0, Number(m.mr)||0) })).filter(m=>m.nodeId&&(m.mx>0||m.my>0||m.mr>0));
   p.materials = p.materials.map(m => ({ ...m, alpha: Number.isFinite(Number(m.alpha)) ? Number(m.alpha) : defaultAlpha(m.type) }));
   p.elements = p.elements.map(e => {
     const releases = { rz1: false, rz2: false, ...(e.releases || {}) };

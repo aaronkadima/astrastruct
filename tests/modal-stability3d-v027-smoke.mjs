@@ -16,7 +16,7 @@ const G0=9.80665,E=200e6,gamma=78.5,rho=gamma/G0,A=.01,L=3;
 // 2) A spatial cantilever yields finite 3D modes and directional participation in X/Y/Z.
 {
   const p={nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:2.5,y:1.2,z:.8}],elements:[{id:'E1',type:'frame3d',n1:'N1',n2:'N2',materialId:'S',sectionId:'SEC',A:.012,Iy:7e-5,Iz:9e-5,J:2e-5,orientation:{up:[0,0,1]}}],materials:[{id:'S',E,nu:.3,density:gamma}],sections:[{id:'SEC',A:.012,Iy:7e-5,Iz:9e-5,J:2e-5}],supports:[{nodeId:'N1',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],loads:[],elementLoads:[],settlements:[],nodalMasses:[]};
-  const r=solveModal3D(p,{modes:6,massFormulation:'consistent'});assert.ok(r.modes.length>=4);assert.ok(r.modes.every((m,i)=>m.frequencyHz>0&&(i===0||m.frequencyHz>=r.modes[i-1].frequencyHz));assert.ok(r.modes.some(m=>m.participation.effectiveMassRatioZ>1e-4));assert.equal(r.dimension,'3d');
+  const r=solveModal3D(p,{modes:6,massFormulation:'consistent'});assert.ok(r.modes.length>=4);assert.ok(r.modes.every((m,i)=>m.frequencyHz>0&&(i===0||m.frequencyHz>=r.modes[i-1].frequencyHz)));assert.ok(r.modes.some(m=>m.participation.effectiveMassRatioZ>1e-4));assert.equal(r.dimension,'3d');
 }
 
 // 3) Mass and geometric matrices remain symmetric in both bending planes.

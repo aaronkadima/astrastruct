@@ -10,6 +10,6 @@
 .context-apply{height:30px;padding:0 10px;border:1px solid #557b9a;border-radius:4px;background:#3a607e;color:#f5f8fb;font-size:11.5px;font-weight:650;cursor:pointer;flex:0 0 auto}.context-apply:hover,.context-apply:focus-visible{background:#49789d;border-color:#85aecd;outline:none}.context-toolbar.is-applying{opacity:.72;pointer-events:none}
 .context-readonly{height:30px;display:flex;align-items:center;padding:0 8px;border:1px dashed #5a5d62;border-radius:4px;color:#aeb6bf;font-size:11px;white-space:nowrap}
 @media(max-width:1450px){.context-toolbar{max-width:430px}.context-toolbar .context-secondary{display:none!important}}
-@media(min-width:1101px) and (max-width:1450px){.context-toolbar[data-context-dimension="3d"] label:has([data-context-qz]){display:flex!important}}
+@media(min-width:1101px) and (max-width:1450px){.context-toolbar[data-context-dimension="3d"] label:has([data-context-fz]),.context-toolbar[data-context-dimension="3d"] label:has([data-context-qz]){display:flex!important}}
 @media(max-width:1100px){.context-toolbar{max-width:250px;margin-left:2px;padding-left:5px;gap:4px}.context-toolbar .context-secondary{display:none!important}.context-field>span{display:none}.context-field input[type=number]{width:58px}.context-field select{min-width:88px;max-width:100px}.context-badge{min-width:48px;padding:2px 5px}.context-apply{padding:0 8px}}
 @media(max-width:760px){.context-toolbar{display:none!important}}

@@ -8,13 +8,16 @@ import { activeFiberHinges, solveFrameCorotationalFiberHinges2D } from './materi
 import { solveModal2D, solveTimeHistory2D, solveResponseSpectrum2D } from './dynamics2d.js';
 import { resolveScenario } from './scenario.js';
 import { buildElementResponses } from './postprocess.js';
+import { classifyElementSet } from '../core/elementRegistry.js';
+import { attachResultContract } from '../core/contracts.js';
 
 function solveLinearModel(project) {
-  const types = new Set((project.elements || []).map(e => e.type));
-  if (types.size === 1 && types.has('truss2d')) return solveTruss2D(project);
-  if (types.size === 1 && types.has('frame2d')) return solveFrame2D(project);
-  if ([...types].every(t => t === 'frame2d' || t === 'truss2d')) return solveMixed2D(project);
-  throw new Error(`Tipos de elementos ainda não suportados pelo solver: ${[...types].join(', ')}`);
+  const elementSet = classifyElementSet(project);
+  if (elementSet === 'truss2d') return solveTruss2D(project);
+  if (elementSet === 'frame2d') return solveFrame2D(project);
+  if (elementSet === 'mixed2d') return solveMixed2D(project);
+  const types = [...new Set((project.elements || []).map(e => e.type))];
+  throw new Error(`Tipos de elementos ainda não suportados pelo solver: ${types.join(', ') || 'modelo vazio'}`);
 }
 
 function buildModalImperfection(project,scenarioId){
@@ -37,7 +40,7 @@ function solveStructuralModel(sourceProject,resolvedProject,scenarioId) {
   return solveLinearModel(resolvedProject);
 }
 
-export function solve(project, scenarioId) {
+function solveRaw(project, scenarioId) {
   const analysisType=project.settings?.analysisType||'linear',fiberHinges=activeFiberHinges(project),s=project.settings||{};
   if(analysisType==='modal'){
     if(fiberHinges.length)throw new Error('Dinâmica modal v0.25 é linear-elástica; desative as rótulas de fibras.');
@@ -68,4 +71,9 @@ export function solve(project, scenarioId) {
     analysisType: resolved.project.settings?.analysisType || 'linear',
     solverVersion: analysisType==='pdelta'?'0.12.0':'0.13.4-exp'
   };
+}
+
+
+export function solve(project, scenarioId) {
+  return attachResultContract(project, scenarioId, solveRaw(project, scenarioId));
 }

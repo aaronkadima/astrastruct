@@ -1,3 +1,7 @@
+import { migrateProject } from './migrations.js';
+import { analysisConfigFromSettings } from './analysisConfig.js';
+import { PRODUCT_VERSION, PROJECT_SCHEMA_VERSION, productMetadata } from './version.js';
+
 export const uid = (p = 'id') => `${p}_${Math.random().toString(36).slice(2, 9)}`;
 
 export const MATERIALS = [
@@ -34,7 +38,7 @@ export function sectionDepth(section) {
 
 export function emptyProject() {
   return {
-    id: uid('project'), name: 'Novo projeto', version: 13, units: 'kN-m-MPa',
+    id: uid('project'), name: 'Novo projeto', version: 13, schemaVersion: PROJECT_SCHEMA_VERSION, units: 'kN-m-MPa',
     nodes: [], elements: [], materials: clone(MATERIALS), sections: clone(SECTIONS), supports: [],
     loads: [], elementLoads: [], settlements: [], nodeSprings: [], nodalMasses: [],
     loadCases: [{ id: 'LC1', name: 'Caso 1', type: 'user' }],
@@ -53,12 +57,12 @@ export function emptyProject() {
       dynamicMassFormulation: 'consistent', modalModes: 6, dynamicDampingRatio: 0.02, dynamicRayleighMode1: 1, dynamicRayleighMode2: 2, dynamicTimeStep: 0.01, dynamicDuration: 1, dynamicMonitorNodeId: null, dynamicMonitorDof: 'uy', dynamicHistoryPoints: [{t:0,scale:0},{t:0.1,scale:1},{t:1,scale:0}], dynamicExcitationType: 'load-pattern', dynamicGroundMotionDirection: 'x', dynamicGroundMotionPoints: [{t:0,accelG:0},{t:0.05,accelG:0.15},{t:0.10,accelG:0},{t:0.15,accelG:-0.10},{t:0.20,accelG:0}], dynamicGroundMotionPointsY: [{t:0,accelG:0},{t:0.05,accelG:0.10},{t:0.10,accelG:0},{t:0.15,accelG:-0.06},{t:0.20,accelG:0}], groundMotionBaselineCorrection: 'linear', groundMotionTaperRatio: 0.02, groundMotionHighPassHz: 0, groundMotionLowPassHz: 0, groundMotionResampleDt: 0, groundMotionScaleFactor: 1, dynamicGroundMotionLibrary: [], responseSpectrumCombination: 'cqc', responseSpectrumDirectionalCombination: 'srss', responseSpectrumPeriodMin: 0.02, responseSpectrumPeriodMax: 4, responseSpectrumPeriodPoints: 80, responseSpectrumTargetPoints: [],
       imperfection: { enabled: false, source: 'bucklingMode', scenarioId: null, mode: 1, amplitudeMm: 10 }
     },
-    meta: { solverVersion: '0.13.6-exp', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+    meta: { solverVersion: '0.13.6-exp', productVersion: PRODUCT_VERSION, schemaVersion: PROJECT_SCHEMA_VERSION, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
   };
 }
 
 export function normalizeProject(input) {
-  const base = emptyProject(), p = { ...base, ...(input || {}) };
+  const base = emptyProject(), p = { ...base, ...migrateProject(input || {}) };
   p.nodes = Array.isArray(p.nodes) ? p.nodes : [];
   p.elements = Array.isArray(p.elements) ? p.elements : [];
   p.materials = Array.isArray(p.materials) && p.materials.length ? p.materials : clone(MATERIALS);
@@ -153,8 +157,11 @@ export function normalizeProject(input) {
   p.settings.imperfection.scenarioId = p.settings.imperfection.scenarioId || null;
   p.settings.imperfection.mode = Math.max(1, Math.min(12, Math.round(Number(p.settings.imperfection.mode) || 1)));
   p.settings.imperfection.amplitudeMm = Number.isFinite(Number(p.settings.imperfection.amplitudeMm)) && Number(p.settings.imperfection.amplitudeMm) > 0 ? Number(p.settings.imperfection.amplitudeMm) : 10;
-  p.meta = { ...base.meta, ...(p.meta || {}), solverVersion: '0.13.6-exp' };
-  p.version = 13;
+  p.analysis = analysisConfigFromSettings(p.settings);
+  p.schemaVersion = PROJECT_SCHEMA_VERSION;
+  p.meta = productMetadata({ ...base.meta, ...(p.meta || {}), solverVersion: '0.13.6-exp', updatedAt: new Date().toISOString() });
+  p.version = 13; // legacy compatibility marker; schemaVersion is authoritative.
+
 
   const firstCaseId = p.loadCases[0]?.id || 'LC1';
   p.loads = p.loads.map(l => ({ ...l, caseId: l.caseId || firstCaseId }));

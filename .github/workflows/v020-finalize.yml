@@ -1,0 +1,38 @@
+name: Finalize AstraStruct v0.20
+
+on:
+  push:
+    branches: [feat/v020-distributed-plasticity]
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Finalize README and remove temporary tooling
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('README.md'); t=p.read_text()
+          t=t.replace('> **v0.19 experimental:** estabilidade tangente multimodal sobre Arc-Length/Riks, rastreamento por MAC, agrupamento de modos quase degenerados, exploração bilateral ±φ e troca de ramo modal opcional.', '> **v0.20 experimental:** plasticidade distribuída de aço em frame2d por integração Gauss–Lobatto de seções de fibras, preservando os recursos Arc-Length/estabilidade multimodal da v0.19.', 1)
+          t=t.replace('> **Estado atual — v0.19.0 experimental:**', '> **Estado atual — v0.20.0 experimental:**', 1)
+          anchor='- **rótulas concentradas de fibras de aço v0.16 para seções retangulares, I/H e RHS, com equilíbrio local N–M, linearização tangente-afim e Newton constitutivo embutido em cada avaliação do equilíbrio global**;'
+          add=anchor+'\n- **plasticidade distribuída de aço v0.20 para frame2d, com 3/5 pontos Gauss–Lobatto, seções de fibras rect/I-H/RHS, propagação espacial do escoamento e tangente integrada BᵀDB; modelo displacement-based e monotônico**;'
+          if anchor in t and 'plasticidade distribuída de aço v0.20' not in t:t=t.replace(anchor,add,1)
+          if 'docs/distributed-plasticity-v020.md' not in t:
+              marker='- documentação metodológica da estabilidade multimodal em `docs/multimode-stability-v019.md`;'
+              if marker in t:t=t.replace(marker,marker+'\n- documentação metodológica da plasticidade distribuída em `docs/distributed-plasticity-v020.md`;',1)
+          p.write_text(t)
+          PY
+          rm -f .github/workflows/v020-core-validate.yml .github/workflows/v020-ui-validate.yml .github/workflows/v020-finalize.yml
+          rm -f tools/v020_core_patch.py tools/v020_ui_patch.py
+      - name: Commit final v0.20 branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs: finalize AstraStruct v0.20 distributed plasticity" || exit 0
+          git push

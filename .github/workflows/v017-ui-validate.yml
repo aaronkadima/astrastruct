@@ -23,6 +23,7 @@ jobs:
             sed -i 's/Modelo concentrado v0\.16:/Modelo concentrado v0.15:/' app/src/NonlinearReportPanel.tsx
             python tools/v017_ui_patch.py
           fi
+          sed -i 's/Não linearidade material v0\.16/Não linearidade material v0.17/' tests/e2e/material-nonlinear.spec.ts
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Validate modules
@@ -39,7 +40,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/src/AnalysisPanelV13.tsx app/src/NonlinearPostprocessPanel.tsx app/src/NonlinearReportPanel.tsx tests/e2e/arc-length.spec.ts README.md
+          git add app/src/AnalysisPanelV13.tsx app/src/NonlinearPostprocessPanel.tsx app/src/NonlinearReportPanel.tsx tests/e2e/arc-length.spec.ts tests/e2e/material-nonlinear.spec.ts README.md
           if git diff --cached --quiet; then exit 0; fi
           git commit -m "feat: add arc-length controls and equilibrium-path postprocess"
           git push

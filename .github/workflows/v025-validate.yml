@@ -13,7 +13,18 @@ jobs:
         with:
           node-version: 24
       - name: Apply v0.25 implementation
-        run: python scripts/tmp_v025_patch.py
+        run: |
+          python scripts/tmp_v025_patch.py
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('web/src/solver/dynamics2d.js')
+          s=p.read_text()
+          old="points=points.map((x,i)=>({t:x.t,accelG:values[i]*scaleFactor}));const processedStats=groundStats(points);"
+          new="points=points.map((x,i)=>({t:x.t,accelG:values[i]*scaleFactor}));if(taperRatio>0&&points.length){points[0].accelG=0;points[points.length-1].accelG=0}const processedStats=groundStats(points);"
+          if old not in s:
+              raise SystemExit('v0.25 tapered endpoint anchor missing')
+          p.write_text(s.replace(old,new))
+          PY
       - name: Install dependencies
         run: npm install
       - name: Typecheck and module validation

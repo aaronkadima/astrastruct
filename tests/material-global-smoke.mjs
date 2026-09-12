@@ -21,13 +21,17 @@ function steelCantilever({axial=0,moment=2200}={}){
 // equilibrar o momento de ponta e preservar o equilíbrio global.
 {
   const applied=2200,p=steelCantilever({moment:applied}),r=solve(p,'LC1');
-  assert(r.solverVersion==='0.14.0-exp',`v0.14 global: solverVersion inesperada ${r.solverVersion}`);
+  assert(r.solverVersion==='0.14.1-exp',`v0.14 global: solverVersion inesperada ${r.solverVersion}`);
   assert(r.materialNonlinearity?.enabled,'v0.14 global: metadado de não linearidade material ausente');
+  assert(r.materialNonlinearity.linearization==='tangent','v0.14.1 global: linearização tangente não foi ativada');
+  assert(String(r.materialNonlinearity.globalStrategy||'').includes('affine'),'v0.14.1 global: estratégia afim não registrada');
   assert(r.materialNonlinearity.hingeCount===1,'v0.14 global: contagem de rótulas incorreta');
   assert(r.materialNonlinearity.outerIterations>=2,'v0.14 global: iteração constitutiva externa não executada');
   const rec=r.materialNonlinearity.records[0],force=r.elementForces.find(x=>x.elementId==='E1'),conn=force.connectionRotations.find(x=>x.end===2),reaction=r.reactions.find(x=>x.nodeId==='N1');
   assert(conn?.type==='fiber-hinge','v0.14 global: ligação não foi marcada como fiber-hinge');
   assert(rec.yieldedFibers>0,'v0.14 global: benchmark deveria plastificar fibras');
+  assert(Number.isFinite(rec.appliedStiffness)&&rec.appliedStiffness>0,'v0.14.1 global: rigidez tangente aplicada inválida');
+  assert(Number.isFinite(rec.appliedOffsetMoment),'v0.14.1 global: termo afim M0 ausente');
   near(rec.constitutiveMoment,applied,Math.max(.15,Math.abs(applied)*5e-4),'v0.14 global: momento constitutivo');
   near(rec.elementMoment,rec.constitutiveMoment,Math.max(.15,Math.abs(applied)*5e-4),'v0.14 global: equilíbrio momento elemento-rótula');
   near(reaction.mz,-applied,Math.max(.2,Math.abs(applied)*5e-4),'v0.14 global: reação de momento');

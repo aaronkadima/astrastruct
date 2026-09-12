@@ -11,6 +11,7 @@ export const SECTIONS = [
   { id: 'rc_30x50', name: 'RC retangular 30 × 50 cm', family: 'rect', b: 0.30, h: 0.50, A: 0.150, I: 0.003125 },
   { id: 'rc_30x60', name: 'RC retangular 30 × 60 cm', family: 'rect', b: 0.30, h: 0.60, A: 0.180, I: 0.005400 },
   { id: 'steel_generic', name: 'Aço — seção genérica', family: 'steel', A: 0.012, I: 0.000220 },
+  { id: 'steel_i_400x200_demo', name: 'Aço — perfil I 400 × 200 mm (exemplo)', family: 'i', h: 0.400, b: 0.200, tw: 0.010, tf: 0.016, A: 0.010080, I: 0.00027759616 },
   { id: 'truss_generic', name: 'Barra axial — seção genérica', family: 'truss', A: 0.004, I: 0 }
 ];
 

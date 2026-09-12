@@ -84,7 +84,7 @@ test('context toolbar exposes quick node geometry and support editing',async({pa
 test('context toolbar switches to material and section controls for elements',async({page},testInfo)=>{
   test.skip(testInfo.project.name!=='desktop-chromium','desktop contextual toolbar');
   await page.goto('./');
-  await page.locator('line.member').first().click();
+  await page.locator('line.member').first().dispatchEvent('pointerdown',{button:0,pointerType:'mouse'});
   const context=page.getByTestId('context-toolbar');
   await expect(context).toBeVisible();
   await expect(context).toHaveAttribute('data-context-kind','element');

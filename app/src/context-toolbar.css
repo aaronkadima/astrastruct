@@ -1,0 +1,14 @@
+.context-toolbar{height:34px;min-width:0;max-width:min(620px,44vw);display:flex;align-items:center;gap:5px;flex:0 1 auto;margin-left:5px;padding-left:7px;border-left:1px solid #55575b;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;color:#dce3eb;font-size:11.5px}
+.context-toolbar[hidden]{display:none!important}
+.context-badge{height:30px;min-width:54px;display:grid;align-content:center;padding:2px 7px;border:1px solid #59636e;border-radius:4px;background:#2e3034;line-height:1.05;flex:0 0 auto}
+.context-badge b{font-size:12px;color:#f1f4f7;font-weight:700}.context-badge small{font-size:9px;color:#aeb6bf;text-transform:uppercase;letter-spacing:.035em}
+.context-field{height:30px;display:flex;align-items:center;gap:4px;flex:0 0 auto;color:#c4cbd3;white-space:nowrap}.context-field>span{font-size:10.5px;color:#aeb6bf}
+.context-field input,.context-field select{height:28px;border:1px solid #5a5d62;border-radius:4px;background:#2c2e31;color:#f1f3f5;padding:0 6px;font-size:11.5px;outline:none}
+.context-field input:focus,.context-field select:focus{border-color:#8cb6dc;box-shadow:0 0 0 1px #5c8bb4}
+.context-field input[type=number]{width:68px;font-variant-numeric:tabular-nums}.context-field input[type=text]{width:92px}.context-field select{max-width:132px;min-width:92px}
+.context-support select{min-width:108px}
+.context-apply{height:30px;padding:0 10px;border:1px solid #557b9a;border-radius:4px;background:#3a607e;color:#f5f8fb;font-size:11.5px;font-weight:650;cursor:pointer;flex:0 0 auto}.context-apply:hover,.context-apply:focus-visible{background:#49789d;border-color:#85aecd;outline:none}.context-toolbar.is-applying{opacity:.72;pointer-events:none}
+.context-readonly{height:30px;display:flex;align-items:center;padding:0 8px;border:1px dashed #5a5d62;border-radius:4px;color:#aeb6bf;font-size:11px;white-space:nowrap}
+@media(max-width:1450px){.context-toolbar{max-width:430px}.context-toolbar .context-secondary{display:none!important}}
+@media(max-width:1100px){.context-toolbar{max-width:250px;margin-left:2px;padding-left:5px;gap:4px}.context-toolbar .context-secondary{display:none!important}.context-field>span{display:none}.context-field input[type=number]{width:58px}.context-field select{min-width:88px;max-width:100px}.context-badge{min-width:48px;padding:2px 5px}.context-apply{padding:0 8px}}
+@media(max-width:760px){.context-toolbar{display:none!important}}

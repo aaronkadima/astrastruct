@@ -1,9 +1,21 @@
 import {test,expect} from '@playwright/test';
+// @ts-ignore
+import {fitCamera3D,applyCameraPreset3D,projectPoint3D,nodePoint} from '../../web/src/view/spatialView3d.js';
+
+const project={id:'canvas3d',name:'Canvas 3D E2E',version:13,schemaVersion:2,units:'kN-m-MPa',nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:0,y:0,z:3},{id:'N3',x:4,y:0,z:3},{id:'N4',x:4,y:2.5,z:3}],elements:[{id:'E1',type:'frame3d',n1:'N1',n2:'N2',materialId:'S',sectionId:'SEC',A:.012,Iy:.00018,Iz:.00022,J:.00003},{id:'E2',type:'frame3d',n1:'N2',n2:'N3',materialId:'S',sectionId:'SEC',A:.012,Iy:.00018,Iz:.00022,J:.00003},{id:'E3',type:'frame3d',n1:'N3',n2:'N4',materialId:'S',sectionId:'SEC',A:.012,Iy:.00018,Iz:.00022,J:.00003,orientation:{up:[0,0,1]}}],materials:[{id:'S',name:'Aço E2E',type:'steel',E:200e6,nu:.3,density:78.5}],sections:[{id:'SEC',name:'Seção espacial E2E',family:'steel3d',A:.012,Iy:.00018,Iz:.00022,J:.00003,I:.00022}],supports:[{nodeId:'N1',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],loads:[{id:'L',caseId:'LC1',nodeId:'N4',fx:12,fy:-8,fz:-25,mx:2,my:0,mz:1}],elementLoads:[],settlements:[],nodeSprings:[],nodalMasses:[],loadCases:[{id:'LC1',name:'Caso 1',type:'user'}],loadCombinations:[],connections:[],settings:{analysisType:'linear',analysisScenarioId:'LC1',activeLoadCaseId:'LC1',grid:.25,snap:true},meta:{solverVersion:'0.13.6-exp',productVersion:'0.28.0',schemaVersion:2}};
+
+async function loadProject(page:any){await page.addInitScript((p:any)=>localStorage.setItem('astrastruct.project',JSON.stringify(p)),project);await page.goto('./')}
+async function clickWorldPoint(page:any,point:number[]){
+  const shell=page.getByTestId('spatial-canvas-3d'),canvas=shell.locator('canvas.spatial3d-canvas');
+  await page.getByTestId('view-3d-xz').click();
+  const box=await canvas.boundingBox();if(!box)throw new Error('Canvas 3D sem bounding box');
+  const camera=applyCameraPreset3D(fitCamera3D(project,'iso','perspective'),project,'xz');
+  const p=projectPoint3D(point,camera,{width:box.width,height:box.height});
+  await canvas.click({position:{x:p.x,y:p.y}});
+}
 
 test('v0.26.1 renders and operates the spatial Canvas 3D',async({page})=>{
-  const project={id:'canvas3d',name:'Canvas 3D E2E',version:13,schemaVersion:2,units:'kN-m-MPa',nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:0,y:0,z:3},{id:'N3',x:4,y:0,z:3},{id:'N4',x:4,y:2.5,z:3}],elements:[{id:'E1',type:'frame3d',n1:'N1',n2:'N2',materialId:'S',sectionId:'SEC',A:.012,Iy:.00018,Iz:.00022,J:.00003},{id:'E2',type:'frame3d',n1:'N2',n2:'N3',materialId:'S',sectionId:'SEC',A:.012,Iy:.00018,Iz:.00022,J:.00003},{id:'E3',type:'frame3d',n1:'N3',n2:'N4',materialId:'S',sectionId:'SEC',A:.012,Iy:.00018,Iz:.00022,J:.00003,orientation:{up:[0,0,1]}}],materials:[{id:'S',type:'steel',E:200e6,nu:.3,density:78.5}],sections:[{id:'SEC',family:'steel3d',A:.012,Iy:.00018,Iz:.00022,J:.00003,I:.00022}],supports:[{nodeId:'N1',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],loads:[{id:'L',caseId:'LC1',nodeId:'N4',fx:12,fy:-8,fz:-25,mx:2,my:0,mz:1}],elementLoads:[],settlements:[],nodeSprings:[],nodalMasses:[],loadCases:[{id:'LC1',name:'Caso 1',type:'user'}],loadCombinations:[],connections:[],settings:{analysisType:'linear',analysisScenarioId:'LC1',activeLoadCaseId:'LC1',grid:.25,snap:true},meta:{solverVersion:'0.13.6-exp'}};
-  await page.addInitScript(p=>localStorage.setItem('astrastruct.project',JSON.stringify(p)),project);
-  await page.goto('./');
+  await loadProject(page);
   const canvas=page.getByTestId('spatial-canvas-3d');await expect(canvas).toBeVisible();await expect(canvas).toHaveAttribute('data-view','iso');
   await page.getByTestId('view-3d-xy').click();await expect(canvas).toHaveAttribute('data-view','xy');
   await page.getByTestId('view-3d-iso').click();await expect(canvas).toHaveAttribute('data-view','iso');
@@ -11,4 +23,27 @@ test('v0.26.1 renders and operates the spatial Canvas 3D',async({page})=>{
   await page.getByTestId('spatial3d-projection').click();await expect(canvas).toHaveAttribute('data-projection','orthographic');
   await page.getByTestId('analyze-button').click();await expect(page.getByTestId('spatial3d-results')).toBeVisible();await expect(page.getByTestId('spatial3d-result-controls')).toBeVisible();await expect(page.getByTestId('spatial3d-shape-kind')).toContainText('Deformada');
   await page.getByLabel('Campo de esforço 3D').selectOption('M');await expect(canvas).toHaveAttribute('data-force-mode','M');
+});
+
+test('spatial Inspector edits Z, six support DOFs and 3D loads',async({page},testInfo)=>{
+  test.skip(testInfo.project.name!=='desktop-chromium','spatial inspector geometry test');
+  await loadProject(page);
+  await clickWorldPoint(page,nodePoint(project.nodes[1]));
+  const inspector=page.getByTestId('spatial-inspector-node');await expect(inspector).toBeVisible();
+  await expect(page.getByTestId('spatial-node-z')).toHaveValue('3');
+  const context=page.getByTestId('context-toolbar');await expect(context).toHaveAttribute('data-context-dimension','3d');await expect(context).toHaveAttribute('data-context-kind','node');
+  await context.locator('[data-context-z]').fill('3.2');await context.locator('[data-context-support]').selectOption('fixed3d');await context.locator('[data-context-fz]').fill('-7.5');await context.getByTestId('context-apply').click();
+  await expect(page.getByTestId('spatial-node-z')).toHaveValue('3.2');await expect(page.getByTestId('spatial-load-fz')).toHaveValue('-7.5');
+  for(const k of ['ux','uy','uz','rx','ry','rz'])await expect(page.getByTestId(`spatial-support-${k}`)).toBeChecked();
+});
+
+test('spatial Inspector exposes frame3d section and qz properties',async({page},testInfo)=>{
+  test.skip(testInfo.project.name!=='desktop-chromium','spatial inspector geometry test');
+  await loadProject(page);
+  const shell=page.getByTestId('spatial-canvas-3d'),canvas=shell.locator('canvas.spatial3d-canvas');await page.getByTestId('view-3d-xz').click();const box=await canvas.boundingBox();if(!box)throw new Error('Canvas 3D sem bounding box');
+  const camera=applyCameraPreset3D(fitCamera3D(project,'iso','perspective'),project,'xz'),a=projectPoint3D(nodePoint(project.nodes[1]),camera,{width:box.width,height:box.height}),b=projectPoint3D(nodePoint(project.nodes[2]),camera,{width:box.width,height:box.height});
+  await canvas.click({position:{x:(a.x+b.x)/2,y:(a.y+b.y)/2}});
+  const inspector=page.getByTestId('spatial-inspector-element');await expect(inspector).toBeVisible();await expect(page.getByTestId('spatial-iy')).toBeVisible();await expect(page.getByTestId('spatial-iz')).toBeVisible();await expect(page.getByTestId('spatial-j')).toBeVisible();
+  const context=page.getByTestId('context-toolbar');await expect(context).toHaveAttribute('data-context-dimension','3d');await expect(context).toHaveAttribute('data-context-kind','element');await expect(context.locator('[data-context-section]')).toBeVisible();await expect(context.locator('[data-context-qz]')).toBeVisible();
+  await context.locator('[data-context-qz]').fill('-3.5');await context.getByTestId('context-apply').click();await expect(page.getByTestId('spatial-qz')).toHaveValue('-3.5');
 });

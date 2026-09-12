@@ -41,7 +41,7 @@ async function openInspector(page:Page){
   await editor.scrollIntoViewIfNeeded();await expect(editor).toBeVisible();
 }
 
-test('v0.14 fiber hinge is configured, solved and traced through postprocess/report',async({page})=>{
+test('v0.14 fiber hinge is configured, guarded, solved and traced through postprocess/report',async({page})=>{
   await installSteelCantilever(page);
   await expect(page.getByTestId('astra-app')).toBeVisible();
   const canvas=page.getByTestId('model-canvas');await expect(canvas).toBeVisible();const box=await canvas.boundingBox();if(!box)throw new Error('Canvas sem geometria');await page.mouse.click(box.x+box.width/2,box.y+box.height/2);
@@ -56,6 +56,15 @@ test('v0.14 fiber hinge is configured, solved and traced through postprocess/rep
   await expect.poll(async()=>{const p=await storedProject(page);const e=p?.elements?.find((x:any)=>x.id==='E1');return [p?.settings?.analysisType,e?.fiberHinges?.rz2?.enabled,Number(e?.fiberHinges?.rz2?.nFibers),Number(e?.fiberHinges?.rz2?.hingeLength),e?.releases?.rz2,e?.rotationalSprings?.rz2]}).toEqual(['corotational',true,100,.35,false,null]);
 
   if((page.viewportSize()?.width||1280)<=1100){const close=page.locator('.inspector-panel.open button[aria-label="Fechar"]:visible').first();if(await close.isVisible().catch(()=>false))await close.click()}
+
+  await openCommand(page,'Tipo de análise');
+  await expect(page.getByTestId('material-nonlinear-controls')).toBeVisible();
+  await expect(page.getByTestId('material-nonlinear-controls')).toContainText('1 rótula');
+  await page.getByTestId('analysis-linear').click();await expect(page.getByTestId('material-mode-warning')).toContainText('exige Geom. não linear');await expect(page.getByTestId('analysis-apply')).toBeDisabled();
+  await page.getByTestId('analysis-corotational').click();await expect(page.getByTestId('analysis-apply')).toBeEnabled();
+  await page.getByTestId('material-max-iterations').fill('32');await page.getByTestId('material-tolerance').fill('0.00001');await page.getByTestId('material-relaxation').fill('0.70');await page.getByTestId('analysis-apply').click();
+  await expect.poll(async()=>{const p=await storedProject(page);return [Number(p?.settings?.materialMaxIterations),Number(p?.settings?.materialTolerance),Number(p?.settings?.materialRelaxation),p?.settings?.analysisType]}).toEqual([32,1e-5,.7,'corotational']);
+
   await page.getByTestId('analyze-button').click();
   const results=page.locator('.results-content');await expect(results).toBeVisible();
   await expect(results).toContainText('frame2d-corotational-fiber-hinge-experimental');

@@ -6,9 +6,9 @@
 .brand{position:relative;min-width:38px!important;width:38px!important;flex:0 0 38px!important;gap:0!important}
 .modern-brand-copy{display:none!important}
 .brand-mark.modern-app-menu{width:36px!important;height:36px!important;display:grid!important;place-items:center!important;border:1px solid #60758a!important;border-radius:5px!important;background:#3c5e7c!important;color:#f4f8fc!important;cursor:pointer!important;user-select:none!important}
-.brand.open .brand-mark.modern-app-menu,.brand-mark.modern-app-menu:hover,.brand-mark.modern-app-menu:focus-visible{background:#4a7294!important;border-color:#89a8c2!important;outline:none!important}
-.modern-file-popup{display:none;left:0!important;top:calc(100% + 5px)!important;z-index:420!important}
-.brand.open>.modern-file-popup{display:block!important}
+.brand.file-menu-open .brand-mark.modern-app-menu,.brand-mark.modern-app-menu:hover,.brand-mark.modern-app-menu:focus-visible{background:#4a7294!important;border-color:#89a8c2!important;outline:none!important}
+.modern-file-popup{display:none!important;pointer-events:none!important;left:0!important;top:calc(100% + 5px)!important;z-index:420!important}
+.brand.file-menu-open>.modern-file-popup{display:block!important;pointer-events:auto!important}
 
 .modern-menubar{position:static!important;inset:auto!important;z-index:auto!important;height:36px!important;display:flex!important;align-items:stretch!important;flex:0 0 auto!important;background:transparent!important;border:0!important;overflow:visible!important}
 .modern-menu-groups{display:flex!important;align-items:stretch!important}

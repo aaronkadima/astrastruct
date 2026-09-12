@@ -2,7 +2,10 @@ name: Deploy AstraStruct production and development
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
+  workflow_run:
+    workflows: ["AstraStruct CI"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -16,6 +19,7 @@ concurrency:
 
 jobs:
   assemble-site:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'develop')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout production branch
@@ -88,34 +92,8 @@ jobs:
         run: sleep 25
 
       - name: Retry combined site deployment
-        id: deployment_retry
         if: steps.deployment_first.outcome == 'failure'
         uses: actions/deploy-pages@v4
 
-      - name: Confirm deployment
+      - name: Confirm deployment channels
         run: echo "Production=/astrastruct/ Development=/astrastruct/dev/"
-
-  development-browser-regression:
-    if: github.ref == 'refs/heads/develop'
-    needs: assemble-site
-    continue-on-error: true
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: develop
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-      - name: Build development application
-        env:
-          ASTRA_BASE_PATH: /astrastruct/dev/
-        run: npm run build
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Run desktop, Android and tablet regression
-        env:
-          ASTRA_BASE_PATH: /astrastruct/dev/
-        run: npm run test:e2e

@@ -1,0 +1,2 @@
+.main-grid{grid-template-areas:"library workspace inspector"!important}.library-panel{grid-area:library}.workspace{grid-area:workspace}.inspector-panel{grid-area:inspector}.modern-duplicate-control{display:grid!important}
+@media(max-width:1100px){.main-grid{grid-template-columns:1fr!important;grid-template-areas:"workspace"!important}.workspace{grid-area:workspace}.library-panel,.inspector-panel{grid-area:auto}}

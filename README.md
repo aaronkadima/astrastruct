@@ -1,3 +1,7 @@
+## AstraStruct v0.25 — tratamento de registros sísmicos
+
+A v0.25 acrescenta pré-processamento de acelerogramas (remoção de média/detrend linear, taper, filtros high/low-pass RC zero-phase, reamostragem e escala), componentes simultâneas X+Y, biblioteca de registros persistida no JSON do projeto, combinação direcional SRSS ou envelope 100/30 e comparação do espectro do registro com um espectro-alvo fornecido pelo usuário. O núcleo continua linear-elástico e não representa movimento diferencial de múltiplos apoios.
+
 # AstraStruct
 
 

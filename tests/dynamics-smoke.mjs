@@ -13,7 +13,7 @@ const project={
 };
 
 const modal=solveModal2D(project,{modes:3,massFormulation:'consistent'});
-assert.equal(modal.solverVersion,'0.24.0-exp');
+assert.equal(modal.solverVersion,'0.25.0-exp');
 assert.equal(modal.modes.length,1);
 const physicalMass=gamma/g*A*L,expectedOmega=Math.sqrt((E*A/L)/(physicalMass/3));
 assert(Math.abs(modal.modes[0].omega/expectedOmega-1)<1e-10,`consistent axial bar omega mismatch: ${modal.modes[0].omega} vs ${expectedOmega}`);
@@ -36,7 +36,7 @@ const z1=rayleigh.alphaM/(2*10)+rayleigh.betaK*10/2,z2=rayleigh.alphaM/(2*30)+ra
 assert(Math.abs(z1-.02)<1e-12&&Math.abs(z2-.02)<1e-12,'Rayleigh damping targets must be exact at calibration modes');
 
 const th=solveTimeHistory2D(project,'LC1',{massFormulation:'consistent',dampingRatio:.02,rayleighMode1:1,rayleighMode2:1,timeStep:.002,duration:.2,monitorNodeId:'N2',monitorDof:'ux',historyPoints:[{t:0,scale:0},{t:.04,scale:1},{t:.12,scale:-.5},{t:.2,scale:0}]});
-assert.equal(th.solverVersion,'0.24.0-exp');
+assert.equal(th.solverVersion,'0.25.0-exp');
 assert.equal(th.newmark.steps,100);
 assert.equal(th.history.length,101);
 assert(th.peakResponse.absDisplacement>0,'time history must develop response');

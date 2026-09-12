@@ -1,10 +1,10 @@
 # AstraStruct
 
 
-> **v0.21 experimental:** história constitutiva cíclica por fibra sobre a plasticidade distribuída de aço, com retorno plástico, endurecimento combinado, efeito Bauschinger, protocolo reversível de deslocamento e commit/rollback material.
+> **v0.22 experimental:** história constitutiva cíclica agora também nas rótulas concentradas de fibras de aço, com retorno plástico, endurecimento combinado, efeito Bauschinger, commit/rollback e demanda plástica acumulada.
 AstraStruct é uma plataforma web **assembly-first** para modelagem, análise, dimensionamento e futura verificação/detalhamento de estruturas de concreto armado e aço.
 
-> **Estado atual — v0.21.0 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
+> **Estado atual — v0.22.0 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
 
 ## Executar online
 
@@ -25,7 +25,7 @@ A interface React/Vite é construída, testada e publicada automaticamente em `d
 - **temperatura uniforme e gradiente térmico como deformação/curvatura iniciais no solver co‑rotacional**;
 - **força seguidora concentrada na extremidade 2 de `frame2d`, com tangente externa consistente, no co‑rotacional**;
 - **rótulas e ligações rotacionais semirrígidas no co‑rotacional v0.13.5, com rotação interna de extremidade e condensação estática de Schur**;
-- **rótulas concentradas de fibras de aço v0.16 para seções retangulares, I/H e RHS, com equilíbrio local N–M, linearização tangente-afim e Newton constitutivo embutido em cada avaliação do equilíbrio global**;
+- **rótulas concentradas de fibras de aço v0.16/v0.22 para seções retangulares, I/H e RHS, com equilíbrio local N–M, Newton constitutivo embutido e, na v0.22, história cíclica por fibra, Bauschinger, energia dissipada e demanda plástica acumulada**;
 - **plasticidade distribuída de aço v0.20/v0.21 para frame2d, com 3/5 pontos Gauss–Lobatto, seções de fibras rect/I-H/RHS, propagação espacial do escoamento e tangente integrada BᵀDB; a v0.21 acrescenta história incremental por fibra, descarga/recarga, endurecimento cinemático/isotrópico combinado e efeito Bauschinger**;
 - **protocolo cíclico de controle de deslocamento v0.21, com sequência de alvos, subdivisão por trecho, commit/rollback após convergência global e rastreamento da energia plástica dissipada**;
 - **pushover por controle de deslocamento v0.16, com fator de carga λ como incógnita, curva capacidade λ–u, rastreamento da sequência de plastificação e recuperação do estado final no fator de carga convergido**;
@@ -33,7 +33,8 @@ A interface React/Vite é construída, testada e publicada automaticamente em `d
 - **estabilidade tangente multimodal v0.19, com múltiplos autovalores críticos, rastreamento por MAC, agrupamento de subespaços quase degenerados, exploração local dos ramos +φ/−φ e semeadura modal experimental; para tangentes não simétricas o resultado permanece apenas candidato a singularidade não conservativa**;
 - documentação metodológica da estabilidade multimodal em `docs/multimode-stability-v019.md`;
 - documentação metodológica da plasticidade distribuída em `docs/distributed-plasticity-v020.md`;
-- documentação da história constitutiva cíclica, Bauschinger e commit/rollback em `docs/cyclic-hysteresis-v021.md`;
+- documentação da história constitutiva cíclica, Bauschinger e commit/rollback distribuídos em `docs/cyclic-hysteresis-v021.md`;
+- documentação das rótulas concentradas cíclicas e demanda acumulada em `docs/cyclic-hinges-v022.md`;
 - molas nodais `kx`, `ky`, `kr` no solver Linear/P‑Delta;
 - casos de ação e combinações customizadas, incluindo escalonamento de `followerEnd` antes da solução não linear;
 - análise Linear, P‑Delta ou Geometricamente Não Linear co‑rotacional selecionável;

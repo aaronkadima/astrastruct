@@ -146,7 +146,9 @@ export function normalizeProject(input) {
     if (releases.rz1) rotationalSprings.rz1 = 0;
     if (releases.rz2) rotationalSprings.rz2 = 0;
     const rawDp=e.distributedPlasticity||{},integrationPoints=[3,5].includes(Math.round(Number(rawDp.integrationPoints)))?Math.round(Number(rawDp.integrationPoints)):5,distributedPlasticity={enabled:!!rawDp.enabled,integrationPoints,nFibers:Math.max(8,Math.min(400,Math.round(Number(rawDp.nFibers)||80))),hardeningRatio:Math.max(1e-6,Math.min(.25,Math.abs(Number(rawDp.hardeningRatio)||.01))),cyclic:!!rawDp.cyclic,kinematicFraction:Math.max(0,Math.min(1,Number.isFinite(Number(rawDp.kinematicFraction))?Number(rawDp.kinematicFraction):1))};
-    return { ...e, releases, rotationalSprings, distributedPlasticity };
+    const normHinge=(raw={})=>({enabled:!!raw.enabled,hingeLength:Math.max(1e-4,Number(raw.hingeLength)||.35),nFibers:Math.max(8,Math.min(400,Math.round(Number(raw.nFibers)||80))),hardeningRatio:Math.max(1e-6,Math.min(.25,Math.abs(Number(raw.hardeningRatio)||.01))),cyclic:!!raw.cyclic,kinematicFraction:Math.max(0,Math.min(1,Number.isFinite(Number(raw.kinematicFraction))?Number(raw.kinematicFraction):1))});
+    const fiberHinges={rz1:normHinge(e.fiberHinges?.rz1),rz2:normHinge(e.fiberHinges?.rz2)};
+    return { ...e, releases, rotationalSprings, distributedPlasticity, fiberHinges };
   });
   p.supports = p.supports.map(s => ({
     ...s,

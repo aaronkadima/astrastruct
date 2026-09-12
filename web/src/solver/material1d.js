@@ -35,7 +35,7 @@ export function bilinearSteelFromModelMaterial(material,strain,{hardeningRatio=0
 }
 
 export function initialSteelHistoryState(){
-  return{plasticStrain:0,backstress:0,equivalentPlasticStrain:0,dissipatedEnergyDensity:0,stress:0,strain:0,loadingDirection:0,yielded:false};
+  return{plasticStrain:0,backstress:0,equivalentPlasticStrain:0,dissipatedEnergyDensity:0,stress:0,strain:0,loadingDirection:0,reversalCount:0,yielded:false};
 }
 
 /**
@@ -55,13 +55,13 @@ export function cyclicSteelState({strain,E,fy,hardeningRatio=0.01,kinematicFract
   for(const key of ['plasticStrain','backstress','equivalentPlasticStrain','dissipatedEnergyDensity','stress','strain'])c[key]=finite(key,c[key]);
   const Htotal=b<=EPS?0:modulus*b/(1-b),Hkin=eta*Htotal,Hiso=(1-eta)*Htotal;
   const sigmaTrial=modulus*(eps-c.plasticStrain),xiTrial=sigmaTrial-c.backstress,radius=yieldStress+Hiso*c.equivalentPlasticStrain,fTrial=Math.abs(xiTrial)-radius,tol=1e-12*Math.max(1,yieldStress,Math.abs(sigmaTrial));
-  const deltaStrain=eps-c.strain,loadingDirection=Math.abs(deltaStrain)>EPS?(deltaStrain>0?1:-1):Number(c.loadingDirection)||0;
+  const deltaStrain=eps-c.strain,previousDirection=Number(c.loadingDirection)||0,loadingDirection=Math.abs(deltaStrain)>EPS?(deltaStrain>0?1:-1):previousDirection,reversalCount=(Number(c.reversalCount)||0)+(previousDirection&&loadingDirection&&previousDirection!==loadingDirection?1:0);
   if(fTrial<=tol){
-    const history={...c,strain:eps,stress:sigmaTrial,loadingDirection,yielded:Math.abs(Math.abs(xiTrial)-radius)<=10*tol&&c.equivalentPlasticStrain>0};
+    const history={...c,strain:eps,stress:sigmaTrial,loadingDirection,reversalCount,yielded:Math.abs(Math.abs(xiTrial)-radius)<=10*tol&&c.equivalentPlasticStrain>0};
     return{type:'steel-bilinear-cyclic-combined-hardening',strain:eps,stress:sigmaTrial,tangent:modulus,yielded:history.yielded,yieldStrain:yieldStress/modulus,yieldStress,hardeningRatio:b,kinematicFraction:eta,branch:c.equivalentPlasticStrain>0?'elastic-unloading-reloading':'elastic',plasticMultiplier:0,plasticStrain:history.plasticStrain,backstress:history.backstress,equivalentPlasticStrain:history.equivalentPlasticStrain,dissipatedEnergyDensity:history.dissipatedEnergyDensity,history};
   }
   const sign=xiTrial<0?-1:1,den=modulus+Hkin+Hiso,dGamma=fTrial/Math.max(den,EPS),plasticStrain=c.plasticStrain+dGamma*sign,backstress=c.backstress+Hkin*dGamma*sign,equivalentPlasticStrain=c.equivalentPlasticStrain+dGamma,stress=sigmaTrial-modulus*dGamma*sign,tangent=(Hkin+Hiso)>EPS?modulus*(Hkin+Hiso)/den:0,dissipationIncrement=Math.max(0,yieldStress*dGamma),dissipatedEnergyDensity=c.dissipatedEnergyDensity+dissipationIncrement;
-  const history={plasticStrain,backstress,equivalentPlasticStrain,dissipatedEnergyDensity,stress,strain:eps,loadingDirection,yielded:true};
+  const history={plasticStrain,backstress,equivalentPlasticStrain,dissipatedEnergyDensity,stress,strain:eps,loadingDirection,reversalCount,yielded:true};
   return{type:'steel-bilinear-cyclic-combined-hardening',strain:eps,stress,tangent,yielded:true,yieldStrain:yieldStress/modulus,yieldStress,hardeningRatio:b,kinematicFraction:eta,branch:'plastic-return',plasticMultiplier:dGamma,plasticStrain,backstress,equivalentPlasticStrain,dissipationIncrement,dissipatedEnergyDensity,history};
 }
 
@@ -73,4 +73,4 @@ export function cyclicSteelFromModelMaterial(material,strain,{hardeningRatio=0.0
   return cyclicSteelState({strain,E,fy:fyMPa*1000,hardeningRatio,kinematicFraction,committed});
 }
 
-export const MATERIAL_1D_VERSION='0.21.0-exp';
+export const MATERIAL_1D_VERSION='0.22.0-exp';

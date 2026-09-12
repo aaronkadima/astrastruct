@@ -41,9 +41,9 @@ function model(load={}){return{nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:L,y:0,z:0
  const r=solve(p);assert.equal(r.dimension,'3d');assert.equal(r.analysisType,'corotational');assert.equal(r.solverVersion,'0.30.0-exp');assert.equal(r.scenario?.id,'LC1');assert.equal(r.nonlinear?.converged,true);
 }
 
-// 6) Protected scope rejects distributed loads until the follower/dead-load formulation is added.
+// 6) The raw core requires mechanical member loads to pass through the dead-load preparation wrapper.
 {
- const p=model({fy:-1});p.elementLoads=[{id:'q',elementId:'E1',kind:'uniform',qy:-1}];assert.throws(()=>solveFrameCorotational3D(p),/cargas de barra/i);
+ const p=model({fy:-1});p.elementLoads=[{id:'q',elementId:'E1',kind:'uniform',qy:-1}];assert.throws(()=>solveFrameCorotational3D(p),/carga de barra.*preparada/i);
 }
 
 console.log('v0.30 global elastic co-rotational frame3d smoke: OK');

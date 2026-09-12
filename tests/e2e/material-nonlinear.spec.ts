@@ -22,28 +22,29 @@ async function installSteelCantilever(page:Page){
   await page.reload();
 }
 
-async function openInspectorIfNeeded(page:Page){
-  const editor=page.getByTestId('fiber-hinge-rz2-enabled');
-  if(await editor.isVisible().catch(()=>false))return;
-  const inspector=page.locator('button[aria-label="Inspector"]:visible').first();
-  if(await inspector.isVisible().catch(()=>false))await inspector.click();
-  await expect(editor).toBeVisible();
+async function openInspector(page:Page){
+  const editor=page.getByTestId('fiber-hinge-rz2-enabled'),width=page.viewportSize()?.width||1280;
+  if(width<=1100){
+    const inspector=page.locator('button[aria-label="Inspector"]:visible').first();await expect(inspector).toBeVisible();await inspector.click();
+  }
+  await editor.scrollIntoViewIfNeeded();await expect(editor).toBeVisible();
 }
 
 test('v0.14 fiber hinge is configured in Inspector and solved by material nonlinear kernel',async({page})=>{
   await installSteelCantilever(page);
   await expect(page.getByTestId('astra-app')).toBeVisible();
   const canvas=page.getByTestId('model-canvas');await expect(canvas).toBeVisible();const box=await canvas.boundingBox();if(!box)throw new Error('Canvas sem geometria');await page.mouse.click(box.x+box.width/2,box.y+box.height/2);
-  await openInspectorIfNeeded(page);
+  await openInspector(page);
 
   const enabled=page.getByTestId('fiber-hinge-rz2-enabled');await expect(enabled).toBeEnabled();await enabled.check();
   await page.getByTestId('fiber-hinge-rz2-lp').fill('0.35');
   await page.getByTestId('fiber-hinge-rz2-fibers').fill('100');
   await page.getByTestId('fiber-hinge-rz2-hardening').fill('0.01');
-  const apply=page.getByRole('button',{name:'Aplicar alterações'}).last();await apply.click();
+  const apply=page.getByRole('button',{name:'Aplicar alterações'}).last();await apply.scrollIntoViewIfNeeded();await apply.click();
 
   await expect.poll(async()=>{const p=await storedProject(page);const e=p?.elements?.find((x:any)=>x.id==='E1');return [p?.settings?.analysisType,e?.fiberHinges?.rz2?.enabled,Number(e?.fiberHinges?.rz2?.nFibers),Number(e?.fiberHinges?.rz2?.hingeLength),e?.releases?.rz2,e?.rotationalSprings?.rz2]}).toEqual(['corotational',true,100,.35,false,null]);
 
+  if((page.viewportSize()?.width||1280)<=1100){const close=page.locator('.inspector-panel.open button[aria-label="Fechar"]:visible').first();if(await close.isVisible().catch(()=>false))await close.click()}
   await page.getByTestId('analyze-button').click();
   const results=page.locator('.results-content');await expect(results).toBeVisible();
   await expect(results).toContainText('frame2d-corotational-fiber-hinge-experimental');

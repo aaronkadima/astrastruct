@@ -19,7 +19,9 @@ jobs:
         with:
           node-version: 24
       - name: Implement displacement-control pushover core
-        run: python tools/v016_core_patch.py
+        run: |
+          python tools/v016_core_patch.py
+          python tools/v016_regression_patch.py
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Validate modules
@@ -33,7 +35,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add web/src/solver/corotational2d.js web/src/solver/materialNonlinear2d.js web/src/solver/index.js web/src/core/model.js web/src/solver/corotationalPostprocess.js tests/pushover-smoke.mjs package.json
+          git add web/src/solver/corotational2d.js web/src/solver/materialNonlinear2d.js web/src/solver/index.js web/src/core/model.js web/src/solver/corotationalPostprocess.js tests/material-global-smoke.mjs tests/pushover-smoke.mjs package.json
           if ! git diff --cached --quiet; then
             git commit -m "feat: add displacement-control pushover core"
             git push origin HEAD:feat/v016-displacement-control-pushover

@@ -10,6 +10,7 @@ import './results.css';
 import './buckling.css';
 import './modern.css';
 import './modern-layout-fix.css';
+import './unified-toolbar.css';
 import './modernShell';
 
 const root = document.getElementById('root');

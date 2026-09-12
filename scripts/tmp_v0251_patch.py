@@ -53,3 +53,5 @@ s=s.replace('> **v0.24 experimental:** dinâmica estrutural linear com análise 
 p.write_text(s)
 
 print('v0.25.1 patch applied')
+
+# validation-trigger: 2026-09-12

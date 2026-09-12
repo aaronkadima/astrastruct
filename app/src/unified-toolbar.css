@@ -1,0 +1,86 @@
+:root{--toolbar-h:50px}
+
+/* One application bar: AS/File + menus + modeling/editing + engineering commands. */
+.astra-app{padding-top:0!important;grid-template-rows:var(--toolbar-h) minmax(0,1fr)!important}
+.topbar{height:var(--toolbar-h)!important;min-height:var(--toolbar-h)!important;padding:5px 7px!important;gap:5px!important;overflow:visible!important;white-space:nowrap;background:#343538!important}
+.brand{position:relative;min-width:38px!important;width:38px!important;flex:0 0 38px!important;gap:0!important}
+.modern-brand-copy{display:none!important}
+.brand-mark.modern-app-menu{width:36px!important;height:36px!important;display:grid!important;place-items:center!important;border:1px solid #60758a!important;border-radius:5px!important;background:#3c5e7c!important;color:#f4f8fc!important;cursor:pointer!important;user-select:none!important}
+.brand.open .brand-mark.modern-app-menu,.brand-mark.modern-app-menu:hover,.brand-mark.modern-app-menu:focus-visible{background:#4a7294!important;border-color:#89a8c2!important;outline:none!important}
+.modern-file-popup{display:none;left:0!important;top:calc(100% + 5px)!important;z-index:420!important}
+.brand.open>.modern-file-popup{display:block!important}
+
+.modern-menubar{position:static!important;inset:auto!important;z-index:auto!important;height:36px!important;display:flex!important;align-items:stretch!important;flex:0 0 auto!important;background:transparent!important;border:0!important;overflow:visible!important}
+.modern-menu-groups{display:flex!important;align-items:stretch!important}
+.modern-menu{height:36px!important}
+.modern-menu-button{height:36px!important;padding:0 8px!important;font-size:12.5px!important;border-radius:3px!important}
+.modern-menu-popup{top:calc(100% + 5px)!important;z-index:410!important;min-width:250px!important}
+.modern-menu-popup>button.active::before{content:'✓';display:inline-block;width:15px;margin-right:4px;color:#bfe0ff}
+.modern-menu-popup>button.active{grid-template-columns:auto minmax(150px,1fr) auto!important}
+.modern-menu-popup>button.active>span{grid-column:2}
+.modern-menu-popup>button.active>kbd{grid-column:3}
+.modern-open-file{display:none!important}
+
+.modern-unified-tools{display:flex!important;align-items:center!important;gap:3px!important;flex:0 0 auto!important;margin-left:3px!important;padding-left:7px!important;border-left:1px solid #55575b!important}
+.modern-unified-tools .icon-btn{width:34px!important;height:34px!important;min-width:34px!important}
+.modern-proxy-tool.modern-group-start,.top-actions .modern-group-start,.topbar>.modern-group-start{margin-left:8px!important;box-shadow:-8px 0 0 -7px #66686c!important}
+.modern-superseded{display:none!important}
+
+.top-actions{height:38px!important;display:flex!important;align-items:center!important;gap:3px!important;min-width:80px!important;flex:1 1 auto!important;overflow-x:auto!important;overflow-y:hidden!important;scrollbar-width:thin!important;padding:0 2px!important}
+.scenario-box{flex:0 0 auto!important;margin-left:3px!important}
+.scenario-box select{max-width:170px!important}
+.topbar>button[aria-label="Executar análise"]{flex:0 0 34px!important}
+
+/* Retire the second button bar above the canvas. */
+.modern-workspace-bar-retired{display:none!important}
+.workspace{grid-template-rows:minmax(0,1fr) 155px!important}
+.ui-hide-results .workspace,.ui-canvas-focus .workspace{grid-template-rows:minmax(0,1fr) 0!important}
+.viewport{min-height:0!important}
+
+/* Canvas color configuration. */
+.canvas-white .viewport,.canvas-white .model-canvas{background:#fff!important}
+.canvas-white .viewport{box-shadow:inset 0 0 0 1px #d2d5d9!important}
+.canvas-white .grid-lines line{stroke:#e1e4e8!important}
+.canvas-white .node-label,.canvas-white .element-label,.canvas-white .model-canvas text{paint-order:stroke;stroke:#fff!important;stroke-width:3px!important}
+.canvas-white .node-label{fill:#243b50!important}.canvas-white .element-label{fill:#315f83!important}
+.canvas-white .spatial3d-shell,.canvas-white .spatial3d-canvas{background:#fff!important}
+
+.canvas-black .viewport,.canvas-black .model-canvas{background:#101113!important}
+.canvas-black .viewport{box-shadow:inset 0 0 0 1px #34373b!important}
+.canvas-black .grid-lines line{stroke:#2b2e32!important}
+.canvas-black .member{stroke:#77b7ff!important}.canvas-black .member.truss{stroke:#6fd3b8!important}.canvas-black .member.selected{stroke:#ffc85e!important}
+.canvas-black .node{fill:#eef3f7!important;stroke:#0d0f11!important}
+.canvas-black .node-label,.canvas-black .element-label,.canvas-black .model-canvas text{paint-order:stroke;stroke:#101113!important;stroke-width:3.2px!important}
+.canvas-black .node-label{fill:#eef5fb!important}.canvas-black .element-label{fill:#9fd0ff!important}
+.canvas-black .load line{stroke:#ff7681!important}.canvas-black .load path{fill:#ff7681!important}.canvas-black .load text{fill:#ffadb4!important}
+.canvas-black .support{stroke:#b5c0c9!important;fill:#b5c0c9!important}.canvas-black .deformed{stroke:#6fe0c7!important}
+.canvas-black .spatial3d-shell,.canvas-black .spatial3d-canvas{background:#101113!important}
+
+@media(max-width:1100px){
+  :root{--toolbar-h:50px}
+  .astra-app{padding-top:0!important;grid-template-rows:var(--toolbar-h) minmax(0,1fr) 60px!important}
+  .topbar{height:var(--toolbar-h)!important;min-height:var(--toolbar-h)!important;padding:5px 6px!important}
+  .modern-menubar{height:38px!important;max-width:290px!important;overflow-x:auto!important;overflow-y:visible!important;scrollbar-width:none!important}
+  .modern-menu{height:38px!important}.modern-menu-button{height:38px!important;padding:0 7px!important;font-size:12px!important}
+  .modern-unified-tools{padding-left:5px!important;margin-left:1px!important;gap:2px!important}
+  .modern-unified-tools .icon-btn{width:36px!important;height:36px!important;min-width:36px!important}
+  .top-actions{min-width:50px!important}
+  .scenario-box{display:none!important}
+  .sidebar{top:var(--toolbar-h)!important}
+  .scrim{inset:var(--toolbar-h) 0 60px!important}
+  .workspace{grid-template-rows:minmax(0,1fr) minmax(150px,27vh)!important}
+  .ui-hide-results .workspace,.ui-canvas-focus .workspace{grid-template-rows:minmax(0,1fr) 0!important}
+}
+@media(max-width:760px){
+  .modern-menubar{max-width:178px!important}
+  .modern-menu-button{padding:0 6px!important;font-size:11.5px!important}
+  .modern-menu-popup,.modern-file-popup{position:fixed!important;left:6px!important;right:6px!important;top:var(--toolbar-h)!important;width:auto!important;max-height:72vh!important;overflow:auto!important}
+  .modern-unified-tools .icon-btn:nth-child(n+5){display:none!important}
+  .top-actions{display:none!important}
+  .topbar>button[aria-label="Executar análise"]{display:grid!important}
+  .workspace{grid-template-rows:minmax(0,1fr) 0!important}
+}
+@media(max-width:500px){
+  .modern-menubar{max-width:128px!important}
+  .modern-unified-tools .icon-btn:nth-child(n+4){display:none!important}
+}

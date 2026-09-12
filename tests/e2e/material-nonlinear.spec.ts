@@ -20,7 +20,7 @@ async function installSteelCantilever(page:Page){
   await page.evaluate(()=>{
     const raw=localStorage.getItem('astrastruct.project');if(!raw)throw new Error('Projeto inicial ausente');
     const p=JSON.parse(raw),b=.2,h=.4,A=b*h,I=b*h**3/12;
-    p.name='E2E — rótula de fibras v0.14';
+    p.name='E2E — rótula de fibras v0.16';
     p.materials=[{id:'S355',name:'Steel S355 E2E',type:'steel',E:200e6,nu:.3,density:78.5,alpha:12e-6,fy:355,fu:510,verified:false}];
     p.sections=[{id:'R200x400',name:'Retangular 200 × 400 mm',family:'rect',b,h,A,I}];
     p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:2,y:0}];
@@ -41,7 +41,7 @@ async function openInspector(page:Page){
   await editor.scrollIntoViewIfNeeded();await expect(editor).toBeVisible();
 }
 
-test('v0.14 fiber hinge is configured, guarded, solved and traced through postprocess/report',async({page})=>{
+test('v0.16 fiber hinge is configured, guarded, solved and traced through postprocess/report',async({page})=>{
   await installSteelCantilever(page);
   await expect(page.getByTestId('astra-app')).toBeVisible();
   const canvas=page.getByTestId('model-canvas');await expect(canvas).toBeVisible();const box=await canvas.boundingBox();if(!box)throw new Error('Canvas sem geometria');await page.mouse.click(box.x+box.width/2,box.y+box.height/2);
@@ -75,11 +75,11 @@ test('v0.14 fiber hinge is configured, guarded, solved and traced through postpr
 
   await openCommand(page,'Diagramas/envelopes');
   const post=page.getByTestId('panel-nonlinear-postprocess');await expect(post).toBeVisible();
-  const materialNote=page.getByTestId('material-postprocess-note');await expect(materialNote).toContainText('Não linearidade material v0.15');await expect(materialNote).toContainText('fibras escoadas=');await expect(materialNote).toContainText('equilíbrio local N–M');await expect(post).toContainText('0.15.0-exp');
+  const materialNote=page.getByTestId('material-postprocess-note');await expect(materialNote).toContainText('Não linearidade material v0.16');await expect(materialNote).toContainText('fibras escoadas=');await expect(materialNote).toContainText('equilíbrio local N–M');await expect(post).toContainText('0.16.0-exp');
   await post.locator('button[aria-label="Fechar"]').click();
 
   await openCommand(page,'Relatório técnico');
-  const report=page.getByTestId('panel-nonlinear-report');await expect(report).toBeVisible();await expect(report).toContainText('0.15.0-exp');
+  const report=page.getByTestId('panel-nonlinear-report');await expect(report).toBeVisible();await expect(report).toContainText('0.16.0-exp');
   const materialReport=page.getByTestId('material-nonlinear-report');await expect(materialReport).toContainText('aço bilinear monotônico');
   const constitutiveMoment=Number(await page.getByTestId('material-hinge-moment').first().textContent());expect(Math.abs(constitutiveMoment-2200)).toBeLessThan(.2);
   await expect(page.getByTestId('material-hinge-yielded').first()).toContainText('/100');

@@ -40,25 +40,28 @@ function ensureHost(){
   const topbar=document.querySelector<HTMLElement>('.topbar'),tools=topbar?.querySelector<HTMLElement>('.modern-unified-tools');if(!topbar||!tools)return null;
   let host=topbar.querySelector<HTMLElement>('.context-toolbar');if(!host){host=document.createElement('div');host.className='context-toolbar';host.setAttribute('aria-label','Propriedades contextuais');host.setAttribute('data-testid','context-toolbar');tools.insertAdjacentElement('afterend',host)}return host;
 }
+async function applyFreshInspector(){await nextFrame();await nextFrame();document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)?.querySelector<HTMLButtonElement>('.inspector-apply')?.click()}
 async function applyNode(host:HTMLElement,e:InspectorEntity){
   const x=host.querySelector<HTMLInputElement>('[data-context-x]'),y=host.querySelector<HTMLInputElement>('[data-context-y]'),z=host.querySelector<HTMLInputElement>('[data-context-z]'),fx=host.querySelector<HTMLInputElement>('[data-context-fx]'),fy=host.querySelector<HTMLInputElement>('[data-context-fy]'),fz=host.querySelector<HTMLInputElement>('[data-context-fz]'),preset=host.querySelector<HTMLSelectElement>('[data-context-support]');
   await setField(field(e.panel,'X [m]'),x?.value||'0');await setField(field(e.panel,'Y [m]'),y?.value||'0');if(e.is3d&&z)await setField(field(e.panel,'Z [m]'),z.value||'0');
   if(preset&&preset.value!=='custom'){
     if(e.is3d){
       const map:Record<string,[boolean,boolean,boolean,boolean,boolean,boolean]>={free:[false,false,false,false,false,false],pinned3d:[true,true,true,false,false,false],fixed3d:[true,true,true,true,true,true]},v=map[preset.value];
-      if(v){for(const [i,k] of ['ux','uy','uz','rx','ry','rz'].entries())await setCheck(check(e.panel,k),v[i])}
+      if(v){for(const [i,k] of ['ux','uy','uz','rx','ry','rz'].entries())await setCheck(check(document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||e.panel,k),v[i])}
     }else{
-      const map:Record<string,[boolean,boolean,boolean]>={free:[false,false,false],'roller-y':[false,true,false],pinned:[true,true,false],fixed:[true,true,true]},v=map[preset.value];
-      if(v){await setCheck(check(e.panel,'Ux'),v[0]);await setCheck(check(e.panel,'Uy'),v[1]);await setCheck(check(e.panel,'Rz'),v[2])}
+      const fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||e.panel,map:Record<string,[boolean,boolean,boolean]>={free:[false,false,false],'roller-y':[false,true,false],pinned:[true,true,false],fixed:[true,true,true]},v=map[preset.value];
+      if(v){await setCheck(check(fresh,'Ux'),v[0]);await setCheck(check(fresh,'Uy'),v[1]);await setCheck(check(fresh,'Rz'),v[2])}
     }
   }
-  if(fx)await setField(field(e.panel,'Fx [kN]'),fx.value);if(fy)await setField(field(e.panel,'Fy [kN]'),fy.value);if(e.is3d&&fz)await setField(field(e.panel,'Fz [kN]'),fz.value);
-  e.panel.querySelector<HTMLButtonElement>('.inspector-apply')?.click();
+  const fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||e.panel;
+  if(fx)await setField(field(fresh,'Fx [kN]'),fx.value);if(fy)await setField(field(fresh,'Fy [kN]'),fy.value);if(e.is3d&&fz)await setField(field(fresh,'Fz [kN]'),fz.value);
+  await applyFreshInspector();
 }
 async function applyElement(host:HTMLElement,e:InspectorEntity){
   const name=host.querySelector<HTMLInputElement>('[data-context-name]'),material=host.querySelector<HTMLSelectElement>('[data-context-material]'),section=host.querySelector<HTMLSelectElement>('[data-context-section]'),qy=host.querySelector<HTMLInputElement>('[data-context-qy]'),qz=host.querySelector<HTMLInputElement>('[data-context-qz]');
-  if(name)await setField(field(e.panel,'Nome'),name.value);if(material)await setField(field(e.panel,'Material'),material.value);if(section)await setField(field(e.panel,'Seção'),section.value);if(qy)await setField(field(e.panel,'qy [kN/m]'),qy.value);if(e.is3d&&qz)await setField(field(e.panel,'qz [kN/m]'),qz.value);
-  e.panel.querySelector<HTMLButtonElement>('.inspector-apply')?.click();
+  let fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||e.panel;
+  if(name)await setField(field(fresh,'Nome'),name.value);fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||fresh;if(material)await setField(field(fresh,'Material'),material.value);fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||fresh;if(section)await setField(field(fresh,'Seção'),section.value);fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||fresh;if(qy)await setField(field(fresh,'qy [kN/m]'),qy.value);fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||fresh;if(e.is3d&&qz)await setField(field(fresh,'qz [kN/m]'),qz.value);
+  await applyFreshInspector();
 }
 function signature(e:InspectorEntity|null){
   if(!e)return'none';

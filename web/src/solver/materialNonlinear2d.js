@@ -1,4 +1,4 @@
-import { solveFrameCorotational2D, solveFrameCorotationalDisplacementControl2D } from './corotational2d.js';
+import { solveFrameCorotational2D, solveFrameCorotationalDisplacementControl2D, solveFrameCorotationalArcLength2D } from './corotational2d.js';
 import { fiberHingeSectionState, sectionFibersFromModel, sectionFiberFamily } from './fiberSection2d.js';
 
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -273,7 +273,7 @@ function decorateEmbeddedResult(result, hinges, options = {}) {
   return {
     ...result,
     type: 'frame2d-corotational-fiber-hinge-experimental',
-    solverVersion: '0.16.0-exp',
+    solverVersion: options.controlMode === 'arc-length' ? '0.17.0-exp' : '0.16.0-exp',
     materialNonlinearity,
     nonlinear: {
       ...(result.nonlinear || {}),
@@ -474,15 +474,15 @@ function solveOuterCompatibility(project, scenarioId, hinges, options = {}) {
  */
 export function solveFrameCorotationalFiberHinges2D(project, scenarioId, options = {}) {
   const hinges = activeFiberHinges(project);
-  const displacementControl = options.controlMode === 'displacement';
-  const solveGlobal = displacementControl ? solveFrameCorotationalDisplacementControl2D : solveFrameCorotational2D;
+  const displacementControl = options.controlMode === 'displacement', arcLength = options.controlMode === 'arc-length', pathControl = displacementControl || arcLength;
+  const solveGlobal = arcLength ? solveFrameCorotationalArcLength2D : (displacementControl ? solveFrameCorotationalDisplacementControl2D : solveFrameCorotational2D);
   if (!hinges.length) return solveGlobal(project, scenarioId, options);
   validateHinges(project, hinges);
-  if (displacementControl && options.materialCoupling === 'outer') throw new Error('Pushover v0.16 com rótulas de fibras requer acoplamento material embutido; o modo externo v0.14 permanece apenas para controle de carga.');
+  if (pathControl && options.materialCoupling === 'outer') throw new Error('Controle de caminho v0.17 com rótulas de fibras requer acoplamento material embutido; o modo externo v0.14 permanece apenas para controle de carga.');
   if (options.materialCoupling === 'outer') return solveOuterCompatibility(project, scenarioId, hinges, options);
   const connectionResolver = embeddedConnectionResolver(project, hinges, options);
   const result = solveGlobal(project, scenarioId, { ...options, connectionResolver });
   return decorateEmbeddedResult(result, hinges, options);
 }
 
-export const MATERIAL_NONLINEAR_VERSION = '0.16.0-exp';
+export const MATERIAL_NONLINEAR_VERSION = '0.17.0-exp';

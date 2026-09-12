@@ -1,8 +1,10 @@
 # AstraStruct
 
+
+> **v0.17 experimental:** Arc-Length/Riks esférico de Crisfield com raio adaptativo, cutback, detecção de pontos-limite e integração ao solver co-rotacional/material.
 AstraStruct é uma plataforma web **assembly-first** para modelagem, análise, dimensionamento e futura verificação/detalhamento de estruturas de concreto armado e aço.
 
-> **Estado atual — v0.16.0 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
+> **Estado atual — v0.17.0 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
 
 ## Executar online
 

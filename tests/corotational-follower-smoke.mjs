@@ -52,7 +52,7 @@ function currentFollower(args,q,px,py){
   const x=4+tip.ux,y=tip.uy,l=Math.hypot(x,y),c=x/l,s=y/l,fx=-s*(-10),fy=c*(-10);
   near(follower.currentGlobal.fx,fx,2e-9,'Follower: Fx final');near(follower.currentGlobal.fy,fy,2e-9,'Follower: Fy final');
   near(ra.fx+fx,0,2e-7,'Follower: equilíbrio global Fx');near(ra.fy+fy,0,2e-7,'Follower: equilíbrio global Fy');near(ra.mz+x*fy-y*fx,0,3e-6,'Follower: equilíbrio global de momento');
-  assert(follower.tangentMaxAbs>0,'Follower: tangente externa final deveria ser não nula');near(r.solverVersion==='0.13.4-exp'?1:0,1,0,'Follower: versão do kernel');
+  assert(follower.tangentMaxAbs>0,'Follower: tangente externa final deveria ser não nula');near(r.solverVersion==='0.13.5-exp'?1:0,1,0,'Follower: versão do kernel');
   console.log(p.name,'OK','tip [mm]=',tip.ux*1000,tip.uy*1000,'Fglobal=',fx,fy,'R=',ra.fx,ra.fy,ra.mz);
 }
 
@@ -74,4 +74,4 @@ function currentFollower(args,q,px,py){
   console.log('Co-rotacional — escopo follower protegido OK: apenas extremidade 2');
 }
 
-console.log('Todos os smoke tests de força seguidora co-rotacional v0.13.4 passaram.');
+console.log('Todos os smoke tests de força seguidora co-rotacional v0.13.5 passaram.');

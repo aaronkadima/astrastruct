@@ -13,7 +13,9 @@ jobs:
         with:
           node-version: 24
       - name: Apply v0.22 product patch once
-        run: python scripts/tmp_v022_ui_patch.py
+        run: |
+          python scripts/tmp_v022_ui_patch.py
+          python scripts/tmp_v022_ui_regression_fix.py
       - run: npm install
       - run: npm run check
       - name: Run v0.22 concentrated-hinge benchmark

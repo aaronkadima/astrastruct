@@ -43,5 +43,6 @@ registerSolver({ id: 'response-spectrum-2d', analysisType: 'response-spectrum', 
 registerSolver({ id: 'linear-truss3d', analysisType: 'linear', dimensions: ['3d'], elementSets: ['truss3d'] });
 registerSolver({ id: 'linear-frame3d', analysisType: 'linear', dimensions: ['3d'], elementSets: ['frame3d'] });
 registerSolver({ id: 'linear-mixed3d', analysisType: 'linear', dimensions: ['3d'], elementSets: ['mixed3d'] });
+registerSolver({ id: 'pdelta-frame3d', analysisType: 'pdelta', dimensions: ['3d'], elementSets: ['frame3d'], nonlinear: true });
 
 registerSolver({ id: 'modal-3d', analysisType: 'modal', dimensions: ['3d'], elementSets: ['truss3d','frame3d','mixed3d'], dynamic: true });

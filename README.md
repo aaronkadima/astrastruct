@@ -1,3 +1,7 @@
+## AstraStruct v0.28 — P-Delta espacial 3D
+
+A v0.28 acrescenta análise de segunda ordem elástica para pórticos `frame3d`, com iteração do esforço normal e matriz geométrica consistente nos dois planos de flexão. O escopo permanece deliberadamente limitado a `frame3d` puro; imperfeição modal, plasticidade e co-rotacional 3D ficam para etapas posteriores. Veja `docs/pdelta3d-v028.md`.
+
 ## AstraStruct v0.27 — modal + estabilidade 3D
 
 A v0.27 amplia a fundação espacial com análise modal linear (`Kφ=ω²Mφ`) e flambagem linear 3D (`Kφ=λcr(-Kg)φ`) em dois planos de flexão. A participação modal é reportada em X/Y/Z. O escopo não linear/dinâmico transitório 3D continua protegido. Veja `docs/modal-stability3d-v027.md`.
@@ -24,7 +28,7 @@ A v0.25 acrescenta pré-processamento de acelerogramas (remoção de média/detr
 > **Linha dinâmica v0.23–v0.25:** análise modal, Newmark-β/Rayleigh, aceleração uniforme de base, pseudo-espectros Sa/Sv/Sd, SRSS/CQC e pré-processamento X+Y.
 AstraStruct é uma plataforma web **assembly-first** para modelagem, análise, dimensionamento e futura verificação/detalhamento de estruturas de concreto armado e aço.
 
-> **Estado atual — v0.26.1 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
+> **Estado atual — v0.28 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
 
 ## Executar online
 

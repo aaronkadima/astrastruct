@@ -7,6 +7,7 @@ import { solveFrameCorotational2D, solveFrameCorotationalDisplacementControl2D, 
 import { activeFiberHinges, solveFrameCorotationalFiberHinges2D } from './materialNonlinear2d.js';
 import { solveModal2D, solveTimeHistory2D, solveResponseSpectrum2D } from './dynamics2d.js';
 import { solveSpatial3D } from './spatial3d.js';
+import { solveFramePDelta3D } from './pdelta3d.js';
 import { solveModal3D } from './modalStability3d.js';
 import { resolveScenario } from './scenario.js';
 import { buildElementResponses } from './postprocess.js';
@@ -37,6 +38,7 @@ function buildModalImperfection(project,scenarioId){
 
 function solveStructuralModel(sourceProject,resolvedProject,scenarioId) {
   if (resolvedProject.settings?.analysisType === 'pdelta') {
+    if(inferProjectDimension(resolvedProject)==='3d') return solveFramePDelta3D(resolvedProject);
     const initialImperfection=buildModalImperfection(sourceProject,scenarioId);
     return solveFramePDelta2D(resolvedProject,{initialImperfection});
   }
@@ -45,7 +47,7 @@ function solveStructuralModel(sourceProject,resolvedProject,scenarioId) {
 
 function solveRaw(project, scenarioId) {
   const analysisType=project.settings?.analysisType||'linear',dimension=inferProjectDimension(project),fiberHinges=activeFiberHinges(project),s=project.settings||{};
-  if(dimension==='3d'&&!['linear','modal'].includes(analysisType))throw new Error(`Análise ${analysisType} ainda não é suportada em 3D na v0.27; use análise linear ou modal.`);
+  if(dimension==='3d'&&!['linear','modal','pdelta'].includes(analysisType))throw new Error(`Análise ${analysisType} ainda não é suportada em 3D na v0.28; use análise linear, modal ou P-Delta.`);
   if(analysisType==='modal'){
     if(fiberHinges.length)throw new Error('Dinâmica modal v0.25 é linear-elástica; desative as rótulas de fibras.');
     const result=dimension==='3d'?solveModal3D(project,{modes:s.modalModes,massFormulation:s.dynamicMassFormulation}):solveModal2D(project,{modes:s.modalModes,massFormulation:s.dynamicMassFormulation});
@@ -67,7 +69,7 @@ function solveRaw(project, scenarioId) {
   }
   const resolved = resolveScenario(project, scenarioId);
   const result = solveStructuralModel(project,resolved.project,scenarioId||resolved.scenario?.id);
-  if(result.dimension==='3d')return{...result,scenario:resolved.scenario,analysisType:'linear',solverVersion:result.solverVersion||'0.26.0'};
+  if(result.dimension==='3d')return{...result,scenario:resolved.scenario,analysisType:result.analysisType||analysisType,solverVersion:result.solverVersion||(analysisType==='pdelta'?'0.28.0':'0.26.0')};
   const elementResponses = buildElementResponses(resolved.project, result, 41);
   return {
     ...result,

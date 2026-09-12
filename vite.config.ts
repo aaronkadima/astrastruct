@@ -12,7 +12,25 @@ export default defineConfig({
     outDir: '../dist',
     emptyOutDir: true,
     sourcemap: true,
-    target: 'es2020'
+    target: 'es2020',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalized = id.replaceAll('\\', '/');
+          if (normalized.includes('/node_modules/react/') || normalized.includes('/node_modules/react-dom/')) return 'react-vendor';
+          if (normalized.includes('/web/src/solver/')) return 'structural-solver';
+          if (
+            normalized.includes('/app/src/AnalysisPanelV13') ||
+            normalized.includes('/app/src/EngineeringPanels') ||
+            normalized.includes('/app/src/NonlinearPostprocessPanel') ||
+            normalized.includes('/app/src/NonlinearReportPanel') ||
+            normalized.includes('/app/src/DynamicsPostprocessPanel') ||
+            normalized.includes('/app/src/BucklingPanel')
+          ) return 'engineering-panels';
+          return undefined;
+        }
+      }
+    }
   },
   server: {
     fs: {

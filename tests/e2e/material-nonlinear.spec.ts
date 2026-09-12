@@ -75,7 +75,7 @@ test('v0.16 fiber hinge is configured, guarded, solved and traced through postpr
 
   await openCommand(page,'Diagramas/envelopes');
   const post=page.getByTestId('panel-nonlinear-postprocess');await expect(post).toBeVisible();
-  const materialNote=page.getByTestId('material-postprocess-note');await expect(materialNote).toContainText('Não linearidade material v0.16');await expect(materialNote).toContainText('fibras escoadas=');await expect(materialNote).toContainText('equilíbrio local N–M');await expect(post).toContainText('0.16.0-exp');
+  const materialNote=page.getByTestId('material-postprocess-note');await expect(materialNote).toContainText('Não linearidade material v0.17');await expect(materialNote).toContainText('fibras escoadas=');await expect(materialNote).toContainText('equilíbrio local N–M');await expect(post).toContainText('0.16.0-exp');
   await post.locator('button[aria-label="Fechar"]').click();
 
   await openCommand(page,'Relatório técnico');

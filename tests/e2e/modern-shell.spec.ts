@@ -63,3 +63,32 @@ test('stress visualization uses a large readable chart',async({page},testInfo)=>
   const box=await chart.boundingBox();
   expect(box?.height||0).toBeGreaterThanOrEqual(300);
 });
+
+test('context toolbar exposes quick node geometry and support editing',async({page},testInfo)=>{
+  test.skip(testInfo.project.name!=='desktop-chromium','desktop contextual toolbar');
+  await page.goto('./');
+  await page.locator('g[data-entity="node"]').first().click();
+  const context=page.getByTestId('context-toolbar');
+  await expect(context).toBeVisible();
+  await expect(context).toHaveAttribute('data-context-kind','node');
+  const support=context.locator('[data-context-support]');
+  await support.selectOption('fixed');
+  await context.locator('[data-context-x]').fill('0.125');
+  await context.getByTestId('context-apply').click();
+  await expect(page.locator('.inspector-panel .check-grid input').nth(0)).toBeChecked();
+  await expect(page.locator('.inspector-panel .check-grid input').nth(1)).toBeChecked();
+  await expect(page.locator('.inspector-panel .check-grid input').nth(2)).toBeChecked();
+  await expect(page.locator('.inspector-panel .inspector-grid input').first()).toHaveValue('0.125');
+});
+
+test('context toolbar switches to material and section controls for elements',async({page},testInfo)=>{
+  test.skip(testInfo.project.name!=='desktop-chromium','desktop contextual toolbar');
+  await page.goto('./');
+  await page.locator('g[data-entity="element"]').first().click();
+  const context=page.getByTestId('context-toolbar');
+  await expect(context).toBeVisible();
+  await expect(context).toHaveAttribute('data-context-kind','element');
+  await expect(context.locator('[data-context-material]')).toBeVisible();
+  await expect(context.locator('[data-context-section]')).toBeVisible();
+  await expect(context.getByTestId('context-apply')).toBeVisible();
+});

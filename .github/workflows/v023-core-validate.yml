@@ -13,7 +13,9 @@ jobs:
         with:
           node-version: 24
       - name: Apply v0.23 core integration once
-        run: python scripts/tmp_v023_core_patch.py
+        run: |
+          python scripts/tmp_v023_core_patch.py
+          python scripts/tmp_v023_newmark_fix.py
       - run: npm install
       - run: npm run check
       - name: Run v0.23 dynamics benchmark

@@ -4,6 +4,7 @@ import { solveMixed2D } from './mixed2d.js';
 import { solveFramePDelta2D } from './pdelta2d.js';
 import { solveBuckling2D } from './buckling2d.js';
 import { solveFrameCorotational2D, solveFrameCorotationalDisplacementControl2D, solveFrameCorotationalArcLength2D } from './corotational2d.js';
+import { solveFrameCorotational3D } from './corotational3d.js';
 import { activeFiberHinges, solveFrameCorotationalFiberHinges2D } from './materialNonlinear2d.js';
 import { solveModal2D, solveTimeHistory2D, solveResponseSpectrum2D } from './dynamics2d.js';
 import { solveSpatial3D } from './spatial3d.js';
@@ -58,7 +59,7 @@ function solveStructuralModel(sourceProject,resolvedProject,scenarioId) {
 
 function solveRaw(project, scenarioId) {
   const analysisType=project.settings?.analysisType||'linear',dimension=inferProjectDimension(project),fiberHinges=activeFiberHinges(project),s=project.settings||{};
-  if(dimension==='3d'&&!['linear','modal','pdelta'].includes(analysisType))throw new Error(`Análise ${analysisType} ainda não é suportada em 3D na v0.29; use análise linear, modal ou P-Delta.`);
+  if(dimension==='3d'&&!['linear','modal','pdelta','corotational'].includes(analysisType))throw new Error(`Análise ${analysisType} ainda não é suportada em 3D; use linear, modal, P-Delta ou o co-rotacional elástico experimental v0.30.`);
   if(analysisType==='modal'){
     if(fiberHinges.length)throw new Error('Dinâmica modal v0.25 é linear-elástica; desative as rótulas de fibras.');
     const result=dimension==='3d'?solveModal3D(project,{modes:s.modalModes,massFormulation:s.dynamicMassFormulation}):solveModal2D(project,{modes:s.modalModes,massFormulation:s.dynamicMassFormulation});
@@ -74,6 +75,13 @@ function solveRaw(project, scenarioId) {
   }
   if(fiberHinges.length&&analysisType!=='corotational')throw new Error('Rótulas de fibras v0.16 exigem análise Geom. não linear (co-rotacional). Selecione esse modo antes de executar a análise.');
   if(analysisType==='corotational'){
+    if(dimension==='3d'){
+      if(fiberHinges.length)throw new Error('Co-rotacional 3D v0.30 é elástico; rótulas/plasticidade 3D ainda não são suportadas.');
+      if(s.imperfection?.enabled)throw new Error('Co-rotacional 3D v0.30 ainda não incorpora imperfeição modal; use P-Delta 3D v0.29 ou desative a imperfeição.');
+      if(s.nonlinearControlMode&&s.nonlinearControlMode!=='load')throw new Error('Co-rotacional 3D v0.30 aceita somente controle incremental de carga nesta etapa.');
+      const resolved=resolveScenario(project,scenarioId),result=solveFrameCorotational3D(resolved.project,{steps:s.nonlinearSteps,maxIterations:s.nonlinearMaxIterations,tolerance:s.nonlinearTolerance,lineSearch:s.nonlinearLineSearch});
+      return{...result,scenario:resolved.scenario,analysisType:'corotational',solverVersion:'0.30.0-exp'};
+    }
     const initialImperfection=buildModalImperfection(project,scenarioId),controlMode=s.nonlinearControlMode==='arc-length'?'arc-length':(s.nonlinearControlMode==='displacement'?'displacement':'load'),options={steps:s.nonlinearSteps,maxIterations:s.nonlinearMaxIterations,tolerance:s.nonlinearTolerance,lineSearch:s.nonlinearLineSearch,initialImperfection,controlMode,displacementTolerance:s.displacementControlTolerance,displacementControl:{nodeId:s.displacementControlNodeId,dof:s.displacementControlDof,targetDisplacement:s.displacementControlTarget},cyclicProtocol:{enabled:!!s.cyclicProtocolEnabled,targets:Array.isArray(s.cyclicProtocolTargets)?s.cyclicProtocolTargets:[],stepsPerSegment:s.cyclicStepsPerSegment},arcLengthMonitor:{nodeId:s.arcLengthMonitorNodeId||s.displacementControlNodeId,dof:s.arcLengthMonitorDof||s.displacementControlDof},arcLengthInitialLoadIncrement:s.arcLengthInitialLoadIncrement,arcLengthInitialSign:s.arcLengthInitialSign,arcLengthTargetIterations:s.arcLengthTargetIterations,arcLengthMaxCutbacks:s.arcLengthMaxCutbacks,arcLengthMinRadiusFactor:s.arcLengthMinRadiusFactor,arcLengthMaxRadiusFactor:s.arcLengthMaxRadiusFactor,arcLengthConstraintTolerance:s.arcLengthConstraintTolerance,stabilityTracking:s.stabilityTracking,stabilityEigenTolerance:s.stabilityEigenTolerance,stabilityAsymmetryTolerance:s.stabilityAsymmetryTolerance,stabilityMaxDofs:s.stabilityMaxDofs,stabilityModeCount:s.stabilityModeCount,stabilityClusterTolerance:s.stabilityClusterTolerance,stabilityMacThreshold:s.stabilityMacThreshold,branchExploreEnabled:s.branchExploreEnabled,branchExploreAmplitude:s.branchExploreAmplitude,branchExploreMaxIterations:s.branchExploreMaxIterations,branchExploreMaxEvents:s.branchExploreMaxEvents,branchSwitchEnabled:s.branchSwitchEnabled,branchSwitchSign:s.branchSwitchSign,branchSwitchAmplitude:s.branchSwitchAmplitude,materialMaxIterations:s.materialMaxIterations,materialTolerance:s.materialTolerance,materialRelaxation:s.materialRelaxation,materialCoupling:s.materialCoupling};
     const result=fiberHinges.length?solveFrameCorotationalFiberHinges2D(project,scenarioId,options):(controlMode==='arc-length'?solveFrameCorotationalArcLength2D(project,scenarioId,options):(controlMode==='displacement'?solveFrameCorotationalDisplacementControl2D(project,scenarioId,options):solveFrameCorotational2D(project,scenarioId,options)));
     return{...result,analysisType:'corotational',solverVersion:result.solverVersion||'0.13.6-exp'};

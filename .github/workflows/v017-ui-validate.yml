@@ -15,8 +15,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Apply v0.17 UI patch
-        run: python tools/v017_ui_patch.py
+      - name: Apply v0.17 UI patch once
+        run: |
+          if grep -q 'arc-length-monitor-node' app/src/AnalysisPanelV13.tsx; then
+            echo 'v0.17 UI already applied'
+          else
+            sed -i 's/Modelo concentrado v0\.16:/Modelo concentrado v0.15:/' app/src/NonlinearReportPanel.tsx
+            python tools/v017_ui_patch.py
+          fi
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Validate modules

@@ -1,0 +1,131 @@
+name: AstraStruct v0.15 wire and validate
+
+on:
+  push:
+    branches: [feat/v015-embedded-material-newton]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/v015-embedded-material-newton
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Wire kernel, UI and regression tests
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # Kernel hook for a custom end-connection resolver.
+          p=Path('web/src/solver/corotational2d.js');s=p.read_text()
+          if 'function assemble(prepared,u,loadFactor=1,options={}){' not in s:
+              s=s.replace('function assemble(prepared,u,loadFactor=1){','function assemble(prepared,u,loadFactor=1,options={}){',1)
+          old="""    const connected=corotationalConnectedElementState({X1:Number(item.a.x),Y1:Number(item.a.y),X2:Number(item.b.x),Y2:Number(item.b.y),qGlobal:qNode,E:item.E,A:item.A,I:item.I,initialBasic,pGlobal:item.pGlobal,loadFactor,releases:item.e.releases||{},rotationalSprings:item.e.rotationalSprings||{},rotationalSpringMoments:item.e.rotationalSpringMoments||{}}),state=connected.state;"""
+          new="""    const connectionArgs={X1:Number(item.a.x),Y1:Number(item.a.y),X2:Number(item.b.x),Y2:Number(item.b.y),qGlobal:qNode,E:item.E,A:item.A,I:item.I,initialBasic,pGlobal:item.pGlobal,loadFactor,releases:item.e.releases||{},rotationalSprings:item.e.rotationalSprings||{},rotationalSpringMoments:item.e.rotationalSpringMoments||{}};\n    const connected=typeof options.connectionResolver==='function'?options.connectionResolver({item,qNode,initialBasic,loadFactor,connectionArgs,solveConnected:(overrides={})=>corotationalConnectedElementState({...connectionArgs,...overrides})}):corotationalConnectedElementState(connectionArgs),state=connected?.state;\n    if(!state||!Array.isArray(connected?.gradient)||!Array.isArray(connected?.tangent))throw new Error(`Co-rotacional: resolvedor de ligação retornou estado inválido em ${item.e.id}.`);"""
+          if old in s:s=s.replace(old,new,1)
+          s=s.replace('function residualAt(prepared,u,loadFactor){\n  const assembled=assemble(prepared,u,loadFactor)', 'function residualAt(prepared,u,loadFactor,options={}){\n  const assembled=assemble(prepared,u,loadFactor,options)',1)
+          s=s.replace('residualAt(prepared,u,lambda)', 'residualAt(prepared,u,lambda,options)')
+          s=s.replace('residualAt(prepared,trial,lambda)', 'residualAt(prepared,trial,lambda,options)')
+          s=s.replace('residualAt(prepared,u,1)', 'residualAt(prepared,u,1,options)')
+          old="""    history.push({step,loadFactor:lambda,iterations:iteration,residualNorm:last.norm});"""
+          new="""    const materialLocalIterations=Math.max(0,...(last.states||[]).map(x=>Number(x.connected?.materialLocalIterations)||0));\n    history.push({step,loadFactor:lambda,iterations:iteration,residualNorm:last.norm,materialLocalIterations});"""
+          if old in s:s=s.replace(old,new,1)
+          old="""connectionCondensation:{internalResidual:connected.internalConnectionResidual,stiffnesses:connected.stiffnesses}"""
+          new="""connectionCondensation:{internalResidual:connected.internalConnectionResidual,stiffnesses:connected.stiffnesses,materialLocalIterations:Number(connected.materialLocalIterations)||0,materialResidual:Number(connected.materialResidual)||0,materialMeta:connected.materialConnectionMeta||null}"""
+          if old in s:s=s.replace(old,new,1)
+          old="""endConnections:{flexibleEndCount,method:'internal end rotations + Schur condensation',experimental:true},imperfection:imperfectionMeta,history,converged:true"""
+          new="""endConnections:{flexibleEndCount,method:'internal end rotations + Schur condensation',customResolver:typeof options.connectionResolver==='function',experimental:true},imperfection:imperfectionMeta,history,converged:true"""
+          if old in s:s=s.replace(old,new,1)
+          p.write_text(s)
+
+          # Dispatcher.
+          p=Path('web/src/solver/index.js');s=p.read_text()
+          old='materialMaxIterations:s.materialMaxIterations,materialTolerance:s.materialTolerance,materialRelaxation:s.materialRelaxation'
+          new='materialMaxIterations:s.materialMaxIterations,materialTolerance:s.materialTolerance,materialRelaxation:s.materialRelaxation,materialCoupling:s.materialCoupling'
+          if old in s:s=s.replace(old,new,1)
+          s=s.replace('Rótulas de fibras v0.14 exigem','Rótulas de fibras v0.15 exigem',1)
+          p.write_text(s)
+
+          # Analysis panel family validation and coupling selector.
+          p=Path('app/src/AnalysisPanelV13.tsx');s=p.read_text()
+          anchor="""const activeFiberHinges=(project:any)=>(project.elements||[]).flatMap((e:any)=>(['rz1','rz2'] as const).filter(key=>!!e.fiberHinges?.[key]?.enabled).map(key=>({element:e,key,config:e.fiberHinges[key]})));\n"""
+          if 'const fiberSectionEligible=' not in s:
+              extra=anchor+"""const fiberFamily=(sec:any)=>String(sec?.family||'').toLowerCase();\nconst fiberSectionEligible=(sec:any)=>{const f=fiberFamily(sec),h=num(sec?.h??sec?.depth),b=num(sec?.b??sec?.width);if(!(h>0&&b>0))return false;if(['rect','rectangle','retangular'].includes(f))return true;if(['i','h','ih','i/h'].includes(f))return num(sec?.tw??sec?.webThickness)>0&&num(sec?.tf??sec?.flangeThickness)>0;if(f==='rhs')return num(sec?.t??sec?.thickness)>0;return false};\n"""
+              if anchor not in s: raise SystemExit('analysis helper anchor missing')
+              s=s.replace(anchor,extra,1)
+          old="""    if(!(Number(sec?.b??sec?.width)>0&&Number(sec?.h??sec?.depth)>0))issues.push(`Rótula de fibras ${e.id}/${key}: a seção deve ser retangular e possuir b e h positivos.`);"""
+          new="""    if(!fiberSectionEligible(sec))issues.push(`Rótula de fibras ${e.id}/${key}: use seção de aço paramétrica retangular, I/H ou RHS com dimensões válidas.`);"""
+          if old in s:s=s.replace(old,new,1)
+          s=s.replace('v0.14 aceita somente material steel.','v0.15 aceita somente material steel.',1)
+          old='  const [materialRelaxation,setMaterialRelaxation]=useState(project.settings?.materialRelaxation||.65);'
+          new="""  const [materialRelaxation,setMaterialRelaxation]=useState(project.settings?.materialRelaxation??1);\n  const [materialCoupling,setMaterialCoupling]=useState(project.settings?.materialCoupling||'embedded');"""
+          if old in s:s=s.replace(old,new,1)
+          old='    p.settings.materialMaxIterations=Math.max(3,Math.min(60,Math.round(num(materialMaxIt,30))));p.settings.materialTolerance=Math.max(1e-9,num(materialTol,1e-5));p.settings.materialRelaxation=Math.max(.1,Math.min(1,num(materialRelaxation,.65)));'
+          new="""    p.settings.materialMaxIterations=Math.max(3,Math.min(80,Math.round(num(materialMaxIt,30))));p.settings.materialTolerance=Math.max(1e-10,num(materialTol,1e-6));p.settings.materialRelaxation=Math.max(.2,Math.min(1,num(materialRelaxation,1)));p.settings.materialCoupling=materialCoupling==='outer'?'outer':'embedded';"""
+          if old in s:s=s.replace(old,new,1)
+          s=s.replace('Núcleo geom. v0.13.6 · material v0.14.','Núcleo geom. v0.13.6 · material v0.15.',1)
+          s=s.replace('Rótula de fibras v0.14 exige Geom. não linear.','Rótula de fibras v0.15 exige Geom. não linear.',1)
+          s=s.replace('A v0.14 acrescenta <b>rótulas concentradas de fibras de aço bilinear monotônico</b> com equilíbrio local N–M.','A v0.15 acrescenta <b>rótulas concentradas de fibras de aço bilinear monotônico</b> em seções retangulares, I/H e RHS, com Newton constitutivo local embutido no equilíbrio global.',1)
+          s=s.replace('<h3>Material não linear · v0.14</h3>','<h3>Material não linear · v0.15</h3>',1)
+          old="""<div className=\"geometry-grid\"><label>Máx. iterações externas<input data-testid=\"material-max-iterations\" type=\"number\" min=\"3\" max=\"60\" value={materialMaxIt} onChange={e=>setMaterialMaxIt(num(e.target.value,30))}/></label><label>Tolerância M relativa<input data-testid=\"material-tolerance\" type=\"number\" min=\"1e-9\" step=\"1e-5\" value={materialTol} onChange={e=>setMaterialTol(num(e.target.value,1e-5))}/></label><label>Relaxação da secante<input data-testid=\"material-relaxation\" type=\"number\" min=\"0.1\" max=\"1\" step=\"0.05\" value={materialRelaxation} onChange={e=>setMaterialRelaxation(num(e.target.value,.65))}/></label></div><div className=\"panel-note\">Estratégia v0.14: o equilíbrio global co‑rotacional é resolvido, cada rótula recebe Δθ e N, a seção de fibras resolve N–M e atualiza a rigidez secante M/Δθ. O ciclo externo repete até compatibilizar os momentos. Não é uma tangente material global consistente e não possui memória cíclica.</div>"""
+          new="""<div className=\"geometry-grid\"><label>Acoplamento<select data-testid=\"material-coupling\" value={materialCoupling} onChange={e=>setMaterialCoupling(e.target.value)}><option value=\"embedded\">Newton local embutido · v0.15</option><option value=\"outer\">Compatibilidade externa · v0.14</option></select></label><label>{materialCoupling==='outer'?'Máx. iterações externas':'Máx. iterações locais'}<input data-testid=\"material-max-iterations\" type=\"number\" min=\"3\" max=\"80\" value={materialMaxIt} onChange={e=>setMaterialMaxIt(num(e.target.value,30))}/></label><label>Tolerância M relativa<input data-testid=\"material-tolerance\" type=\"number\" min=\"1e-10\" step=\"1e-6\" value={materialTol} onChange={e=>setMaterialTol(num(e.target.value,1e-6))}/></label><label>Relaxação constitutiva<input data-testid=\"material-relaxation\" type=\"number\" min=\"0.2\" max=\"1\" step=\"0.05\" value={materialRelaxation} onChange={e=>setMaterialRelaxation(num(e.target.value,1))}/></label></div><div className=\"panel-note\">{materialCoupling==='outer'?<>Modo de compatibilidade v0.14: repete soluções globais para atualizar a linearização da rótula.</>:<>Estratégia v0.15: em <b>cada avaliação do resíduo/tangente global</b>, a rotação interna da extremidade e a seção de fibras são compatibilizadas por Newton local com M≈kt·Δθ+M0. Não há iteração material global externa. A interação N–M é atualizada em cada estado de tentativa; resposta cíclica ainda não é representada.</>}</div>"""
+          if old in s:s=s.replace(old,new,1)
+          p.write_text(s)
+
+          # Postprocess/report copy.
+          p=Path('app/src/NonlinearPostprocessPanel.tsx');s=p.read_text()
+          s=s.replace('<b>Não linearidade material v0.14:</b>','<b>Não linearidade material v0.15:</b>',1)
+          s=s.replace("{material.outerIterations} iteração(ões) externa(s), resíduo máximo de momento", "acoplamento {material.coupling||'—'}, Newton local máx. {material.maxLocalIterations??'—'} it., iterações externas {material.outerIterations??0}, resíduo máximo de momento",1)
+          s=s.replace('Na rótula de fibras, a rigidez secante é atualizada pela relação constitutiva M–Δθ.','Na rótula de fibras v0.15, a tangente constitutiva e o termo afim M0 são atualizados pelo Newton local e condensados por Schur.',1)
+          s=s.replace("<small>Iterações material</small><b>{material.outerIterations??'—'}</b>","<small>Newton material local</small><b>{material.maxLocalIterations??material.outerIterations??'—'}</b>",1)
+          p.write_text(s)
+
+          p=Path('app/src/NonlinearReportPanel.tsx');s=p.read_text()
+          s=s.replace('com rótulas de fibras v0.14','com rótulas de fibras v0.15',1)
+          s=s.replace("<small>Iterações material</small><b>{material?.outerIterations??'—'}</b>","<small>Newton material local</small><b>{material?.maxLocalIterations??material?.outerIterations??'—'}</b>",1)
+          s=s.replace('Modelo concentrado v0.14: seção retangular discretizada em fibras de aço bilinear monotônico.','Modelo concentrado v0.15: seções retangulares, I/H e RHS discretizadas em fibras de aço bilinear monotônico.',1)
+          s=s.replace("O equilíbrio global usa <b>{material?.globalStrategy||'iteração secante externa'}</b>; não há alegação de história cíclica ou tangente material global consistente.","O equilíbrio global usa <b>{material?.globalStrategy||'Newton constitutivo embutido'}</b>. No modo padrão, a compatibilização M–Δθ ocorre dentro de cada avaliação global; não há história cíclica e a derivada cruzada axial-material ainda é congelada em cada avaliação da tangente.",1)
+          s=s.replace("<small>Iterações externas</small><b>{material?.outerIterations??'—'}</b>","<small>Newton local máx.</small><b>{material?.maxLocalIterations??material?.outerIterations??'—'}</b>",1)
+          p.write_text(s)
+
+          # Regression tests.
+          p=Path('tests/material-global-smoke.mjs');s=p.read_text()
+          s=s.replace('0.14.2-exp','0.15.0-exp')
+          s=s.replace("assert(r.materialNonlinearity.outerIterations>=2,'v0.14 global: iteração constitutiva externa não executada');","assert(r.materialNonlinearity.coupling==='embedded-local-newton','v0.15 global: acoplamento material embutido não ativado');assert(r.materialNonlinearity.outerIterations===0,'v0.15 global: não deveria existir iteração material global externa');assert(r.materialNonlinearity.maxLocalIterations>=2,'v0.15 global: Newton constitutivo local não foi executado');")
+          marker="console.log('Todos os smoke tests globais de rótula de fibras do AstraStruct v0.14.2 passaram.');"
+          if marker in s:
+              s=s.replace(marker,"""// 4) Regressão embedded vs modo externo legado.\n{\n  const pEmbedded=steelCantilever({axial:-600,moment:1900}),rEmbedded=solve(pEmbedded,'LC1'),pOuter=steelCantilever({axial:-600,moment:1900});pOuter.settings.materialCoupling='outer';const rOuter=solve(pOuter,'LC1'),a=rEmbedded.materialNonlinearity.records[0],b=rOuter.materialNonlinearity.records[0],uA=rEmbedded.displacements.find(x=>x.nodeId==='N2'),uB=rOuter.displacements.find(x=>x.nodeId==='N2');\n  near(a.constitutiveMoment,b.constitutiveMoment,Math.max(.2,Math.abs(a.constitutiveMoment)*8e-4),'v0.15 regressão: momento embedded vs outer');near(a.rotation,b.rotation,Math.max(2e-6,Math.abs(a.rotation)*2e-3),'v0.15 regressão: rotação embedded vs outer');near(uA.rz,uB.rz,Math.max(2e-6,Math.abs(uA.rz)*2e-3),'v0.15 regressão: rotação nodal embedded vs outer');assert(rOuter.materialNonlinearity.coupling==='outer-compatibility','v0.15 regressão: fallback externo não identificado');console.log('v0.15 — embedded vs outer OK','M=',a.constitutiveMoment,'theta=',a.rotation,'local=',rEmbedded.materialNonlinearity.maxLocalIterations,'outer=',rOuter.materialNonlinearity.outerIterations);\n}\n\nconsole.log('Todos os smoke tests globais de rótula de fibras do AstraStruct v0.15 passaram.');""",1)
+          p.write_text(s)
+
+          p=Path('tests/e2e/material-nonlinear.spec.ts');s=p.read_text().replace('0.14.2-exp','0.15.0-exp').replace('Não linearidade material v0.14','Não linearidade material v0.15')
+          anchor="  await page.getByTestId('material-max-iterations').fill('32');"
+          if anchor in s and "material-coupling')).toHaveValue('embedded')" not in s:s=s.replace(anchor,"  await expect(page.getByTestId('material-coupling')).toHaveValue('embedded');\n"+anchor,1)
+          p.write_text(s)
+
+          p=Path('README.md');s=p.read_text().replace('**Estado atual — v0.14.2 experimental:**','**Estado atual — v0.15.0 experimental:**',1)
+          s=s.replace('- **rótulas concentradas de fibras de aço v0.14.2 para seções retangulares, I/H e RHS, com equilíbrio local N–M e linearização tangente-afim**;','- **rótulas concentradas de fibras de aço v0.15 para seções retangulares, I/H e RHS, com equilíbrio local N–M, linearização tangente-afim e Newton constitutivo embutido em cada avaliação do equilíbrio global**;',1)
+          p.write_text(s)
+          PY
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck and validate modules
+        run: npm run check
+      - name: Run structural solver tests
+        run: npm test
+      - name: Build React/Vite application
+        run: npm run build
+      - name: Commit validated v0.15 wiring
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add web/src/solver/corotational2d.js web/src/solver/index.js app/src/AnalysisPanelV13.tsx app/src/NonlinearPostprocessPanel.tsx app/src/NonlinearReportPanel.tsx tests/material-global-smoke.mjs tests/e2e/material-nonlinear.spec.ts README.md
+          git commit -m "feat: wire embedded material Newton into global solve" || exit 0
+          git push origin HEAD:feat/v015-embedded-material-newton

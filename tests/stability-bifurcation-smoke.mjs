@@ -19,7 +19,7 @@ function eulerColumn(branchSwitchEnabled=false){
 
 {
   const p=eulerColumn(false),linear=solveBuckling2D(p,'LC1',{modes:1}),r=solve(p,'LC1'),events=r.arcLength?.stability?.events||[],bif=events.find(e=>e.type==='bifurcation-candidate');
-  assert(r.solverVersion==='0.18.0-exp',`v0.18: versão inesperada ${r.solverVersion}`);
+  assert(r.solverVersion==='0.19.0-exp',`v0.18: versão inesperada ${r.solverVersion}`);
   assert(r.arcLength?.stability?.enabled,'v0.18: diagnóstico espectral ausente');
   assert(bif,'v0.18: bifurcação da coluna de Euler não detectada');
   nearRel(bif.criticalLoadFactor,linear.criticalFactor,.12,'v0.18: fator crítico não acompanha flambagem linear');

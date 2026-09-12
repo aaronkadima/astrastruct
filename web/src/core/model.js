@@ -47,7 +47,7 @@ export function emptyProject() {
       nonlinearSteps: 20, nonlinearMaxIterations: 35, nonlinearTolerance: 1e-8, nonlinearLineSearch: true,
       nonlinearControlMode: 'load', displacementControlNodeId: null, displacementControlDof: 'uy', displacementControlTarget: -0.05, displacementControlTolerance: 1e-7,
       arcLengthMonitorNodeId: null, arcLengthMonitorDof: 'uy', arcLengthInitialLoadIncrement: 0.05, arcLengthInitialSign: 1, arcLengthTargetIterations: 6, arcLengthMaxCutbacks: 8, arcLengthMinRadiusFactor: 0.02, arcLengthMaxRadiusFactor: 4, arcLengthConstraintTolerance: 1e-6,
-      stabilityTracking: true, stabilityEigenTolerance: 0.05, stabilityAsymmetryTolerance: 1e-6, stabilityMaxDofs: 120, branchSwitchEnabled: false, branchSwitchSign: 1, branchSwitchAmplitude: 0.08,
+      stabilityTracking: true, stabilityEigenTolerance: 0.05, stabilityAsymmetryTolerance: 1e-6, stabilityMaxDofs: 120, stabilityModeCount: 4, stabilityClusterTolerance: 0.03, stabilityMacThreshold: 0.25, branchExploreEnabled: false, branchExploreAmplitude: 0.08, branchExploreMaxIterations: 30, branchExploreMaxEvents: 3, branchSwitchEnabled: false, branchSwitchSign: 1, branchSwitchAmplitude: 0.08,
       materialMaxIterations: 30, materialTolerance: 1e-6, materialRelaxation: 1, materialCoupling: 'embedded',
       imperfection: { enabled: false, source: 'bucklingMode', scenarioId: null, mode: 1, amplitudeMm: 10 }
     },
@@ -96,6 +96,13 @@ export function normalizeProject(input) {
   p.settings.stabilityEigenTolerance = Math.max(1e-5, Math.min(1, Math.abs(Number(p.settings.stabilityEigenTolerance) || 0.05)));
   p.settings.stabilityAsymmetryTolerance = Math.max(1e-12, Math.min(0.1, Math.abs(Number(p.settings.stabilityAsymmetryTolerance) || 1e-6)));
   p.settings.stabilityMaxDofs = Math.max(6, Math.min(500, Math.round(Number(p.settings.stabilityMaxDofs) || 120)));
+  p.settings.stabilityModeCount = Math.max(1, Math.min(12, Math.round(Number(p.settings.stabilityModeCount) || 4)));
+  p.settings.stabilityClusterTolerance = Math.max(1e-6, Math.min(0.5, Math.abs(Number(p.settings.stabilityClusterTolerance) || 0.03)));
+  p.settings.stabilityMacThreshold = Math.max(0, Math.min(1, Number(p.settings.stabilityMacThreshold) || 0.25));
+  p.settings.branchExploreEnabled = !!p.settings.branchExploreEnabled;
+  p.settings.branchExploreAmplitude = Math.max(1e-4, Math.min(0.45, Math.abs(Number(p.settings.branchExploreAmplitude) || 0.08)));
+  p.settings.branchExploreMaxIterations = Math.max(5, Math.min(80, Math.round(Number(p.settings.branchExploreMaxIterations) || 30)));
+  p.settings.branchExploreMaxEvents = Math.max(1, Math.min(12, Math.round(Number(p.settings.branchExploreMaxEvents) || 3)));
   p.settings.branchSwitchEnabled = !!p.settings.branchSwitchEnabled;
   p.settings.branchSwitchSign = Number(p.settings.branchSwitchSign) < 0 ? -1 : 1;
   p.settings.branchSwitchAmplitude = Math.max(1e-4, Math.min(0.45, Math.abs(Number(p.settings.branchSwitchAmplitude) || 0.08)));

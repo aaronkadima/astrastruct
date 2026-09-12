@@ -5,10 +5,10 @@ import { solve } from '../web/src/solver/index.js';
 
 const close=(a,b,tol,msg)=>assert.ok(Math.abs(a-b)<=tol,`${msg}: got ${a}, expected ${b}, err ${Math.abs(a-b)}`);
 const E=200e6,nu=.3,A=.012,Iy=7e-5,Iz=9e-5,J=1.6e-5,L=3,H=10;
-const base={materials:[{id:'S',type:'steel',E,nu,density:78.5}],sections:[{id:'SEC',family:'i',A,Iy,Iz,J,I:Iz}],elementLoads:[],loads:[],supports:[],settings:{analysisType:'pdelta',pDeltaMaxIterations:60,pDeltaTolerance:1e-10}};
+const base={materials:[{id:'S',type:'steel',E,nu,density:78.5}],sections:[{id:'SEC',family:'i',A,Iy,Iz,J,I:Iz}],loadCases:[{id:'LC1',name:'Caso 1',type:'user'}],elementLoads:[],loads:[],supports:[],settings:{analysisType:'pdelta',analysisScenarioId:'LC1',pDeltaMaxIterations:60,pDeltaTolerance:1e-10}};
 
 function cantilever({P=0,fy=-H,fz=0}={}){
-  return {...base,nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:L,y:0,z:0}],elements:[{id:'E1',type:'frame3d',n1:'N1',n2:'N2',materialId:'S',sectionId:'SEC',A,Iy,Iz,J,orientation:{up:[0,1,0]}}],supports:[{nodeId:'N1',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],loads:[{nodeId:'N2',fx:-P,fy,fz}],elementLoads:[]};
+  return {...base,nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:L,y:0,z:0}],elements:[{id:'E1',type:'frame3d',n1:'N1',n2:'N2',materialId:'S',sectionId:'SEC',A,Iy,Iz,J,orientation:{up:[0,1,0]}}],supports:[{nodeId:'N1',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],loads:[{nodeId:'N2',caseId:'LC1',fx:-P,fy,fz}],elementLoads:[]};
 }
 
 // 1) Sem esforço axial, P-Delta deve coincidir com a solução linear 3D.

@@ -33,7 +33,7 @@ async function openInspectorIfNeeded(page:Page){
 test('v0.14 fiber hinge is configured in Inspector and solved by material nonlinear kernel',async({page})=>{
   await installSteelCantilever(page);
   await expect(page.getByTestId('astra-app')).toBeVisible();
-  const member=page.locator('g[data-entity="element"]').first();await expect(member).toBeVisible();await member.click();
+  const member=page.locator('g[data-entity="element"] .member').first();await expect(member).toBeVisible();await member.click();
   await openInspectorIfNeeded(page);
 
   const enabled=page.getByTestId('fiber-hinge-rz2-enabled');await expect(enabled).toBeEnabled();await enabled.check();

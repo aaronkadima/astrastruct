@@ -8,7 +8,7 @@ import { activeFiberHinges, solveFrameCorotationalFiberHinges2D } from './materi
 import { solveModal2D, solveTimeHistory2D, solveResponseSpectrum2D } from './dynamics2d.js';
 import { solveSpatial3D } from './spatial3d.js';
 import { solveFramePDelta3D } from './pdelta3d.js';
-import { solveModal3D } from './modalStability3d.js';
+import { solveModal3D, solveBuckling3D } from './modalStability3d.js';
 import { resolveScenario } from './scenario.js';
 import { buildElementResponses } from './postprocess.js';
 import { classifyElementSet, inferProjectDimension } from '../core/elementRegistry.js';
@@ -24,21 +24,32 @@ function solveLinearModel(project) {
   throw new Error(`Tipos de elementos ainda não suportados pelo solver: ${types.join(', ') || 'modelo vazio'}`);
 }
 
-function buildModalImperfection(project,scenarioId){
+function modalImperfectionConfig(project,scenarioId){
   const cfg=project.settings?.imperfection;
   if(!cfg?.enabled)return null;
   if((cfg.source||'bucklingMode')!=='bucklingMode')throw new Error(`Fonte de imperfeição ainda não suportada: ${cfg.source}.`);
   const amplitudeMm=Number(cfg.amplitudeMm),mode=Math.max(1,Math.min(12,Math.round(Number(cfg.mode)||1))),referenceScenarioId=cfg.scenarioId||scenarioId||project.settings?.analysisScenarioId||project.loadCases?.[0]?.id;
   if(!(amplitudeMm>0&&Number.isFinite(amplitudeMm)))throw new Error('Imperfeição modal: amplitude máxima deve ser positiva e finita em mm.');
-  const buckling=solveBuckling2D(project,referenceScenarioId,{modes:mode}),selected=buckling.modes?.[mode-1];
-  if(!selected)throw new Error(`Imperfeição modal: modo ${mode} não disponível para o cenário ${referenceScenarioId}.`);
-  const amplitude=amplitudeMm/1000;
-  return{source:'bucklingMode',mode,referenceScenarioId,criticalFactor:selected.factor,amplitude,amplitudeMm,vector:selected.vector.map(v=>v*amplitude)};
+  return{amplitudeMm,mode,referenceScenarioId};
+}
+function buildModalImperfection(project,scenarioId){
+  const cfg=modalImperfectionConfig(project,scenarioId);if(!cfg)return null;
+  const buckling=solveBuckling2D(project,cfg.referenceScenarioId,{modes:cfg.mode}),selected=buckling.modes?.[cfg.mode-1];
+  if(!selected)throw new Error(`Imperfeição modal: modo ${cfg.mode} não disponível para o cenário ${cfg.referenceScenarioId}.`);
+  const amplitude=cfg.amplitudeMm/1000;
+  return{source:'bucklingMode',mode:cfg.mode,referenceScenarioId:cfg.referenceScenarioId,criticalFactor:selected.factor,amplitude,amplitudeMm:cfg.amplitudeMm,vector:selected.vector.map(v=>v*amplitude)};
+}
+function buildModalImperfection3D(project,scenarioId){
+  const cfg=modalImperfectionConfig(project,scenarioId);if(!cfg)return null;
+  const buckling=solveBuckling3D(project,cfg.referenceScenarioId,{modes:cfg.mode}),selected=buckling.modes?.[cfg.mode-1];
+  if(!selected)throw new Error(`Imperfeição modal 3D: modo ${cfg.mode} não disponível para o cenário ${cfg.referenceScenarioId}.`);
+  const amplitude=cfg.amplitudeMm/1000;
+  return{source:'bucklingMode',mode:cfg.mode,referenceScenarioId:cfg.referenceScenarioId,criticalFactor:selected.factor,amplitude,amplitudeMm:cfg.amplitudeMm,vector:selected.vector.map(v=>v*amplitude)};
 }
 
 function solveStructuralModel(sourceProject,resolvedProject,scenarioId) {
   if (resolvedProject.settings?.analysisType === 'pdelta') {
-    if(inferProjectDimension(resolvedProject)==='3d') return solveFramePDelta3D(resolvedProject);
+    if(inferProjectDimension(resolvedProject)==='3d') return solveFramePDelta3D(resolvedProject,{initialImperfection:buildModalImperfection3D(sourceProject,scenarioId)});
     const initialImperfection=buildModalImperfection(sourceProject,scenarioId);
     return solveFramePDelta2D(resolvedProject,{initialImperfection});
   }
@@ -47,7 +58,7 @@ function solveStructuralModel(sourceProject,resolvedProject,scenarioId) {
 
 function solveRaw(project, scenarioId) {
   const analysisType=project.settings?.analysisType||'linear',dimension=inferProjectDimension(project),fiberHinges=activeFiberHinges(project),s=project.settings||{};
-  if(dimension==='3d'&&!['linear','modal','pdelta'].includes(analysisType))throw new Error(`Análise ${analysisType} ainda não é suportada em 3D na v0.28; use análise linear, modal ou P-Delta.`);
+  if(dimension==='3d'&&!['linear','modal','pdelta'].includes(analysisType))throw new Error(`Análise ${analysisType} ainda não é suportada em 3D na v0.29; use análise linear, modal ou P-Delta.`);
   if(analysisType==='modal'){
     if(fiberHinges.length)throw new Error('Dinâmica modal v0.25 é linear-elástica; desative as rótulas de fibras.');
     const result=dimension==='3d'?solveModal3D(project,{modes:s.modalModes,massFormulation:s.dynamicMassFormulation}):solveModal2D(project,{modes:s.modalModes,massFormulation:s.dynamicMassFormulation});
@@ -69,7 +80,7 @@ function solveRaw(project, scenarioId) {
   }
   const resolved = resolveScenario(project, scenarioId);
   const result = solveStructuralModel(project,resolved.project,scenarioId||resolved.scenario?.id);
-  if(result.dimension==='3d')return{...result,scenario:resolved.scenario,analysisType:result.analysisType||analysisType,solverVersion:result.solverVersion||(analysisType==='pdelta'?'0.28.0':'0.26.0')};
+  if(result.dimension==='3d')return{...result,scenario:resolved.scenario,analysisType:result.analysisType||analysisType,solverVersion:result.solverVersion||(analysisType==='pdelta'?'0.29.0':'0.26.0')};
   const elementResponses = buildElementResponses(resolved.project, result, 41);
   return {
     ...result,
@@ -79,7 +90,6 @@ function solveRaw(project, scenarioId) {
     solverVersion: analysisType==='pdelta'?'0.12.0':'0.13.4-exp'
   };
 }
-
 
 export function solve(project, scenarioId) {
   return attachResultContract(project, scenarioId, solveRaw(project, scenarioId));

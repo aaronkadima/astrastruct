@@ -1,10 +1,10 @@
 # AstraStruct
 
 
-> **v0.19 experimental:** estabilidade tangente multimodal sobre Arc-Length/Riks, rastreamento por MAC, agrupamento de modos quase degenerados, exploração bilateral ±φ e troca de ramo modal opcional.
+> **v0.20 experimental:** plasticidade distribuída de aço em frame2d por integração Gauss–Lobatto de seções de fibras, preservando os recursos Arc-Length/estabilidade multimodal da v0.19.
 AstraStruct é uma plataforma web **assembly-first** para modelagem, análise, dimensionamento e futura verificação/detalhamento de estruturas de concreto armado e aço.
 
-> **Estado atual — v0.19.0 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
+> **Estado atual — v0.20.0 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
 
 ## Executar online
 
@@ -26,10 +26,12 @@ A interface React/Vite é construída, testada e publicada automaticamente em `d
 - **força seguidora concentrada na extremidade 2 de `frame2d`, com tangente externa consistente, no co‑rotacional**;
 - **rótulas e ligações rotacionais semirrígidas no co‑rotacional v0.13.5, com rotação interna de extremidade e condensação estática de Schur**;
 - **rótulas concentradas de fibras de aço v0.16 para seções retangulares, I/H e RHS, com equilíbrio local N–M, linearização tangente-afim e Newton constitutivo embutido em cada avaliação do equilíbrio global**;
+- **plasticidade distribuída de aço v0.20 para frame2d, com 3/5 pontos Gauss–Lobatto, seções de fibras rect/I-H/RHS, propagação espacial do escoamento e tangente integrada BᵀDB; modelo displacement-based e monotônico**;
 - **pushover por controle de deslocamento v0.16, com fator de carga λ como incógnita, curva capacidade λ–u, rastreamento da sequência de plastificação e recuperação do estado final no fator de carga convergido**;
 - **Arc-Length/Riks esférico v0.19, com raio adaptativo, cutback, continuidade de ramo e travessia de pontos-limite**;
 - **estabilidade tangente multimodal v0.19, com múltiplos autovalores críticos, rastreamento por MAC, agrupamento de subespaços quase degenerados, exploração local dos ramos +φ/−φ e semeadura modal experimental; para tangentes não simétricas o resultado permanece apenas candidato a singularidade não conservativa**;
 - documentação metodológica da estabilidade multimodal em `docs/multimode-stability-v019.md`;
+- documentação metodológica da plasticidade distribuída em `docs/distributed-plasticity-v020.md`;
 - molas nodais `kx`, `ky`, `kr` no solver Linear/P‑Delta;
 - casos de ação e combinações customizadas, incluindo escalonamento de `followerEnd` antes da solução não linear;
 - análise Linear, P‑Delta ou Geometricamente Não Linear co‑rotacional selecionável;

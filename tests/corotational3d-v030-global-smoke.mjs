@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { solveSpatial3D } from '../web/src/solver/spatial3d.js';
 import { solveFrameCorotational3D } from '../web/src/solver/corotational3d.js';
+import { solve } from '../web/src/solver/index.js';
 
 const close=(a,b,tol,msg)=>assert.ok(Math.abs(a-b)<=tol,`${msg}: got ${a}, expected ${b}, err ${Math.abs(a-b)}`);
 const E=200e6,nu=.3,A=.02,Iy=8e-5,Iz=1.1e-4,J=2e-5,L=3;
@@ -34,7 +35,13 @@ function model(load={}){return{nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:L,y:0,z:0
  assert.equal(r.solverVersion,'0.30.0-exp');
 }
 
-// 5) Protected scope rejects distributed loads until the follower/dead-load formulation is added.
+// 5) Dispatcher resolves the load case before invoking the experimental spatial solver.
+{
+ const p=model({fy:-.8,fz:.35});p.id='corot3d-dispatch';p.version=13;p.schemaVersion=2;p.loadCases=[{id:'LC1',name:'LC1'}];p.loadCombinations=[];p.loads=p.loads.map(l=>({...l,caseId:'LC1'}));p.settings={...p.settings,analysisType:'corotational',analysisScenarioId:'LC1',activeLoadCaseId:'LC1',nonlinearControlMode:'load',imperfection:{enabled:false}};
+ const r=solve(p);assert.equal(r.dimension,'3d');assert.equal(r.analysisType,'corotational');assert.equal(r.solverVersion,'0.30.0-exp');assert.equal(r.scenario?.id,'LC1');assert.equal(r.nonlinear?.converged,true);
+}
+
+// 6) Protected scope rejects distributed loads until the follower/dead-load formulation is added.
 {
  const p=model({fy:-1});p.elementLoads=[{id:'q',elementId:'E1',kind:'uniform',qy:-1}];assert.throws(()=>solveFrameCorotational3D(p),/cargas de barra/i);
 }

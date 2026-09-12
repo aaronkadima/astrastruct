@@ -1,8 +1,8 @@
-name: Deploy AstraStruct to GitHub Pages
+name: Deploy AstraStruct production and development
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
 permissions:
@@ -11,59 +11,98 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: astrastruct-pages
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
+  assemble-site:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout production branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: production
+
+      - name: Checkout development branch
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          path: development
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-      - name: Typecheck and validate engine modules
-        run: npm run check
-      - name: Run structural solver tests
-        run: npm test
-      - name: Build React/Vite application
-        run: npm run build
-      - name: Validate GitHub Pages artifact
-        run: node tests/pages-artifact-smoke.mjs
+
+      - name: Validate and build production
+        working-directory: production
+        env:
+          ASTRA_BASE_PATH: /astrastruct/
+        run: |
+          npm install --no-audit --no-fund
+          npm run check
+          npm test
+          npm run build
+          node tests/pages-artifact-smoke.mjs
+
+      - name: Validate and build development
+        working-directory: development
+        env:
+          ASTRA_BASE_PATH: /astrastruct/dev/
+        run: |
+          npm install --no-audit --no-fund
+          npm run check
+          npm test
+          npm run build
+          grep -q '/astrastruct/dev/assets/' dist/index.html
+
+      - name: Assemble production and development pages
+        run: |
+          rm -rf site
+          mkdir -p site/dev
+          cp -a production/dist/. site/
+          cp -a development/dist/. site/dev/
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
-      - name: Upload built application
+
+      - name: Upload combined Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: ./dist
+          path: ./site
 
   deploy:
-    needs: build-and-test
+    needs: assemble-site
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to GitHub Pages
+      - name: Deploy combined site
         id: deployment
         uses: actions/deploy-pages@v4
 
-  browser-regression:
-    needs: build-and-test
+  development-browser-regression:
+    if: github.ref == 'refs/heads/develop'
+    needs: assemble-site
     continue-on-error: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: develop
       - uses: actions/setup-node@v4
         with:
           node-version: 24
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Build application for browser tests
+      - name: Build development application
+        env:
+          ASTRA_BASE_PATH: /astrastruct/dev/
         run: npm run build
-      - name: Install Chromium for browser regression
+      - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run desktop, Android and tablet regression
+        env:
+          ASTRA_BASE_PATH: /astrastruct/dev/
         run: npm run test:e2e

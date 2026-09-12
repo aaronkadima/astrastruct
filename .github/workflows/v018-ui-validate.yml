@@ -1,0 +1,44 @@
+name: AstraStruct v0.18 stability UI
+
+on:
+  push:
+    branches: [feat/v018-stability-bifurcation]
+
+permissions:
+  contents: write
+
+jobs:
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply v0.18 UI patch once
+        run: |
+          if grep -q 'stability-control-note' app/src/AnalysisPanelV13.tsx; then
+            echo 'v0.18 UI already applied'
+          else
+            python tools/v018_ui_patch.py
+          fi
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Validate modules
+        run: npm run check
+      - name: Run structural regression suite
+        run: npm test
+      - name: Build application
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run v0.18 browser regressions
+        run: npx playwright test tests/e2e/stability-bifurcation.spec.ts tests/e2e/arc-length.spec.ts tests/e2e/pushover.spec.ts tests/e2e/material-nonlinear.spec.ts --project=desktop-chromium
+      - name: Commit validated v0.18 UI
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/AnalysisPanelV13.tsx app/src/NonlinearPostprocessPanel.tsx app/src/NonlinearReportPanel.tsx tests/e2e/stability-bifurcation.spec.ts tests/e2e/arc-length.spec.ts README.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "feat: expose stability diagnostics and branch switching"
+          git push

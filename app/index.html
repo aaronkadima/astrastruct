@@ -10,6 +10,9 @@
     <style>
       html,body,#root{margin:0;min-width:320px;min-height:100%;height:100%;background:#0b0f16;color:#eef4ff;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
       body{min-height:100dvh}
+      .dev-channel{display:none;position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:99999;padding:7px 12px;border:1px solid #6f7f96;border-radius:999px;background:rgba(12,18,28,.94);color:#f0f5ff;font-size:12px;font-weight:800;letter-spacing:.04em;box-shadow:0 8px 26px rgba(0,0,0,.28);backdrop-filter:blur(8px)}
+      .dev-channel a{color:#a9caff;margin-left:8px;text-decoration:none}.dev-channel a:hover{text-decoration:underline}
+      html[data-astra-channel="development"] .dev-channel{display:block}
       .boot-fallback{min-height:100dvh;display:grid;place-items:center;background:#0b0f16;padding:20px;box-sizing:border-box}
       .boot-card{width:min(460px,100%);padding:22px;border:1px solid #2a3648;border-radius:14px;background:#111822;text-align:center;box-sizing:border-box;box-shadow:0 18px 60px rgba(0,0,0,.28)}
       .boot-mark{width:48px;height:48px;margin:0 auto 12px;display:grid;place-items:center;border-radius:12px;background:#163050;color:#9bc4ff;font-weight:900}
@@ -20,6 +23,8 @@
     <script>
       (()=>{
         const BOOT_VERSION='0.13.5';
+        const isDevelopment=location.pathname.includes('/astrastruct/dev/');
+        if(isDevelopment){document.documentElement.dataset.astraChannel='development';document.title='AstraStruct DEV'}
         let timer;
         const ready=()=>document.documentElement.dataset.astraReady==='true';
         const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -45,6 +50,7 @@
     </script>
   </head>
   <body>
+    <div class="dev-channel">AMBIENTE DE DESENVOLVIMENTO <a href="/astrastruct/">Abrir produção</a></div>
     <div id="root"><div class="boot-fallback"><div class="boot-card"><div class="boot-mark">AS</div><strong>Carregando AstraStruct</strong><small>Inicializando a interface React/Vite · bootstrap 0.13.5…</small></div></div></div>
     <noscript><div style="padding:24px;background:#0b0f16;color:#eef4ff">O AstraStruct requer JavaScript habilitado.</div></noscript>
     <script type="module" src="/src/main.tsx"></script>

@@ -155,6 +155,11 @@ function connectionStiffnesses(releases={},rotationalSprings={}){
   return[endRotationalStiffness(releases,rotationalSprings,1),endRotationalStiffness(releases,rotationalSprings,2)];
 }
 
+function connectionMomentOffsets(rotationalSpringMoments={}){
+  const value=key=>{const raw=rotationalSpringMoments?.[key];return Number.isFinite(Number(raw))?Number(raw):0};
+  return[value('rz1'),value('rz2')];
+}
+
 function condenseTangent(Ke,Tq,Tr,flex,kEnds){
   const Hqq=mm(transpose(Tq),mm(Ke,Tq)),Hqr=mm(transpose(Tq),mm(Ke,Tr)),Hrq=mm(transpose(Tr),mm(Ke,Tq)),Hrr=mm(transpose(Tr),mm(Ke,Tr));
   flex.forEach((end,a)=>{
@@ -177,8 +182,8 @@ function condenseTangent(Ke,Tq,Tr,flex,kEnds){
  * seus momentos de extremidade participam do equilíbrio interno antes da
  * condensação. Releases são o limite k=0 e rigidez infinita representa ligação rígida.
  */
-export function corotationalConnectedElementState({X1,Y1,X2,Y2,qGlobal,E,A,I,initialBasic=[0,0,0],pGlobal=[0,0,0,0,0,0],loadFactor=1,releases={},rotationalSprings={}}){
-  const qNode=qGlobal.map(Number),p=pGlobal.map(Number),lambda=Number(loadFactor),kEnds=connectionStiffnesses(releases,rotationalSprings),flex=[0,1].filter(i=>Number.isFinite(kEnds[i]));
+export function corotationalConnectedElementState({X1,Y1,X2,Y2,qGlobal,E,A,I,initialBasic=[0,0,0],pGlobal=[0,0,0,0,0,0],loadFactor=1,releases={},rotationalSprings={},rotationalSpringMoments={}}){
+  const qNode=qGlobal.map(Number),p=pGlobal.map(Number),lambda=Number(loadFactor),kEnds=connectionStiffnesses(releases,rotationalSprings),mEnds=connectionMomentOffsets(rotationalSpringMoments),flex=[0,1].filter(i=>Number.isFinite(kEnds[i]));
   if(!flex.length){
     const state=corotationalElementState({X1,Y1,X2,Y2,qGlobal:qNode,E,A,I,initialBasic});
     return{state,qElement:qNode,gradient:state.internal.map((v,i)=>v-lambda*p[i]),tangent:state.tangent,connectionRotations:[],internalConnectionResidual:0,stiffnesses:kEnds};
@@ -187,8 +192,8 @@ export function corotationalConnectedElementState({X1,Y1,X2,Y2,qGlobal,E,A,I,ini
   const seed=corotationalElementState({X1,Y1,X2,Y2,qGlobal:qNode,E,A,I,initialBasic}),L0=seed.L0,ei=E*I/L0,Kb=[[4*ei,2*ei],[2*ei,4*ei]],rotDofs=[2,5],initial=initialBasic.map(Number),d0=[seed.dAlpha+initial[1],seed.dAlpha+initial[2]],beta=[qNode[2],qNode[5]],rigid=[0,1].filter(i=>!flex.includes(i));
   const Aint=flex.map((i,a)=>flex.map((j,b)=>Kb[i][j]+(a===b?kEnds[i]:0)));
   const rhs=flex.map(i=>{
-    const thermalChord=Kb[i][0]*d0[0]+Kb[i][1]*d0[1],fixed=rigid.reduce((sum,j)=>sum+Kb[i][j]*beta[j],0),k=kEnds[i],theta=qNode[rotDofs[i]],pMoment=lambda*p[rotDofs[i]];
-    return pMoment+k*theta+thermalChord-fixed;
+    const thermalChord=Kb[i][0]*d0[0]+Kb[i][1]*d0[1],fixed=rigid.reduce((sum,j)=>sum+Kb[i][j]*beta[j],0),k=kEnds[i],theta=qNode[rotDofs[i]],pMoment=lambda*p[rotDofs[i]],offsetMoment=mEnds[i];
+    return pMoment+k*theta+offsetMoment+thermalChord-fixed;
   });
   const solved=solveLinear(Aint,rhs);flex.forEach((end,a)=>{beta[end]=solved[a]});
   const qElement=[...qNode];qElement[2]=beta[0];qElement[5]=beta[1];
@@ -201,12 +206,12 @@ export function corotationalConnectedElementState({X1,Y1,X2,Y2,qGlobal,E,A,I,ini
   const gradient=mv(transpose(Tq),beamGradient),connectionRotations=[];
   let internalConnectionResidual=0;
   flex.forEach(end=>{
-    const dof=rotDofs[end],k=kEnds[end],relativeRotation=qNode[dof]-beta[end],springMoment=k*relativeRotation,elementMoment=beamGradient[dof],residual=elementMoment-springMoment;
+    const dof=rotDofs[end],k=kEnds[end],offsetMoment=mEnds[end],relativeRotation=qNode[dof]-beta[end],springMoment=k*relativeRotation+offsetMoment,elementMoment=beamGradient[dof],residual=elementMoment-springMoment;
     gradient[dof]+=springMoment;internalConnectionResidual=Math.max(internalConnectionResidual,Math.abs(residual));
-    connectionRotations.push({dof,end:end+1,k,nodeRotation:qNode[dof],elementRotation:beta[end],relativeRotation,moment:elementMoment,springMoment,residual,type:k===0?'release':'semirigid'});
+    connectionRotations.push({dof,end:end+1,k,offsetMoment,nodeRotation:qNode[dof],elementRotation:beta[end],relativeRotation,moment:elementMoment,springMoment,residual,type:k===0?'release':'semirigid'});
   });
   const tangent=condenseTangent(state.tangent,Tq,Tr,flex,kEnds);
-  return{state,qElement,gradient,tangent,connectionRotations,internalConnectionResidual,stiffnesses:kEnds};
+  return{state,qElement,gradient,tangent,connectionRotations,internalConnectionResidual,stiffnesses:kEnds,momentOffsets:mEnds};
 }
 
 function nodeHasRotationalStiffness(elements,nodeId){
@@ -242,7 +247,7 @@ function assemble(prepared,u,loadFactor=1){
   const Kint=zeros(prepared.nd),Kext=zeros(prepared.nd),fint=Array(prepared.nd).fill(0),follower=Array(prepared.nd).fill(0),states=[];
   for(const item of prepared.elements){
     const initialBasic=item.thermal.initialBasic.map(v=>v*loadFactor),qNode=item.idx.map(i=>u[i]);
-    const connected=corotationalConnectedElementState({X1:Number(item.a.x),Y1:Number(item.a.y),X2:Number(item.b.x),Y2:Number(item.b.y),qGlobal:qNode,E:item.E,A:item.A,I:item.I,initialBasic,pGlobal:item.pGlobal,loadFactor,releases:item.e.releases||{},rotationalSprings:item.e.rotationalSprings||{}}),state=connected.state;
+    const connected=corotationalConnectedElementState({X1:Number(item.a.x),Y1:Number(item.a.y),X2:Number(item.b.x),Y2:Number(item.b.y),qGlobal:qNode,E:item.E,A:item.A,I:item.I,initialBasic,pGlobal:item.pGlobal,loadFactor,releases:item.e.releases||{},rotationalSprings:item.e.rotationalSprings||{},rotationalSpringMoments:item.e.rotationalSpringMoments||{}}),state=connected.state;
     addSub(Kint,connected.tangent,item.idx);connected.gradient.forEach((v,k)=>{fint[item.idx[k]]+=v});
     const followerStates=item.followers.map(load=>{
       const current=followerEndLoadState({px:load.px,py:load.py,end:load.end,l:state.l,c:state.c,s:state.s});

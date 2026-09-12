@@ -1,5 +1,5 @@
 import { bilinearSteelState, bilinearSteelFromModelMaterial } from '../web/src/solver/material1d.js';
-import { rectangularFibers, fiberSectionState, rectangularSteelFiberSectionState, fiberHingePureBendingState } from '../web/src/solver/fiberSection2d.js';
+import { rectangularFibers, fiberSectionState, rectangularSteelFiberSectionState, fiberHingePureBendingState, fiberHingeSectionState } from '../web/src/solver/fiberSection2d.js';
 
 function assert(condition,message){if(!condition)throw new Error(message)}
 function near(actual,expected,tol,message){if(Math.abs(actual-expected)>tol)throw new Error(`${message}: esperado ${expected}, obtido ${actual}`)}
@@ -18,7 +18,7 @@ const E=200e6,fy=355e3,b=.2,h=.4,n=80,hardeningRatio=.01,ey=fy/E;
 
 // 2) Seção retangular elástica: N=0 e M=E*I_fibras*kappa.
 {
-  const fibers=rectangularFibers({width:b,height:h,nFibers:n}),Id= fibers.reduce((s,f)=>s+f.area*f.y*f.y,0),kappa=.001;
+  const fibers=rectangularFibers({width:b,height:h,nFibers:n}),Id=fibers.reduce((s,f)=>s+f.area*f.y*f.y,0),kappa=.001;
   const state=fiberSectionState({fibers,epsilon0:0,kappa,materialLaw:strain=>bilinearSteelState({strain,E,fy,hardeningRatio})});
   near(state.N,0,1e-7,'Seção de fibras elástica: N');near(state.M,E*Id*kappa,1e-6,'Seção de fibras elástica: EIκ');near(state.tangent[0][0],E*b*h,1e-5,'Seção de fibras elástica: EA');near(state.tangent[1][1],E*Id,1e-5,'Seção de fibras elástica: EI discreto');assert(state.yieldedFibers===0,'Seção de fibras elástica: fibras escoadas indevidas');
   console.log('v0.14 — seção de fibras elástica OK','I discreto=',Id,'M=',state.M);
@@ -40,12 +40,25 @@ const E=200e6,fy=355e3,b=.2,h=.4,n=80,hardeningRatio=.01,ey=fy/E;
   console.log('v0.14 — tangente da seção consistente OK','erro rel=',relative);
 }
 
-// 5) Rótula concentrada: M(theta) e dM/dtheta coerentes com a seção de fibras.
+// 5) Rótula concentrada: M(theta) e dM/dtheta coerentes com a seção de fibras em flexão pura.
 {
   const section={b,h},material={type:'steel',E,fy:355},Lp=.35,theta=.012,dh=1e-7,args={hingeLength:Lp,section,material,nFibers:n,hardeningRatio},base=fiberHingePureBendingState({rotation:theta,...args}),plus=fiberHingePureBendingState({rotation:theta+dh,...args}),minus=fiberHingePureBendingState({rotation:theta-dh,...args}),numeric=(plus.moment-minus.moment)/(2*dh),relative=Math.abs(base.rotationalTangent-numeric)/Math.max(1,Math.abs(numeric));
   assert(base.yieldedFibers>0,'Rótula de fibras: estado deveria conter fibras escoadas');assert(relative<3e-7,`Rótula de fibras: tangente momento-rotação inconsistente (${relative})`);
   near(base.curvature,theta/Lp,1e-14,'Rótula de fibras: curvatura');
   console.log('v0.14 — rótula de fibras local OK','M=',base.moment,'kt=',base.rotationalTangent,'erro rel=',relative);
+}
+
+// 6) Rótula N-M: epsilon0 satisfaz o esforço normal alvo e a tangente a N constante
+// coincide com a derivada numérica da curva momento-rotação reequilibrada.
+{
+  const section={b,h},material={type:'steel',E,fy:355},Lp=.35,theta=.008,targetAxialForce=-.10*fy*b*h,dh=1e-7,args={hingeLength:Lp,targetAxialForce,section,material,nFibers:n,hardeningRatio};
+  const base=fiberHingeSectionState({rotation:theta,...args}),plus=fiberHingeSectionState({rotation:theta+dh,...args}),minus=fiberHingeSectionState({rotation:theta-dh,...args}),numeric=(plus.moment-minus.moment)/(2*dh),relative=Math.abs(base.rotationalTangent-numeric)/Math.max(1,Math.abs(numeric));
+  near(base.sectionState.N,targetAxialForce,Math.max(1e-6,Math.abs(targetAxialForce)*2e-9),'Rótula N-M: equilíbrio axial');
+  assert(Math.abs(base.axialResidual)<Math.max(1e-6,Math.abs(targetAxialForce)*2e-9),'Rótula N-M: resíduo axial excessivo');
+  assert(base.yieldedFibers>0,'Rótula N-M: estado de teste deveria plastificar fibras');
+  assert(relative<2e-6,`Rótula N-M: tangente a N constante inconsistente (${relative})`);
+  assert(base.rotationalTangent>0,'Rótula N-M: tangente rotacional deve permanecer positiva com encruamento');
+  console.log('v0.14 — rótula de fibras N-M OK','N=',base.sectionState.N,'M=',base.moment,'epsilon0=',base.epsilon0,'fibras=',base.yieldedFibers,'erro rel=',relative);
 }
 
 console.log('Todos os smoke tests constitutivos do AstraStruct v0.14 passaram.');

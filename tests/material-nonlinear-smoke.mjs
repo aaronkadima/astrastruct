@@ -77,7 +77,7 @@ const E=200e6,fy=355e3,b=.2,h=.4,n=80,hardeningRatio=.01,ey=fy/E;
 
 // 9) RHS: área analítica exata, simetria e integração das duas paredes laterais.
 {
-  const section={family:'rhs',h:.30,b:.20,t:.012},nf=160,fibers=rhsFibers({height:section.h,width:section.b,thickness:section.t,nFibers:nf}),area=fibers.reduce((s,f)=>s+f.area,0),Id=fibers.reduce((s,f)=>s+f.area*f.y*f.y,0),hi=section.h-2*section.t,bi=section.b-2*section.t,A=section.b*section.h-bi*hi,I=(section.b*section.h**3-bi*hi**3)/12,centroid=fibers.reduce((s,f)=>s+f.area*f.y,0)/area,generic=sectionFibersFromModel({section,nFibers:nf});
+  const section={family:'rhs',h:.30,b:.20,t:.012},nf=180,fibers=rhsFibers({height:section.h,width:section.b,thickness:section.t,nFibers:nf}),area=fibers.reduce((s,f)=>s+f.area,0),Id=fibers.reduce((s,f)=>s+f.area*f.y*f.y,0),hi=section.h-2*section.t,bi=section.b-2*section.t,A=section.b*section.h-bi*hi,I=(section.b*section.h**3-bi*hi**3)/12,centroid=fibers.reduce((s,f)=>s+f.area*f.y,0)/area,generic=sectionFibersFromModel({section,nFibers:nf});
   near(area,A,1e-14,'RHS: área da malha');near(centroid,0,1e-14,'RHS: centroide da malha');assert(Math.abs(Id-I)/I<2e-5,`RHS: I discreto não convergiu (${Id} vs ${I})`);assert(generic.some(f=>f.region==='side-walls'),'RHS: paredes laterais não identificadas');
   console.log('v0.14.2 — RHS elástico OK','A=',area,'I=',Id,'erro I=',Math.abs(Id-I)/I);
 }

@@ -74,11 +74,11 @@ test('v0.14 fiber hinge is configured, guarded, solved and traced through postpr
 
   await openCommand(page,'Diagramas/envelopes');
   const post=page.getByTestId('panel-nonlinear-postprocess');await expect(post).toBeVisible();
-  const materialNote=page.getByTestId('material-postprocess-note');await expect(materialNote).toContainText('Não linearidade material v0.14');await expect(materialNote).toContainText('fibras escoadas=');await expect(materialNote).toContainText('equilíbrio local N–M');await expect(post).toContainText('0.14.1-exp');
+  const materialNote=page.getByTestId('material-postprocess-note');await expect(materialNote).toContainText('Não linearidade material v0.14');await expect(materialNote).toContainText('fibras escoadas=');await expect(materialNote).toContainText('equilíbrio local N–M');await expect(post).toContainText('0.14.2-exp');
   await post.locator('button[aria-label="Fechar"]').click();
 
   await openCommand(page,'Relatório técnico');
-  const report=page.getByTestId('panel-nonlinear-report');await expect(report).toBeVisible();await expect(report).toContainText('0.14.1-exp');
+  const report=page.getByTestId('panel-nonlinear-report');await expect(report).toBeVisible();await expect(report).toContainText('0.14.2-exp');
   const materialReport=page.getByTestId('material-nonlinear-report');await expect(materialReport).toContainText('aço bilinear monotônico');
   const constitutiveMoment=Number(await page.getByTestId('material-hinge-moment').first().textContent());expect(Math.abs(constitutiveMoment-2200)).toBeLessThan(.2);
   await expect(page.getByTestId('material-hinge-yielded').first()).toContainText('/100');

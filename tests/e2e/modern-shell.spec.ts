@@ -1,13 +1,14 @@
 import {test,expect} from '@playwright/test';
 
-test('modern shell exposes desktop menus and canvas focus mode',async({page})=>{
+test('modern shell exposes menus and canvas focus mode',async({page})=>{
   await page.goto('./');
   await expect(page.locator('.modern-menubar')).toBeVisible();
   await page.getByRole('button',{name:'Exibir',exact:true}).click();
   await page.getByRole('menuitem',{name:'Canvas ampliado'}).click();
   await expect(page.getByTestId('astra-app')).toHaveClass(/ui-canvas-focus/);
   const viewport=await page.locator('.viewport').boundingBox();
-  expect(viewport?.width||0).toBeGreaterThan(700);
+  const screen=page.viewportSize();
+  expect(viewport?.width||0).toBeGreaterThan((screen?.width||320)*0.85);
   const label=page.locator('.node-label').first();
   if(await label.count()){
     const fontSize=await label.evaluate(el=>parseFloat(getComputedStyle(el).fontSize));

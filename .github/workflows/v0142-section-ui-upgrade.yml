@@ -24,6 +24,14 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
+          p=Path('tests/material-nonlinear-smoke.mjs')
+          s=p.read_text()
+          old="},nf=160,fibers=rhsFibers"
+          new="},nf=180,fibers=rhsFibers"
+          if old not in s: raise SystemExit('RHS mesh anchor not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+
           p=Path('app/src/InspectorPanel.tsx')
           s=p.read_text()
           old="""  const material=project.materials.find((m:any)=>m.id===draft.materialId),section=project.sections.find((s:any)=>s.id===draft.sectionId),fiberEligible=entity.type==='frame2d'&&String(material?.type||'').toLowerCase()==='steel'&&num(section?.b??section?.width)>0&&num(section?.h??section?.depth)>0;"""
@@ -73,6 +81,6 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add app/src/InspectorPanel.tsx tests/e2e/material-nonlinear.spec.ts web/src/core/model.js README.md
+          git add tests/material-nonlinear-smoke.mjs app/src/InspectorPanel.tsx tests/e2e/material-nonlinear.spec.ts web/src/core/model.js README.md
           git commit -m "feat: expose v0.14.2 steel fiber section families" || exit 0
           git push origin HEAD:feat/v0142-steel-fiber-sections

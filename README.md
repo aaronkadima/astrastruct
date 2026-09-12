@@ -1,3 +1,7 @@
+## AstraStruct v0.27 — modal + estabilidade 3D
+
+A v0.27 amplia a fundação espacial com análise modal linear (`Kφ=ω²Mφ`) e flambagem linear 3D (`Kφ=λcr(-Kg)φ`) em dois planos de flexão. A participação modal é reportada em X/Y/Z. O escopo não linear/dinâmico transitório 3D continua protegido. Veja `docs/modal-stability3d-v027.md`.
+
 ## AstraStruct v0.26.1 — Canvas 3D espacial
 
 A v0.26.1 substitui a projeção XY temporária do núcleo 3D por um Canvas 3D interativo com câmera orbital, perspectiva/ortográfica, vistas ISO/XY/XZ/YZ, cargas, apoios, eixos locais, deformada espacial e mapas N/V/M/T. O contrato visual também está preparado para animar formas modais e de flambagem 3D quando esses solvers forem integrados. Veja `docs/canvas3d-v0261.md`.

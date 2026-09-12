@@ -7,6 +7,7 @@ import { solveFrameCorotational2D, solveFrameCorotationalDisplacementControl2D, 
 import { activeFiberHinges, solveFrameCorotationalFiberHinges2D } from './materialNonlinear2d.js';
 import { solveModal2D, solveTimeHistory2D, solveResponseSpectrum2D } from './dynamics2d.js';
 import { solveSpatial3D } from './spatial3d.js';
+import { solveModal3D } from './modalStability3d.js';
 import { resolveScenario } from './scenario.js';
 import { buildElementResponses } from './postprocess.js';
 import { classifyElementSet, inferProjectDimension } from '../core/elementRegistry.js';
@@ -44,10 +45,10 @@ function solveStructuralModel(sourceProject,resolvedProject,scenarioId) {
 
 function solveRaw(project, scenarioId) {
   const analysisType=project.settings?.analysisType||'linear',dimension=inferProjectDimension(project),fiberHinges=activeFiberHinges(project),s=project.settings||{};
-  if(dimension==='3d'&&analysisType!=='linear')throw new Error(`Análise ${analysisType} ainda não é suportada em 3D na v0.26; use análise linear.`);
+  if(dimension==='3d'&&!['linear','modal'].includes(analysisType))throw new Error(`Análise ${analysisType} ainda não é suportada em 3D na v0.27; use análise linear ou modal.`);
   if(analysisType==='modal'){
     if(fiberHinges.length)throw new Error('Dinâmica modal v0.25 é linear-elástica; desative as rótulas de fibras.');
-    const result=solveModal2D(project,{modes:s.modalModes,massFormulation:s.dynamicMassFormulation});
+    const result=dimension==='3d'?solveModal3D(project,{modes:s.modalModes,massFormulation:s.dynamicMassFormulation}):solveModal2D(project,{modes:s.modalModes,massFormulation:s.dynamicMassFormulation});
     const resolved=resolveScenario(project,scenarioId);return{...result,scenario:resolved.scenario,analysisType:'modal'};
   }
   if(analysisType==='response-spectrum'){

@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0b0f16" />
-    <meta name="color-scheme" content="dark" />
-    <meta name="description" content="AstraStruct — modelagem e análise estrutural" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="description" content="AstraStruct — modelagem e análise estrutural interativa" />
     <title>AstraStruct</title>
     <style>
       html,body,#root{margin:0;min-width:320px;min-height:100%;height:100%;background:#0b0f16;color:#eef4ff;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
@@ -22,7 +22,7 @@
     </style>
     <script>
       (()=>{
-        const BOOT_VERSION='0.13.5';
+        const BOOT_VERSION='0.28.0';
         const isDevelopment=location.pathname.includes('/astrastruct/dev/');
         if(isDevelopment){document.documentElement.dataset.astraChannel='development';document.title='AstraStruct DEV'}
         let timer;
@@ -51,7 +51,7 @@
   </head>
   <body>
     <div class="dev-channel">AMBIENTE DE DESENVOLVIMENTO <a href="/astrastruct/">Abrir produção</a></div>
-    <div id="root"><div class="boot-fallback"><div class="boot-card"><div class="boot-mark">AS</div><strong>Carregando AstraStruct</strong><small>Inicializando a interface React/Vite · bootstrap 0.13.5…</small></div></div></div>
+    <div id="root"><div class="boot-fallback"><div class="boot-card"><div class="boot-mark">AS</div><strong>Carregando AstraStruct</strong><small>Inicializando a interface React/Vite · v0.28.0…</small></div></div></div>
     <noscript><div style="padding:24px;background:#0b0f16;color:#eef4ff">O AstraStruct requer JavaScript habilitado.</div></noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>

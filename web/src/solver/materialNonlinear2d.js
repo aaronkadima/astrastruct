@@ -1,4 +1,4 @@
-import { solveFrameCorotational2D } from './corotational2d.js';
+import { solveFrameCorotational2D, solveFrameCorotationalDisplacementControl2D } from './corotational2d.js';
 import { fiberHingeSectionState, sectionFibersFromModel, sectionFiberFamily } from './fiberSection2d.js';
 
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -44,7 +44,7 @@ function validateHinges(project, hinges) {
     const section = (project.sections || []).find(s => s.id === e.sectionId);
     if (!material) throw new Error(`Rótula de fibras ${h.elementId}: material ausente.`);
     if (!section) throw new Error(`Rótula de fibras ${h.elementId}: seção ausente.`);
-    if (String(material.type || '').toLowerCase() !== 'steel') throw new Error(`Rótula de fibras ${h.elementId}: v0.15 aceita apenas material do tipo steel.`);
+    if (String(material.type || '').toLowerCase() !== 'steel') throw new Error(`Rótula de fibras ${h.elementId}: v0.16 aceita apenas material do tipo steel.`);
     if (!(Number(material.E) > 0 && Number(material.fy) > 0)) throw new Error(`Rótula de fibras ${h.elementId}: E e fy devem ser positivos.`);
     const family = sectionFiberFamily(section);
     if (!['rect', 'i', 'rhs'].includes(family)) throw new Error(`Rótula de fibras ${h.elementId}: família de seção "${family}" não suportada. Use retangular, I/H ou RHS.`);
@@ -218,7 +218,7 @@ function embeddedConnectionResolver(project, hinges, options = {}) {
     }
 
     const worst = Math.max(0, ...records.map(r => r.relativeResidual));
-    throw new Error(`Rótulas de fibras v0.15: Newton constitutivo local não convergiu no elemento ${item.e.id} em ${maxLocal} iterações (resíduo relativo máximo=${worst.toExponential(3)}).`);
+    throw new Error(`Rótulas de fibras v0.16: Newton constitutivo local não convergiu no elemento ${item.e.id} em ${maxLocal} iterações (resíduo relativo máximo=${worst.toExponential(3)}).`);
   };
 }
 
@@ -273,7 +273,7 @@ function decorateEmbeddedResult(result, hinges, options = {}) {
   return {
     ...result,
     type: 'frame2d-corotational-fiber-hinge-experimental',
-    solverVersion: '0.15.0-exp',
+    solverVersion: '0.16.0-exp',
     materialNonlinearity,
     nonlinear: {
       ...(result.nonlinear || {}),
@@ -361,7 +361,7 @@ function decorateOuterResult(result, records, outerIterations, tolerance) {
   return {
     ...result,
     type: 'frame2d-corotational-fiber-hinge-experimental',
-    solverVersion: '0.15.0-exp',
+    solverVersion: '0.16.0-exp',
     elementForces,
     materialNonlinearity,
     nonlinear: {
@@ -474,12 +474,15 @@ function solveOuterCompatibility(project, scenarioId, hinges, options = {}) {
  */
 export function solveFrameCorotationalFiberHinges2D(project, scenarioId, options = {}) {
   const hinges = activeFiberHinges(project);
-  if (!hinges.length) return solveFrameCorotational2D(project, scenarioId, options);
+  const displacementControl = options.controlMode === 'displacement';
+  const solveGlobal = displacementControl ? solveFrameCorotationalDisplacementControl2D : solveFrameCorotational2D;
+  if (!hinges.length) return solveGlobal(project, scenarioId, options);
   validateHinges(project, hinges);
+  if (displacementControl && options.materialCoupling === 'outer') throw new Error('Pushover v0.16 com rótulas de fibras requer acoplamento material embutido; o modo externo v0.14 permanece apenas para controle de carga.');
   if (options.materialCoupling === 'outer') return solveOuterCompatibility(project, scenarioId, hinges, options);
   const connectionResolver = embeddedConnectionResolver(project, hinges, options);
-  const result = solveFrameCorotational2D(project, scenarioId, { ...options, connectionResolver });
+  const result = solveGlobal(project, scenarioId, { ...options, connectionResolver });
   return decorateEmbeddedResult(result, hinges, options);
 }
 
-export const MATERIAL_NONLINEAR_VERSION = '0.15.0-exp';
+export const MATERIAL_NONLINEAR_VERSION = '0.16.0-exp';

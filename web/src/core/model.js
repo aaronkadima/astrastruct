@@ -46,6 +46,7 @@ export function emptyProject() {
       analysisType: 'linear', pDeltaMaxIterations: 30, pDeltaTolerance: 1e-8,
       nonlinearSteps: 20, nonlinearMaxIterations: 35, nonlinearTolerance: 1e-8, nonlinearLineSearch: true,
       nonlinearControlMode: 'load', displacementControlNodeId: null, displacementControlDof: 'uy', displacementControlTarget: -0.05, displacementControlTolerance: 1e-7,
+      cyclicProtocolEnabled: false, cyclicProtocolTargets: [-0.02,0.02,-0.04,0.04,0], cyclicStepsPerSegment: 6,
       arcLengthMonitorNodeId: null, arcLengthMonitorDof: 'uy', arcLengthInitialLoadIncrement: 0.05, arcLengthInitialSign: 1, arcLengthTargetIterations: 6, arcLengthMaxCutbacks: 8, arcLengthMinRadiusFactor: 0.02, arcLengthMaxRadiusFactor: 4, arcLengthConstraintTolerance: 1e-6,
       stabilityTracking: true, stabilityEigenTolerance: 0.05, stabilityAsymmetryTolerance: 1e-6, stabilityMaxDofs: 120, stabilityModeCount: 4, stabilityClusterTolerance: 0.03, stabilityMacThreshold: 0.25, branchExploreEnabled: false, branchExploreAmplitude: 0.08, branchExploreMaxIterations: 30, branchExploreMaxEvents: 3, branchSwitchEnabled: false, branchSwitchSign: 1, branchSwitchAmplitude: 0.08,
       materialMaxIterations: 30, materialTolerance: 1e-6, materialRelaxation: 1, materialCoupling: 'embedded',
@@ -83,6 +84,10 @@ export function normalizeProject(input) {
   p.settings.displacementControlDof = ['ux','uy','rz'].includes(p.settings.displacementControlDof) ? p.settings.displacementControlDof : 'uy';
   p.settings.displacementControlTarget = Number.isFinite(Number(p.settings.displacementControlTarget)) && Math.abs(Number(p.settings.displacementControlTarget)) > 1e-12 ? Number(p.settings.displacementControlTarget) : -0.05;
   p.settings.displacementControlTolerance = Math.max(1e-10, Number(p.settings.displacementControlTolerance) || 1e-7);
+  p.settings.cyclicProtocolEnabled = !!p.settings.cyclicProtocolEnabled;
+  p.settings.cyclicProtocolTargets = (Array.isArray(p.settings.cyclicProtocolTargets)?p.settings.cyclicProtocolTargets:[]).map(Number).filter(Number.isFinite).slice(0,30);
+  if(!p.settings.cyclicProtocolTargets.length)p.settings.cyclicProtocolTargets=[-0.02,0.02,-0.04,0.04,0];
+  p.settings.cyclicStepsPerSegment = Math.max(2, Math.min(60, Math.round(Number(p.settings.cyclicStepsPerSegment) || 6)));
   p.settings.arcLengthMonitorNodeId = p.settings.arcLengthMonitorNodeId || null;
   p.settings.arcLengthMonitorDof = ['ux','uy','rz'].includes(p.settings.arcLengthMonitorDof) ? p.settings.arcLengthMonitorDof : 'uy';
   p.settings.arcLengthInitialLoadIncrement = Math.max(1e-5, Math.abs(Number(p.settings.arcLengthInitialLoadIncrement) || 0.05));
@@ -140,7 +145,7 @@ export function normalizeProject(input) {
     };
     if (releases.rz1) rotationalSprings.rz1 = 0;
     if (releases.rz2) rotationalSprings.rz2 = 0;
-    const rawDp=e.distributedPlasticity||{},integrationPoints=[3,5].includes(Math.round(Number(rawDp.integrationPoints)))?Math.round(Number(rawDp.integrationPoints)):5,distributedPlasticity={enabled:!!rawDp.enabled,integrationPoints,nFibers:Math.max(8,Math.min(400,Math.round(Number(rawDp.nFibers)||80))),hardeningRatio:Math.max(1e-6,Math.min(.25,Math.abs(Number(rawDp.hardeningRatio)||.01)))};
+    const rawDp=e.distributedPlasticity||{},integrationPoints=[3,5].includes(Math.round(Number(rawDp.integrationPoints)))?Math.round(Number(rawDp.integrationPoints)):5,distributedPlasticity={enabled:!!rawDp.enabled,integrationPoints,nFibers:Math.max(8,Math.min(400,Math.round(Number(rawDp.nFibers)||80))),hardeningRatio:Math.max(1e-6,Math.min(.25,Math.abs(Number(rawDp.hardeningRatio)||.01))),cyclic:!!rawDp.cyclic,kinematicFraction:Math.max(0,Math.min(1,Number.isFinite(Number(rawDp.kinematicFraction))?Number(rawDp.kinematicFraction):1))};
     return { ...e, releases, rotationalSprings, distributedPlasticity };
   });
   p.supports = p.supports.map(s => ({

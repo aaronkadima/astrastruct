@@ -25,8 +25,8 @@ function applyPrefs(p=readPrefs()){
   app.classList.toggle('workspace-grid-off',!p.grid);
   app.classList.toggle('workspace-labels-off',!p.labels);
   app.classList.toggle('workspace-high-contrast',p.highContrast);
-  app.dataset.lineScale=String(p.lineScale);
-  app.style.setProperty('--workspace-line-scale',String(p.lineScale));
+  const scale=String(p.lineScale);if(app.dataset.lineScale!==scale)app.dataset.lineScale=scale;
+  if(app.style.getPropertyValue('--workspace-line-scale')!==scale)app.style.setProperty('--workspace-line-scale',scale);
   updateAxes(p);
 }
 
@@ -38,17 +38,18 @@ function ensureAxesGroup(svg:SVGSVGElement){
   const tx=document.createElementNS(svgNS,'text'),ty=document.createElementNS(svgNS,'text');tx.setAttribute('class','workspace-axis-label');tx.textContent='X';ty.setAttribute('class','workspace-axis-label');ty.textContent='Y';
   g.append(x,y,tx,ty);svg.insertBefore(g,svg.firstChild);return g;
 }
+function setAttr(el:Element,name:string,value:string){if(el.getAttribute(name)!==value)el.setAttribute(name,value)}
 function updateAxes(p=readPrefs()){
   const svg=document.querySelector<SVGSVGElement>('svg.model-canvas');if(!svg)return;
   const old=svg.querySelector<SVGGElement>(':scope > g.workspace-axes');if(!p.axes){old?.remove();return}
   const scale=Number(svg.dataset.cameraScale),cx=Number(svg.dataset.cameraCx),cy=Number(svg.dataset.cameraCy);if(!Number.isFinite(scale)||!Number.isFinite(cx)||!Number.isFinite(cy))return;
   const g=ensureAxesGroup(svg),x0=500-cx*scale,y0=340+cy*scale;
   const [x,y]=[g.querySelector<SVGLineElement>('.axis-x')!,g.querySelector<SVGLineElement>('.axis-y')!];
-  x.setAttribute('x1','0');x.setAttribute('x2','1000');x.setAttribute('y1',String(y0));x.setAttribute('y2',String(y0));
-  y.setAttribute('x1',String(x0));y.setAttribute('x2',String(x0));y.setAttribute('y1','0');y.setAttribute('y2','680');
+  setAttr(x,'x1','0');setAttr(x,'x2','1000');setAttr(x,'y1',String(y0));setAttr(x,'y2',String(y0));
+  setAttr(y,'x1',String(x0));setAttr(y,'x2',String(x0));setAttr(y,'y1','0');setAttr(y,'y2','680');
   const [tx,ty]=g.querySelectorAll<SVGTextElement>('.workspace-axis-label');
-  tx.setAttribute('x','976');tx.setAttribute('y',String(Math.max(18,Math.min(670,y0-8))));
-  ty.setAttribute('x',String(Math.max(8,Math.min(974,x0+8))));ty.setAttribute('y','20');
+  setAttr(tx,'x','976');setAttr(tx,'y',String(Math.max(18,Math.min(670,y0-8))));
+  setAttr(ty,'x',String(Math.max(8,Math.min(974,x0+8))));setAttr(ty,'y','20');
 }
 
 function toolName(){
@@ -84,7 +85,7 @@ function ensureStatusBar(){
 function syncStatus(){
   const bar=ensureStatusBar();if(!bar)return;const d=statusData();
   setText(bar.querySelector('[data-ws="tool"]'),d.tool);setText(bar.querySelector('[data-ws="selection"]'),d.selection);setText(bar.querySelector('[data-ws="model"]'),`${d.dimension} · ${d.nodes} nós · ${d.elements} elementos`);setText(bar.querySelector('[data-ws="coords"]'),d.coords);setText(bar.querySelector('[data-ws="grid"]'),d.grid);setText(bar.querySelector('[data-ws="scenario"]'),`cenário ${d.scenario}`);setText(bar.querySelector('[data-ws="zoom"]'),d.zoom);
-  const disabled=!document.querySelector('.canvas-nav');bar.querySelectorAll<HTMLButtonElement>('[data-ws-action^="zoom"],[data-ws-action="fit"]').forEach(b=>b.disabled=disabled);updateAxes();
+  const disabled=!document.querySelector('.canvas-nav');bar.querySelectorAll<HTMLButtonElement>('[data-ws-action^="zoom"],[data-ws-action="fit"]').forEach(b=>{if(b.disabled!==disabled)b.disabled=disabled});updateAxes();
 }
 
 function closeSettings(){document.querySelector('.workspace-settings-backdrop')?.remove()}
@@ -108,7 +109,7 @@ function sync(){queued=false;ensureStatusBar();ensureViewMenuEntry();applyPrefs(
 function schedule(){if(queued)return;queued=true;requestAnimationFrame(sync)}
 function boot(){
   if(!document.querySelector('.astra-app')){setTimeout(boot,40);return}sync();
-  const app=document.querySelector('.astra-app')!;new MutationObserver(schedule).observe(app,{subtree:true,childList:true,attributes:true,characterData:true});
+  const app=document.querySelector('.astra-app')!;new MutationObserver(records=>{const external=records.some(r=>{const el=r.target instanceof Element?r.target:null;return !el?.closest?.('.workspace-statusbar,.workspace-axes')});if(external)schedule()}).observe(app,{subtree:true,childList:true,attributes:true,attributeFilter:['class','data-camera-scale','data-camera-cx','data-camera-cy','value'],characterData:true});
   document.addEventListener('pointermove',e=>{if((e.target as Element)?.closest?.('.viewport'))schedule()},{passive:true});
   window.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key===','){e.preventDefault();openSettings()}if(e.key==='Escape'&&document.querySelector('.workspace-settings-backdrop'))closeSettings()});
   window.addEventListener('storage',schedule);setInterval(schedule,700);

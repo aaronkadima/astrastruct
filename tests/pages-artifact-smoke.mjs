@@ -18,7 +18,12 @@ assert(fs.existsSync(healthPath),'Pages artifact: dist/health.html ausente.');
 
 const html=fs.readFileSync(indexPath,'utf8'),health=fs.readFileSync(healthPath,'utf8');
 assert(/Carregando AstraStruct/.test(html),'Pages artifact: fallback de bootstrap ausente.');
-assert(new RegExp(`bootstrap ${escapeRegExp(version)}`,'i').test(html),`Pages artifact: versão do bootstrap ${version} ausente.`);
+const bootstrapPatterns=[
+  new RegExp(`BOOT_VERSION=['\"]${escapeRegExp(version)}['\"]`,'i'),
+  new RegExp(`v${escapeRegExp(version)}(?:…|\.\.\.|<)`,'i'),
+  new RegExp(`bootstrap\\s+${escapeRegExp(version)}`,'i')
+];
+assert(bootstrapPatterns.some(pattern=>pattern.test(html)),`Pages artifact: versão do bootstrap ${version} ausente.`);
 assert(new RegExp(`health-${escapeRegExp(version)}`,'i').test(health),`Pages artifact: health.html não corresponde à versão ${version}.`);
 
 const refs=[...html.matchAll(/(?:src|href)="([^"]+)"/g)].map(m=>m[1]).filter(ref=>ref.includes('/assets/'));

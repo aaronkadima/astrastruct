@@ -32,10 +32,6 @@ jobs:
         run: npm run build
       - name: Validate GitHub Pages artifact
         run: node tests/pages-artifact-smoke.mjs
-      - name: Install Chromium for browser smoke tests
-        run: npx playwright install --with-deps chromium
-      - name: Run desktop, Android and tablet smoke tests
-        run: npm run test:e2e
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload built application
@@ -53,3 +49,21 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  browser-regression:
+    needs: build-and-test
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build application for browser tests
+        run: npm run build
+      - name: Install Chromium for browser regression
+        run: npx playwright install --with-deps chromium
+      - name: Run desktop, Android and tablet regression
+        run: npm run test:e2e

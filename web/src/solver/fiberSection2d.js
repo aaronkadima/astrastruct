@@ -36,16 +36,43 @@ export function rectangularSteelFiberSectionFromModel({section,material,nFibers=
   return fiberSectionState({fibers,epsilon0,kappa,materialLaw:strain=>bilinearSteelFromModelMaterial(material,strain,{hardeningRatio})});
 }
 
-/**
- * Rótula concentrada de flexão pura baseada na seção de fibras.
- * theta é a rotação relativa da rótula e Lp o comprimento plástico de referência.
- * A versão inicial impõe epsilon0=0 e, portanto, é destinada a benchmark/uso sem
- * interação axial significativa. A integração global deve verificar esse escopo.
- */
+/** Pure-bending helper retained as an exact local benchmark. */
 export function fiberHingePureBendingState({rotation,hingeLength,section,material,nFibers=40,hardeningRatio=0.01}){
   const theta=finite('rotação da rótula',rotation),Lp=finite('comprimento da rótula',hingeLength);if(!(Lp>0))throw new Error('Rótula de fibras: comprimento deve ser positivo.');
   const curvature=theta/Lp,state=rectangularSteelFiberSectionFromModel({section,material,nFibers,epsilon0:0,kappa:curvature,hardeningRatio}),sectionTangent=state.tangent[1][1],rotationalTangent=sectionTangent/Lp;
   return{type:'fiber-hinge-pure-bending',rotation:theta,hingeLength:Lp,curvature,moment:state.M,rotationalTangent,sectionState:state,yieldedFibers:state.yieldedFibers,fiberCount:state.fiberCount};
+}
+
+/**
+ * Concentrated steel fiber hinge with axial-force equilibrium.
+ *
+ * For a prescribed relative rotation theta, kappa=theta/Lp. epsilon0 is solved
+ * locally so the fiber section reproduces targetAxialForce (N>0 tension).
+ * The flexural tangent at constant N is the Schur complement
+ * D_Mk|N = K22 - K12²/K11, converted to dM/dtheta by division by Lp.
+ *
+ * The constitutive law is still the monotonic bilinear envelope; no cyclic
+ * history/unloading is implied by this local equilibrium solve.
+ */
+export function fiberHingeSectionState({rotation,hingeLength,targetAxialForce=0,section,material,nFibers=40,hardeningRatio=0.01,maxIterations=30,tolerance=1e-9,initialEpsilon0=null}){
+  const theta=finite('rotação da rótula',rotation),Lp=finite('comprimento da rótula',hingeLength),targetN=finite('esforço normal alvo',targetAxialForce);if(!(Lp>0))throw new Error('Rótula de fibras: comprimento deve ser positivo.');
+  if(!material)throw new Error('Rótula de fibras: material ausente.');
+  const E=finite('E',material.E);if(!(E>0))throw new Error('Rótula de fibras: E deve ser positivo.');
+  const width=Number(section?.b??section?.width),height=Number(section?.h??section?.depth),fibers=rectangularFibers({width,height,nFibers}),area=fibers.reduce((s,f)=>s+f.area,0),curvature=theta/Lp;
+  let epsilon0=initialEpsilon0==null?targetN/(E*area):finite('epsilon0 inicial',initialEpsilon0),state=null,residual=Infinity,iteration=0;
+  const fyScale=Math.abs(Number(material.fy)||0)*1000*area,forceScale=Math.max(1,Math.abs(targetN),fyScale),tol=Math.max(1e-12,Number(tolerance)||1e-9)*forceScale,maxIt=Math.max(3,Math.min(80,Math.round(Number(maxIterations)||30)));
+  const materialLaw=strain=>bilinearSteelFromModelMaterial(material,strain,{hardeningRatio});
+  for(iteration=1;iteration<=maxIt;iteration++){
+    state=fiberSectionState({fibers,epsilon0,kappa:curvature,materialLaw});residual=state.N-targetN;
+    if(Math.abs(residual)<=tol)break;
+    const K11=state.tangent[0][0];if(!(Math.abs(K11)>1e-12))throw new Error('Rótula de fibras: rigidez axial tangente degenerada durante equilíbrio N–M. Use encruamento positivo ou reduza o nível de plastificação.');
+    epsilon0-=residual/K11;
+    if(!Number.isFinite(epsilon0)||Math.abs(epsilon0)>.5)throw new Error('Rótula de fibras: equilíbrio axial divergiu para deformação não física.');
+  }
+  if(!state||Math.abs(residual)>tol)throw new Error(`Rótula de fibras: equilíbrio axial não convergiu em ${maxIt} iterações.`);
+  const [[K11,K12],[,K22]]=state.tangent;if(!(Math.abs(K11)>1e-12))throw new Error('Rótula de fibras: K11 tangente degenerado.');
+  const flexuralTangentAtConstantN=K22-K12*K12/K11,rotationalTangent=flexuralTangentAtConstantN/Lp;
+  return{type:'fiber-hinge-steel-nm',rotation:theta,hingeLength:Lp,curvature,targetAxialForce:targetN,epsilon0,moment:state.M,rotationalTangent,flexuralTangentAtConstantN,axialResidual:residual,axialIterations:iteration,sectionState:state,yieldedFibers:state.yieldedFibers,fiberCount:state.fiberCount};
 }
 
 export const FIBER_SECTION_VERSION='0.14.0-exp';

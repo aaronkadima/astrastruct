@@ -27,6 +27,15 @@ jobs:
           else
             python tools/v019_settings_patch.py
           fi
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('web/src/solver/corotational2d.js'); t=p.read_text()
+          old="stabilityEvent:stabilityEvent?{type:stabilityEvent.type,criticalLoadFactor:stabilityEvent.criticalLoadFactor,dominant:stabilityEvent.dominant}:null"
+          new="stabilityEvent:newStabilityEvents[0]?{type:newStabilityEvents[0].type,criticalLoadFactor:newStabilityEvents[0].criticalLoadFactor,dominant:newStabilityEvents[0].dominant}:null"
+          if old in t:t=t.replace(old,new,1)
+          elif new not in t:raise SystemExit('multimode history event anchor missing')
+          p.write_text(t)
+          PY
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Validate modules

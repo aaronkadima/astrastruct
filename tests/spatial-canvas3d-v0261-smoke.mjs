@@ -12,7 +12,9 @@ let field=resolveShapeField3D(staticResult,null,0);assert.equal(field.kind,'defo
 
 const pdeltaImperfection={dimension:'3d',analysisType:'pdelta',displacements:[{nodeId:'N1',ux:0,uy:0,uz:0},{nodeId:'N2',ux:0,uy:.002,uz:0}],totalDisplacements:[{nodeId:'N1',ux:0,uy:0,uz:0},{nodeId:'N2',ux:0,uy:.007,uz:0}],pDelta:{imperfection:{enabled:true}}};
 field=resolveShapeField3D(pdeltaImperfection,null,0);assert.equal(field.kind,'deformed');assert.match(field.label,/total/i);assert.equal(field.map.get('N2')[1],.007,'Canvas 3D deve usar u0 + Δu quando a imperfeição P-Delta estiver ativa');
+const corotImperfection={dimension:'3d',analysisType:'corotational',displacements:[{nodeId:'N1',ux:0,uy:0,uz:0},{nodeId:'N2',ux:0,uy:.0015,uz:0}],totalDisplacements:[{nodeId:'N1',ux:0,uy:0,uz:0},{nodeId:'N2',ux:0,uy:.0065,uz:0}],nonlinear:{imperfection:{enabled:true,stressFreeReference:true}}};
+field=resolveShapeField3D(corotImperfection,null,0);assert.equal(field.kind,'deformed');assert.match(field.label,/total/i);assert.equal(field.map.get('N2')[1],.0065,'Canvas 3D deve usar u0 + Δu no co-rotacional imperfeito');
 
 const modal={dimension:'3d',analysisType:'modal',modes:[{mode:1,displacements:[{nodeId:'N1',ux:0,uy:0,uz:0},{nodeId:'N2',ux:1,uy:0,uz:.2}]}]};field=resolveShapeField3D(modal,null,0);assert.equal(field.kind,'modal');assert.equal(field.mode.mode,1);assert.equal(field.map.get('N2')[0],1);
 const bucklingView={modeIndex:0,result:{dimension:'3d',modes:[{mode:1,factor:2.5,displacements:[{nodeId:'N1',ux:0,uy:0,uz:0},{nodeId:'N2',ux:0,uy:1,uz:0}]}]}};field=resolveShapeField3D(modal,bucklingView,0);assert.equal(field.kind,'buckling');assert.equal(field.mode.factor,2.5);assert.equal(field.map.get('N2')[1],1);
-console.log('v0.26.1/v0.29 Canvas 3D math/analysis smoke: OK');
+console.log('v0.26.1/v0.30 Canvas 3D math/analysis smoke: OK');

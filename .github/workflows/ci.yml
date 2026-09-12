@@ -28,3 +28,25 @@ jobs:
         env:
           ASTRA_BASE_PATH: ${{ github.ref == 'refs/heads/develop' && '/astrastruct/dev/' || '/astrastruct/' }}
         run: npm run build
+
+  development-browser-regression:
+    if: github.ref == 'refs/heads/develop'
+    needs: app-and-solver-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build development application
+        env:
+          ASTRA_BASE_PATH: /astrastruct/dev/
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run desktop, Android and tablet regression
+        env:
+          ASTRA_BASE_PATH: /astrastruct/dev/
+        run: npm run test:e2e

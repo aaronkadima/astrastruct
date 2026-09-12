@@ -35,6 +35,8 @@ elif mode=='post':
 
     # Add an E2E for spatial buckling + Canvas visualization. It creates a
     # pin-ended column with multiple frame elements and a compressive reference load.
+    # Canvas controls are intentionally behind the stability modal, so the test
+    # closes the modal after selecting/visualizing the mode before starting animation.
     Path('tests/e2e/buckling3d-v027.spec.ts').write_text(r'''import {test,expect} from '@playwright/test';
 
 test('v0.27 visualizes a 3D linear buckling mode in Canvas 3D',async({page})=>{
@@ -44,7 +46,9 @@ test('v0.27 visualizes a 3D linear buckling mode in Canvas 3D',async({page})=>{
  const p={id:'buckling3d',name:'Buckling 3D',version:13,schemaVersion:2,units:'kN-m-MPa',nodes,elements,materials:[{id:'S',type:'steel',E,nu:.3,density:78.5}],sections:[{id:'SEC',family:'steel3d',A,Iy,Iz,J,I:Iz}],supports:[{nodeId:'N0',ux:true,uy:true,uz:true,rx:true},{nodeId:`N${n}`,uy:true,uz:true}],loads:[{id:'P',caseId:'LC1',nodeId:`N${n}`,fx:-1000}],elementLoads:[],settlements:[],nodeSprings:[],nodalMasses:[],loadCases:[{id:'LC1',name:'Compressão'}],loadCombinations:[],connections:[],settings:{analysisType:'linear',analysisScenarioId:'LC1',activeLoadCaseId:'LC1',grid:.25,snap:true},meta:{}};
  await page.addInitScript(x=>localStorage.setItem('astrastruct.project',JSON.stringify(x)),p);await page.goto('./');
  await page.getByLabel('Estabilidade').click();await expect(page.getByTestId('panel-buckling')).toBeVisible();await page.getByTestId('buckling-calculate').click();await expect(page.getByTestId('buckling-critical-factor')).toBeVisible();
- const factor=Number(await page.getByTestId('buckling-critical-factor').textContent());expect(factor).toBeGreaterThan(0);const canvas=page.getByTestId('spatial-canvas-3d');await expect(canvas).toHaveAttribute('data-shape-kind','buckling');await expect(page.getByTestId('spatial3d-shape-kind')).toContainText('Flambagem');await page.getByTestId('spatial3d-animate').click();await expect(page.getByTestId('spatial3d-animate')).toContainText('Parar');
+ const factor=Number(await page.getByTestId('buckling-critical-factor').textContent());expect(factor).toBeGreaterThan(0);const canvas=page.getByTestId('spatial-canvas-3d');await expect(canvas).toHaveAttribute('data-shape-kind','buckling');await expect(page.getByTestId('spatial3d-shape-kind')).toContainText('Flambagem');
+ await page.getByTestId('panel-buckling').getByLabel('Fechar').click();await expect(page.getByTestId('panel-buckling')).toBeHidden();
+ await page.getByTestId('spatial3d-animate').click();await expect(page.getByTestId('spatial3d-animate')).toContainText('Parar');
 });
 ''')
     print('v0.27 Canvas bridge post-integration applied')

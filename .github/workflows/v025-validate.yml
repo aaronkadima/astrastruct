@@ -24,6 +24,13 @@ jobs:
           if old not in s:
               raise SystemExit('v0.25 tapered endpoint anchor missing')
           p.write_text(s.replace(old,new))
+          p=Path('tests/e2e/seismic-spectrum.spec.ts')
+          s=p.read_text()
+          old="await page.getByTestId('ground-motion-direction').selectOption('x');await page.getByTestId('ground-motion-points').fill"
+          new="await page.getByTestId('ground-motion-direction').selectOption('x');await page.getByTestId('ground-baseline-correction').selectOption('none');await page.getByTestId('ground-taper-ratio').fill('0');await page.getByTestId('ground-motion-points').fill"
+          if old not in s:
+              raise SystemExit('v0.25 legacy seismic E2E anchor missing')
+          p.write_text(s.replace(old,new,1))
           PY
       - name: Install dependencies
         run: npm install

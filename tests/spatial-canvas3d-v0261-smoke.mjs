@@ -10,6 +10,9 @@ const ax=elementAxes3D(project,project.elements[0]);assert.ok(ax);assert.ok(Math
 const staticResult={dimension:'3d',analysisType:'linear',displacements:[{nodeId:'N1',ux:0,uy:0,uz:0},{nodeId:'N2',ux:.01,uy:-.02,uz:.03}],elementForces:[{elementId:'E1',N1:-10,N2:10,Vy1:3,Vz1:4,Vy2:-3,Vz2:-4,T1:2,T2:-2,My1:6,Mz1:8,My2:-6,Mz2:-8}]};
 let field=resolveShapeField3D(staticResult,null,0);assert.equal(field.kind,'deformed');assert.ok(Math.abs(maxFieldMagnitude3D(field.map)-Math.hypot(.01,.02,.03))<1e-12);const pd=displacedPoint3D(project.nodes[1],field.map,10,1);assert.deepEqual(pd,[4.1,1.8,3.3]);assert.equal(elementResultScalar3D(staticResult,'E1','V'),5);assert.equal(elementResultScalar3D(staticResult,'E1','M'),10);assert.equal(elementResultScalar3D(staticResult,'E1','T'),2);assert.equal(elementResultScalar3D(staticResult,'E1','N'),10);
 
+const pdeltaImperfection={dimension:'3d',analysisType:'pdelta',displacements:[{nodeId:'N1',ux:0,uy:0,uz:0},{nodeId:'N2',ux:0,uy:.002,uz:0}],totalDisplacements:[{nodeId:'N1',ux:0,uy:0,uz:0},{nodeId:'N2',ux:0,uy:.007,uz:0}],pDelta:{imperfection:{enabled:true}}};
+field=resolveShapeField3D(pdeltaImperfection,null,0);assert.equal(field.kind,'deformed');assert.match(field.label,/total/i);assert.equal(field.map.get('N2')[1],.007,'Canvas 3D deve usar u0 + Δu quando a imperfeição P-Delta estiver ativa');
+
 const modal={dimension:'3d',analysisType:'modal',modes:[{mode:1,displacements:[{nodeId:'N1',ux:0,uy:0,uz:0},{nodeId:'N2',ux:1,uy:0,uz:.2}]}]};field=resolveShapeField3D(modal,null,0);assert.equal(field.kind,'modal');assert.equal(field.mode.mode,1);assert.equal(field.map.get('N2')[0],1);
 const bucklingView={modeIndex:0,result:{dimension:'3d',modes:[{mode:1,factor:2.5,displacements:[{nodeId:'N1',ux:0,uy:0,uz:0},{nodeId:'N2',ux:0,uy:1,uz:0}]}]}};field=resolveShapeField3D(modal,bucklingView,0);assert.equal(field.kind,'buckling');assert.equal(field.mode.factor,2.5);assert.equal(field.map.get('N2')[1],1);
-console.log('v0.26.1 Canvas 3D math/analysis smoke: OK');
+console.log('v0.26.1/v0.29 Canvas 3D math/analysis smoke: OK');

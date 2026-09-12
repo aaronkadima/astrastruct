@@ -12,10 +12,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Apply v0.22 core patch once
+      - name: Apply history-persistence fix once
         run: |
-          if [ -f scripts/tmp_v022_core_patch.py ]; then python scripts/tmp_v022_core_patch.py; fi
-          if [ -f scripts/tmp_v022_outer_fix.py ]; then python scripts/tmp_v022_outer_fix.py; fi
+          if [ -f scripts/tmp_v022_history_fix.py ]; then python scripts/tmp_v022_history_fix.py; fi
       - run: npm install
       - run: npm run check
       - name: Run v0.22 benchmark
@@ -27,7 +26,7 @@ jobs:
           if ! git diff --quiet; then
             git config user.name github-actions[bot]
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add web/src/solver/material1d.js web/src/solver/fiberSection2d.js web/src/solver/corotational2d.js web/src/solver/materialNonlinear2d.js web/src/core/model.js
-            git commit -m "feat: integrate v0.22 cyclic concentrated hinge history"
+            git add web/src/solver/materialNonlinear2d.js tests/cyclic-hinge-smoke.mjs
+            git commit -m "fix: persist v0.22 cyclic hinge state across steps"
             git push
           fi

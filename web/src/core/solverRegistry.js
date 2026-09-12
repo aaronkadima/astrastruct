@@ -39,3 +39,7 @@ registerSolver({ id: 'corotational-frame2d', analysisType: 'corotational', eleme
 registerSolver({ id: 'modal-2d', analysisType: 'modal', elementSets: ['truss2d','frame2d','mixed2d'], dynamic: true });
 registerSolver({ id: 'time-history-2d', analysisType: 'time-history', elementSets: ['truss2d','frame2d','mixed2d'], dynamic: true });
 registerSolver({ id: 'response-spectrum-2d', analysisType: 'response-spectrum', elementSets: ['truss2d','frame2d','mixed2d'], dynamic: true });
+
+registerSolver({ id: 'linear-truss3d', analysisType: 'linear', dimensions: ['3d'], elementSets: ['truss3d'] });
+registerSolver({ id: 'linear-frame3d', analysisType: 'linear', dimensions: ['3d'], elementSets: ['frame3d'] });
+registerSolver({ id: 'linear-mixed3d', analysisType: 'linear', dimensions: ['3d'], elementSets: ['mixed3d'] });

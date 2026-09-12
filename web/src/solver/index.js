@@ -6,9 +6,10 @@ import { solveBuckling2D } from './buckling2d.js';
 import { solveFrameCorotational2D, solveFrameCorotationalDisplacementControl2D, solveFrameCorotationalArcLength2D } from './corotational2d.js';
 import { activeFiberHinges, solveFrameCorotationalFiberHinges2D } from './materialNonlinear2d.js';
 import { solveModal2D, solveTimeHistory2D, solveResponseSpectrum2D } from './dynamics2d.js';
+import { solveSpatial3D } from './spatial3d.js';
 import { resolveScenario } from './scenario.js';
 import { buildElementResponses } from './postprocess.js';
-import { classifyElementSet } from '../core/elementRegistry.js';
+import { classifyElementSet, inferProjectDimension } from '../core/elementRegistry.js';
 import { attachResultContract } from '../core/contracts.js';
 
 function solveLinearModel(project) {
@@ -16,6 +17,7 @@ function solveLinearModel(project) {
   if (elementSet === 'truss2d') return solveTruss2D(project);
   if (elementSet === 'frame2d') return solveFrame2D(project);
   if (elementSet === 'mixed2d') return solveMixed2D(project);
+  if (elementSet === 'truss3d' || elementSet === 'frame3d' || elementSet === 'mixed3d') return solveSpatial3D(project);
   const types = [...new Set((project.elements || []).map(e => e.type))];
   throw new Error(`Tipos de elementos ainda não suportados pelo solver: ${types.join(', ') || 'modelo vazio'}`);
 }
@@ -41,7 +43,8 @@ function solveStructuralModel(sourceProject,resolvedProject,scenarioId) {
 }
 
 function solveRaw(project, scenarioId) {
-  const analysisType=project.settings?.analysisType||'linear',fiberHinges=activeFiberHinges(project),s=project.settings||{};
+  const analysisType=project.settings?.analysisType||'linear',dimension=inferProjectDimension(project),fiberHinges=activeFiberHinges(project),s=project.settings||{};
+  if(dimension==='3d'&&analysisType!=='linear')throw new Error(`Análise ${analysisType} ainda não é suportada em 3D na v0.26; use análise linear.`);
   if(analysisType==='modal'){
     if(fiberHinges.length)throw new Error('Dinâmica modal v0.25 é linear-elástica; desative as rótulas de fibras.');
     const result=solveModal2D(project,{modes:s.modalModes,massFormulation:s.dynamicMassFormulation});
@@ -63,6 +66,7 @@ function solveRaw(project, scenarioId) {
   }
   const resolved = resolveScenario(project, scenarioId);
   const result = solveStructuralModel(project,resolved.project,scenarioId||resolved.scenario?.id);
+  if(result.dimension==='3d')return{...result,scenario:resolved.scenario,analysisType:'linear',solverVersion:result.solverVersion||'0.26.0'};
   const elementResponses = buildElementResponses(resolved.project, result, 41);
   return {
     ...result,

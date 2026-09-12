@@ -1,3 +1,7 @@
+## AstraStruct v0.26 — fundação estrutural 3D
+
+A v0.26 introduz o primeiro kernel espacial linear: `truss3d` e `frame3d`, 6 DOFs por nó, transformação local/global robusta, axial, torção e flexão biaxial, cargas nodais 3D e distribuídas locais, cenários/combinações e recuperação `N/Vy/Vz/T/My/Mz`. Recursos não lineares e dinâmicos 3D permanecem fora do escopo desta versão. Veja `docs/spatial3d-v026.md`.
+
 ## AstraStruct v0.25.1 — consolidação arquitetural
 
 A v0.25.1 consolida schema/migrations, `AnalysisConfig`, `ElementRegistry`, `SolverRegistry`, contratos de análise/resultados e a interface do futuro `RuleEngine`. Não acrescenta novos métodos numéricos; o objetivo é preparar Frame 3D, shells, componentes e regras normativas sem ampliar o acoplamento do núcleo 2D. Veja `docs/architecture-v0251.md`.

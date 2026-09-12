@@ -11,18 +11,18 @@ export function resolveScenario(project,scenarioId){
     scenario={id:combination.id,name:combination.name,kind:'combination',type:combination.type||'custom',terms:[...factors].map(([caseId,factor])=>({caseId,factor}))};
   }
   const scaled=clone(project),firstCaseId=cases[0]?.id,factorFor=load=>factors.get(load.caseId||firstCaseId)||0;
-  scaled.loads=(project.loads||[]).map(load=>({load,factor:factorFor(load)})).filter(x=>Math.abs(x.factor)>1e-15).map(({load,factor})=>({...clone(load),fx:(load.fx||0)*factor,fy:(load.fy||0)*factor,mz:(load.mz||0)*factor,sourceCaseId:load.caseId||firstCaseId,scenarioFactor:factor}));
+  scaled.loads=(project.loads||[]).map(load=>({load,factor:factorFor(load)})).filter(x=>Math.abs(x.factor)>1e-15).map(({load,factor})=>({...clone(load),fx:(load.fx||0)*factor,fy:(load.fy||0)*factor,fz:(load.fz||0)*factor,mx:(load.mx||0)*factor,my:(load.my||0)*factor,mz:(load.mz||0)*factor,sourceCaseId:load.caseId||firstCaseId,scenarioFactor:factor}));
   scaled.elementLoads=(project.elementLoads||[]).map(load=>({load,factor:factorFor(load)})).filter(x=>Math.abs(x.factor)>1e-15).map(({load,factor})=>{
     const out={...clone(load),sourceCaseId:load.caseId||firstCaseId,scenarioFactor:factor};
-    if(load.kind==='uniform'){out.qx=(load.qx||0)*factor;out.qy=(load.qy||0)*factor}
-    else if(load.kind==='point'||load.kind==='followerEnd'){out.px=(load.px||0)*factor;out.py=(load.py||0)*factor}
+    if(load.kind==='uniform'){out.qx=(load.qx||0)*factor;out.qy=(load.qy||0)*factor;out.qz=(load.qz||0)*factor}
+    else if(load.kind==='point'||load.kind==='followerEnd'){out.px=(load.px||0)*factor;out.py=(load.py||0)*factor;out.pz=(load.pz||0)*factor}
     else if(load.kind==='selfWeight'){out.weightFactor=factor*(Number(load.factor)||1)}
     else if(load.kind==='thermal'){out.dT=(load.dT||0)*factor;out.dTGradient=(load.dTGradient||0)*factor}
     return out;
   });
 
   const settlementByNode=new Map();
-  for(const st of project.settlements||[]){const factor=factorFor(st);if(Math.abs(factor)<1e-15)continue;let acc=settlementByNode.get(st.nodeId);if(!acc){acc={ux:0,uy:0,rz:0};settlementByNode.set(st.nodeId,acc)}acc.ux+=(st.ux||0)*factor;acc.uy+=(st.uy||0)*factor;acc.rz+=(st.rz||0)*factor}
-  scaled.supports=(project.supports||[]).map(s=>{const st=settlementByNode.get(s.nodeId)||{ux:0,uy:0,rz:0};return{...clone(s),uxValue:(Number(s.baseUxValue)||0)+st.ux,uyValue:(Number(s.baseUyValue)||0)+st.uy,rzValue:(Number(s.baseRzValue)||0)+st.rz}});
+  for(const st of project.settlements||[]){const factor=factorFor(st);if(Math.abs(factor)<1e-15)continue;let acc=settlementByNode.get(st.nodeId);if(!acc){acc={ux:0,uy:0,uz:0,rx:0,ry:0,rz:0};settlementByNode.set(st.nodeId,acc)}acc.ux+=(st.ux||0)*factor;acc.uy+=(st.uy||0)*factor;acc.uz+=(st.uz||0)*factor;acc.rx+=(st.rx||0)*factor;acc.ry+=(st.ry||0)*factor;acc.rz+=(st.rz||0)*factor}
+  scaled.supports=(project.supports||[]).map(s=>{const st=settlementByNode.get(s.nodeId)||{ux:0,uy:0,uz:0,rx:0,ry:0,rz:0};return{...clone(s),uxValue:(Number(s.baseUxValue)||0)+st.ux,uyValue:(Number(s.baseUyValue)||0)+st.uy,uzValue:(Number(s.baseUzValue)||0)+st.uz,rxValue:(Number(s.baseRxValue)||0)+st.rx,ryValue:(Number(s.baseRyValue)||0)+st.ry,rzValue:(Number(s.baseRzValue)||0)+st.rz}});
   scaled.settlements=[];scaled.results=null;scaled.__scenario=scenario;return{project:scaled,scenario};
 }

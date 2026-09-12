@@ -1,4 +1,4 @@
-export const PRODUCT_VERSION = '0.25.1';
+export const PRODUCT_VERSION = '0.26.0';
 export const PROJECT_SCHEMA_VERSION = 2;
 export const RESULT_CONTRACT_VERSION = '1.0';
 

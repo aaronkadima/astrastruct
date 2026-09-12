@@ -168,7 +168,7 @@ function circularArc(ne){
   const r=solveFrameCorotational2D(p,'COMB_F',{steps:7,maxIterations:35,tolerance:1e-10}),tip=r.displacements.find(d=>d.nodeId==='N2'),ra=r.reactions.find(x=>x.nodeId==='N1'),f=r.elementResponses[0].followerEnds[0],expectedP=140,expectedU=expectedP*2/(30e6*.15);
   near(tip.ux,expectedU,2e-10,'Follower combinado: deslocamento axial');near(tip.uy,0,1e-10,'Follower combinado: deslocamento transversal');near(ra.fx,-expectedP,2e-6,'Follower combinado: reação axial');
   near(f.px,expectedP,1e-12,'Follower combinado: Px escalado');near(f.currentGlobal.fx,expectedP,2e-6,'Follower combinado: Fx global');near(f.currentGlobal.fy,0,1e-10,'Follower combinado: Fy global');
-  assert(f.consistentExternalTangent===true,'Follower combinado: metadado da tangente externa ausente');assert(r.nonlinear.followerLoads?.count===1,'Follower combinado: contagem de follower incorreta');assert(r.solverVersion==='0.13.5-exp','Follower combinado: versão do solver incorreta');
+  assert(f.consistentExternalTangent===true,'Follower combinado: metadado da tangente externa ausente');assert(r.nonlinear.followerLoads?.count===1,'Follower combinado: contagem de follower incorreta');assert(r.solverVersion==='0.13.6-exp','Follower combinado: versão do solver incorreta');
   console.log(p.name,'OK','Px=',f.px,'ux [mm]=',tip.ux*1000,'R=',ra.fx);
 }
 
@@ -207,12 +207,12 @@ function circularArc(ne){
   const settlement=simpleCantilever();settlement.settlements=[{id:'SET1',caseId:'LC1',nodeId:'N1',ux:0,uy:.001,rz:0}];
   mustThrow(()=>solveFrameCorotational2D(settlement,'LC1'),/deslocamentos impostos|recalques/i,'Co-rotacional: recalque deve ser recusado');
   const imperfect=simpleCantilever();imperfect.settings.imperfection={...(imperfect.settings.imperfection||{}),enabled:true,scenarioId:'LC1',mode:1,amplitudeMm:10};
-  mustThrow(()=>solveFrameCorotational2D(imperfect,'LC1'),/imperfei/i,'Co-rotacional: imperfeição modal deve ser recusada');
+  mustThrow(()=>solveFrameCorotational2D(imperfect,'LC1'),/imperfei/i,'Co-rotacional: imperfeição modal deve ser recusada sem vetor de referência');
   const prescribed=simpleCantilever();prescribed.supports[0].baseUxValue=.001;
   mustThrow(()=>solveFrameCorotational2D(prescribed,'LC1'),/deslocamentos impostos/i,'Co-rotacional: deslocamento base deve ser recusado');
   const invalidFollower=simpleCantilever();invalidFollower.loads=[];invalidFollower.elementLoads=[{id:'F1',caseId:'LC1',elementId:'E1',kind:'followerEnd',end:1,px:0,py:-10}];
   mustThrow(()=>solveFrameCorotational2D(invalidFollower,'LC1'),/extremidade 2/i,'Co-rotacional: follower na extremidade 1 deve ser recusada');
-  console.log('Co-rotacional — escopo protegido OK: recalques, imperfeição, deslocamento base e follower fora da ext. 2 recusados');
+  console.log('Co-rotacional — escopo protegido OK: recalques, imperfeição sem vetor, deslocamento base e follower fora da ext. 2 recusados');
 }
 
-console.log('Todos os smoke tests co-rotacionais experimentais do AstraStruct v0.13.5 passaram.');
+console.log('Todos os smoke tests co-rotacionais experimentais do AstraStruct v0.13.6 passaram.');

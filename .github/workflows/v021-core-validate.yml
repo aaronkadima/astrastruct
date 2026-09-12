@@ -1,0 +1,38 @@
+name: AstraStruct v0.21 cyclic history core
+on:
+  push:
+    branches: [feat/v021-cyclic-hysteresis]
+permissions:
+  contents: write
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply v0.21 patch once
+        run: |
+          if [ -f scripts/tmp_v021_core_patch.py ]; then
+            python scripts/tmp_v021_core_patch.py
+          fi
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate modules
+        run: npm run check
+      - name: Run v0.21 hysteresis benchmark
+        run: node tests/cyclic-hysteresis-smoke.mjs
+      - name: Run full structural regression suite
+        run: npm test
+      - name: Build application
+        run: npm run build
+      - name: Commit validated core patch
+        run: |
+          if ! git diff --quiet; then
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add web/src/solver/corotational2d.js web/src/solver/index.js web/src/core/model.js
+            git commit -m "feat: integrate v0.21 cyclic history with global solver"
+            git push
+          fi

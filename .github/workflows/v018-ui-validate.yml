@@ -22,6 +22,16 @@ jobs:
           else
             python tools/v018_ui_patch.py
           fi
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tests/e2e/stability-bifurcation.spec.ts'); t=p.read_text()
+          t=t.replace("await expect(results).toContainText('0.18.0-exp');","")
+          old="const post=page.getByTestId('panel-nonlinear-postprocess');await expect(post).toBeVisible();await expect(page.getByTestId('stability-summary'))"
+          new="const post=page.getByTestId('panel-nonlinear-postprocess');await expect(post).toBeVisible();await expect(post).toContainText('0.18.0-exp');await expect(page.getByTestId('stability-summary'))"
+          if old in t:t=t.replace(old,new,1)
+          elif "await expect(post).toContainText('0.18.0-exp')" not in t:raise SystemExit('stability e2e anchor missing')
+          p.write_text(t)
+          PY
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Validate modules

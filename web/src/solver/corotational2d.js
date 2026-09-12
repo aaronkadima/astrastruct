@@ -18,7 +18,7 @@ const addVector=(a,b)=>a.map((v,i)=>v+b[i]);
 const subVector=(a,b)=>a.map((v,i)=>v-b[i]);
 const maxAbsMatrix=A=>Math.max(0,...A.flat().map(v=>Math.abs(v)));
 
-function validateModel(project){
+function validateModel(project,{initialImperfection=null}={}){
   const nodes=project.nodes||[],elements=project.elements||[];
   if(!nodes.length||!elements.length)throw new Error('Co-rotacional: modelo sem nós ou elementos.');
   if(elements.some(e=>e.type!=='frame2d'))throw new Error('Co-rotacional v0.13 experimental suporta somente elementos frame2d.');
@@ -29,11 +29,29 @@ function validateModel(project){
   if(invalidFollower)throw new Error('Co-rotacional v0.13.5 experimental aceita força seguidora somente na extremidade 2 do elemento.');
   if((project.nodeSprings||[]).length)throw new Error('Co-rotacional v0.13 experimental ainda não aceita molas nodais.');
   if((project.settlements||[]).length)throw new Error('Co-rotacional v0.13 experimental ainda não aceita recalques/deslocamentos impostos.');
-  if(project.settings?.imperfection?.enabled)throw new Error('Co-rotacional v0.13 experimental ainda não aceita imperfeição geométrica inicial; desative a imperfeição modal ou use P-Delta.');
+  if(project.settings?.imperfection?.enabled&&!initialImperfection)throw new Error('Co-rotacional: a imperfeição está ativa, mas o vetor da geometria inicial não foi fornecido ao kernel. Use o dispatcher do AstraStruct ou desative a imperfeição.');
   for(const s of project.supports||[]){
     const values=[s.baseUxValue,s.baseUyValue,s.baseRzValue,s.uxValue,s.uyValue,s.rzValue].map(v=>Number(v)||0);
     if(values.some(v=>Math.abs(v)>EPS))throw new Error('Co-rotacional v0.13 experimental ainda não aceita deslocamentos impostos nos apoios.');
   }
+}
+
+function normalizeInitialImperfection(project,nodes,raw){
+  if(!raw)return null;
+  const nd=nodes.length*3;
+  if(!Array.isArray(raw.vector)||raw.vector.length!==nd)throw new Error(`Imperfeição co-rotacional inválida: vetor deve possuir ${nd} graus de liberdade.`);
+  const vector=raw.vector.map((v,i)=>{const n=Number(v);if(!Number.isFinite(n))throw new Error(`Imperfeição co-rotacional inválida no DOF ${i}.`);return n});
+  const maxTranslation=Math.max(0,...nodes.flatMap((_,i)=>[Math.abs(vector[3*i]),Math.abs(vector[3*i+1])]));
+  if(!(maxTranslation>EPS))throw new Error('Imperfeição co-rotacional sem componente translacional significativa.');
+  const map=new Map(nodes.map((n,i)=>[n.id,i]));
+  for(const s of project.supports||[]){
+    const i=map.get(s.nodeId);if(i==null)continue;
+    if(s.ux&&Math.abs(vector[3*i])>1e-8)throw new Error(`Imperfeição co-rotacional incompatível com apoio Ux no nó ${s.nodeId}.`);
+    if(s.uy&&Math.abs(vector[3*i+1])>1e-8)throw new Error(`Imperfeição co-rotacional incompatível com apoio Uy no nó ${s.nodeId}.`);
+    if(s.rz&&Math.abs(vector[3*i+2])>1e-8)throw new Error(`Imperfeição co-rotacional incompatível com apoio Rz no nó ${s.nodeId}.`);
+  }
+  const referenceNodes=nodes.map((n,i)=>({...n,x:Number(n.x)+vector[3*i],y:Number(n.y)+vector[3*i+1]}));
+  return{...raw,vector,maxTranslation,amplitude:Number(raw.amplitude)||maxTranslation,amplitudeMm:Number(raw.amplitudeMm)||maxTranslation*1000,referenceNodes};
 }
 
 function localVectorToGlobal(vector,c,s){
@@ -199,16 +217,16 @@ function nodeHasRotationalStiffness(elements,nodeId){
   });
 }
 
-function prepare(project){
-  const nodes=project.nodes||[],map=new Map(nodes.map((n,i)=>[n.id,i])),elements=[],nd=nodes.length*3,F=Array(nd).fill(0);
+function prepare(project,initialImperfection=null){
+  const nominalNodes=project.nodes||[],imperfection=normalizeInitialImperfection(project,nominalNodes,initialImperfection),nodes=imperfection?.referenceNodes||nominalNodes.map(n=>({...n})),map=new Map(nodes.map((n,i)=>[n.id,i])),elements=[],nd=nodes.length*3,F=Array(nd).fill(0);
   for(const e of project.elements||[]){
     const i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Co-rotacional: elemento ${e.id} referencia nó inexistente.`);
     const mat=(project.materials||[]).find(m=>m.id===e.materialId);if(!mat)throw new Error(`Co-rotacional: material ausente em ${e.id}.`);
-    const section=(project.sections||[]).find(s=>s.id===e.sectionId),a=nodes[i],b=nodes[j],dx0=Number(b.x)-Number(a.x),dy0=Number(b.y)-Number(a.y),L0=Math.hypot(dx0,dy0);
-    if(!(L0>EPS))throw new Error(`Co-rotacional: elemento ${e.id} possui comprimento nulo.`);
+    const section=(project.sections||[]).find(s=>s.id===e.sectionId),a=nodes[i],b=nodes[j],aNominal=nominalNodes[i],bNominal=nominalNodes[j],dx0=Number(b.x)-Number(a.x),dy0=Number(b.y)-Number(a.y),L0=Math.hypot(dx0,dy0);
+    if(!(L0>EPS))throw new Error(`Co-rotacional: elemento ${e.id} possui comprimento de referência nulo após aplicar a imperfeição.`);
     const E=Number(mat.E),A=Number(e.A),I=Number(e.I);if(!(E>0&&A>0&&I>0))throw new Error(`Co-rotacional: propriedades inválidas em ${e.id}.`);
     const idx=[3*i,3*i+1,3*i+2,3*j,3*j+1,3*j+2],c0=dx0/L0,s0=dy0/L0,referenceLoads=prepareReferenceElementLoads(project,e,mat,L0,c0,s0),thermal=prepareThermalInitialState(project,e,mat,section,L0),followers=prepareFollowerElementLoads(project,e);
-    elements.push({e,i,j,a,b,E,A,I,idx,c0,s0,thermal,followers,...referenceLoads});
+    elements.push({e,i,j,a,b,aNominal,bNominal,E,A,I,idx,c0,s0,thermal,followers,...referenceLoads});
   }
   const prescribed=new Set();
   for(const s of project.supports||[]){const i=map.get(s.nodeId);if(i==null)continue;if(s.ux)prescribed.add(3*i);if(s.uy)prescribed.add(3*i+1);if(s.rz)prescribed.add(3*i+2)}
@@ -217,7 +235,7 @@ function prepare(project){
   if(!free.length)throw new Error('Co-rotacional: não existem graus de liberdade livres.');
   if(free.length>240)throw new Error(`Co-rotacional v0.13 experimental limita a análise a 240 DOFs livres no navegador; modelo atual: ${free.length}.`);
   for(const load of project.loads||[]){const i=map.get(load.nodeId);if(i==null)continue;F[3*i]+=Number(load.fx)||0;F[3*i+1]+=Number(load.fy)||0;F[3*i+2]+=Number(load.mz)||0}
-  return{nodes,map,elements,prescribed,free,nd,F};
+  return{nodes,nominalNodes,map,elements,prescribed,free,nd,F,imperfection};
 }
 
 function assemble(prepared,u,loadFactor=1){
@@ -247,7 +265,7 @@ function residualScale(prepared,current,loadFactor){
 }
 
 export function solveFrameCorotational2D(project,scenarioId,options={}){
-  const resolved=resolveScenario(project,scenarioId),p=resolved.project;validateModel(p);const prepared=prepare(p);
+  const resolved=resolveScenario(project,scenarioId),p=resolved.project;validateModel(p,{initialImperfection:options.initialImperfection});const prepared=prepare(p,options.initialImperfection);
   const steps=clamp(Math.round(Number(options.steps??20)||20),1,200),maxIterations=clamp(Math.round(Number(options.maxIterations??35)||35),3,100),tolerance=Math.max(1e-12,Number(options.tolerance??1e-8)||1e-8),lineSearch=options.lineSearch!==false;
   const u=Array(prepared.nd).fill(0),history=[];let last=null;
   for(let step=1;step<=steps;step++){
@@ -274,12 +292,16 @@ export function solveFrameCorotational2D(project,scenarioId,options={}){
   }
   last=residualAt(prepared,u,1);
   const reactions=prepared.nodes.map((n,i)=>({nodeId:n.id,fx:last.fint[3*i]-last.external[3*i],fy:last.fint[3*i+1]-last.external[3*i+1],mz:last.fint[3*i+2]-last.external[3*i+2]})),displacements=prepared.nodes.map((n,i)=>({nodeId:n.id,ux:u[3*i],uy:u[3*i+1],rz:u[3*i+2]}));
+  const initialDisplacements=prepared.imperfection?prepared.nominalNodes.map((n,i)=>({nodeId:n.id,ux:prepared.imperfection.vector[3*i],uy:prepared.imperfection.vector[3*i+1],rz:prepared.imperfection.vector[3*i+2]})):null;
+  const totalDisplacements=prepared.imperfection?prepared.nominalNodes.map((n,i)=>({nodeId:n.id,ux:prepared.imperfection.vector[3*i]+u[3*i],uy:prepared.imperfection.vector[3*i+1]+u[3*i+1],rz:prepared.imperfection.vector[3*i+2]+u[3*i+2]})):null;
+  const initialGeometry=prepared.imperfection?prepared.nominalNodes.map((n,i)=>({nodeId:n.id,nominal:{x:Number(n.x),y:Number(n.y)},reference:{x:Number(prepared.nodes[i].x),y:Number(prepared.nodes[i].y)},offset:{ux:prepared.imperfection.vector[3*i],uy:prepared.imperfection.vector[3*i+1],rz:prepared.imperfection.vector[3*i+2]}})):null;
   const elementForces=last.states.map(({item,state,connected,followerStates})=>{
     const endGlobal=state.internal.map((v,k)=>v-item.pGlobal[k]),endLocal=globalVectorToLocal(endGlobal,state.c,state.s);
     const followerEnds=followerStates.map(({load,current})=>({id:load.id,end:2,px:load.px,py:load.py,currentGlobal:{fx:current.fx,fy:current.fy},alpha:state.alpha,tangentMaxAbs:current.tangentMaxAbs,consistentExternalTangent:true}));
-    return{elementId:item.e.id,type:'frame2d',N1:endLocal[0],V1:endLocal[1],M1:endLocal[2],N2:endLocal[3],V2:endLocal[4],M2:endLocal[5],basicForces:{N:state.basicForces[0],M1:state.basicForces[1],M2:state.basicForces[2]},connectionRotations:connected.connectionRotations,connectionCondensation:{internalResidual:connected.internalConnectionResidual,stiffnesses:connected.stiffnesses},corotational:{L0:state.L0,l:state.l,alpha:state.alpha,dAlpha:state.dAlpha,basic:state.basic,initialBasic:state.initialBasic,elasticBasic:state.elasticBasic},loadSummary:{...item.summary,thermal:item.thermal.summary,followerEnds},equivalentNodalLoad:{referenceLocal:item.pLocal,global:item.pGlobal}};
+    return{elementId:item.e.id,type:'frame2d',N1:endLocal[0],V1:endLocal[1],M1:endLocal[2],N2:endLocal[3],V2:endLocal[4],M2:endLocal[5],basicForces:{N:state.basicForces[0],M1:state.basicForces[1],M2:state.basicForces[2]},connectionRotations:connected.connectionRotations,connectionCondensation:{internalResidual:connected.internalConnectionResidual,stiffnesses:connected.stiffnesses},corotational:{L0:state.L0,l:state.l,alpha:state.alpha,dAlpha:state.dAlpha,basic:state.basic,initialBasic:state.initialBasic,elasticBasic:state.elasticBasic,referenceImperfection:prepared.imperfection?{enabled:true}:null},loadSummary:{...item.summary,thermal:item.thermal.summary,followerEnds},equivalentNodalLoad:{referenceLocal:item.pLocal,global:item.pGlobal}};
   });
   const followerCount=prepared.elements.reduce((n,e)=>n+e.followers.length,0),flexibleEndCount=prepared.elements.reduce((n,item)=>n+connectionStiffnesses(item.e.releases||{},item.e.rotationalSprings||{}).filter(Number.isFinite).length,0);
-  const base={type:'frame2d-corotational-experimental',solverVersion:'0.13.5-exp',scenario:resolved.scenario,dofs:prepared.nd,activeDofs:prepared.free.length,displacements,reactions,elementForces,nonlinear:{formulation:'2D co-rotational Euler-Bernoulli',steps,maxIterations,tolerance,lineSearch,loadModel:'reference-dead mechanical loads + thermal initial strain/curvature + follower end forces',followerLoads:{count:followerCount,externalTangent:'consistent',supported:'element end 2 concentrated force'},endConnections:{flexibleEndCount,method:'internal end rotations + Schur condensation',experimental:true},history,converged:true}};
+  const imperfectionMeta=prepared.imperfection?{enabled:true,source:prepared.imperfection.source||'explicit',mode:prepared.imperfection.mode||null,referenceScenarioId:prepared.imperfection.referenceScenarioId||null,criticalFactor:prepared.imperfection.criticalFactor||null,amplitude:prepared.imperfection.maxTranslation,amplitudeMm:prepared.imperfection.maxTranslation*1000,reference:'stress-free imperfect geometry',rotations:'stored as initial nodal orientation metadata'}:null;
+  const base={type:'frame2d-corotational-experimental',solverVersion:'0.13.5-exp',scenario:resolved.scenario,dofs:prepared.nd,activeDofs:prepared.free.length,displacements,initialDisplacements,totalDisplacements,initialGeometry,reactions,elementForces,imperfection:imperfectionMeta,nonlinear:{formulation:'2D co-rotational Euler-Bernoulli',steps,maxIterations,tolerance,lineSearch,loadModel:'reference-dead mechanical loads + thermal initial strain/curvature + follower end forces',followerLoads:{count:followerCount,externalTangent:'consistent',supported:'element end 2 concentrated force'},endConnections:{flexibleEndCount,method:'internal end rotations + Schur condensation',experimental:true},imperfection:imperfectionMeta,history,converged:true}};
   return{...base,elementResponses:buildCorotationalResponses(p,base,41)};
 }

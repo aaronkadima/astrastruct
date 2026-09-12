@@ -1,0 +1,35 @@
+name: AstraStruct v0.23 dynamics UI
+on:
+  push:
+    branches: [feat/v023-structural-dynamics]
+permissions:
+  contents: write
+jobs:
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply v0.23 UI integration once
+        run: python scripts/tmp_v023_ui_patch.py
+      - run: npm install
+      - run: npm run check
+      - name: Run dynamics benchmark
+        run: node tests/dynamics-smoke.mjs
+      - run: npm test
+      - run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run desktop browser suite
+        run: npx playwright test --project=desktop-chromium
+      - name: Commit validated permanent UI
+        run: |
+          if ! git diff --quiet; then
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add app/src/InspectorPanel.tsx app/src/AnalysisPanelV13.tsx app/src/App.tsx app/src/DynamicsPostprocessPanel.tsx README.md docs/structural-dynamics-v023.md
+            git commit -m "feat: add AstraStruct v0.23 dynamics UI"
+            git push
+          fi

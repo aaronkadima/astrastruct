@@ -45,6 +45,7 @@ export function emptyProject() {
       activeLoadCaseId: 'LC1', analysisScenarioId: 'LC1',
       analysisType: 'linear', pDeltaMaxIterations: 30, pDeltaTolerance: 1e-8,
       nonlinearSteps: 20, nonlinearMaxIterations: 35, nonlinearTolerance: 1e-8, nonlinearLineSearch: true,
+      materialMaxIterations: 30, materialTolerance: 1e-6, materialRelaxation: 1, materialCoupling: 'embedded',
       imperfection: { enabled: false, source: 'bucklingMode', scenarioId: null, mode: 1, amplitudeMm: 10 }
     },
     meta: { solverVersion: '0.13.6-exp', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
@@ -74,6 +75,10 @@ export function normalizeProject(input) {
   p.settings.nonlinearMaxIterations = Math.max(3, Math.min(100, Math.round(Number(p.settings.nonlinearMaxIterations) || 35)));
   p.settings.nonlinearTolerance = Math.max(1e-12, Number(p.settings.nonlinearTolerance) || 1e-8);
   p.settings.nonlinearLineSearch = p.settings.nonlinearLineSearch !== false;
+  p.settings.materialMaxIterations = Math.max(3, Math.min(80, Math.round(Number(p.settings.materialMaxIterations) || 30)));
+  p.settings.materialTolerance = Math.max(1e-10, Number(p.settings.materialTolerance) || 1e-6);
+  p.settings.materialRelaxation = Math.max(.2, Math.min(1, Number(p.settings.materialRelaxation) || 1));
+  p.settings.materialCoupling = p.settings.materialCoupling === 'outer' ? 'outer' : 'embedded';
   p.settings.imperfection.enabled = !!p.settings.imperfection.enabled;
   p.settings.imperfection.source = p.settings.imperfection.source === 'bucklingMode' ? 'bucklingMode' : 'bucklingMode';
   p.settings.imperfection.scenarioId = p.settings.imperfection.scenarioId || null;

@@ -2,7 +2,7 @@
 
 AstraStruct é uma plataforma web **assembly-first** para modelagem, análise, dimensionamento e futura verificação/detalhamento de estruturas de concreto armado e aço.
 
-> **Estado atual — v0.14.2 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
+> **Estado atual — v0.15.0 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
 
 ## Executar online
 
@@ -23,7 +23,7 @@ A interface React/Vite é construída, testada e publicada automaticamente em `d
 - **temperatura uniforme e gradiente térmico como deformação/curvatura iniciais no solver co‑rotacional**;
 - **força seguidora concentrada na extremidade 2 de `frame2d`, com tangente externa consistente, no co‑rotacional**;
 - **rótulas e ligações rotacionais semirrígidas no co‑rotacional v0.13.5, com rotação interna de extremidade e condensação estática de Schur**;
-- **rótulas concentradas de fibras de aço v0.14.2 para seções retangulares, I/H e RHS, com equilíbrio local N–M e linearização tangente-afim**;
+- **rótulas concentradas de fibras de aço v0.15 para seções retangulares, I/H e RHS, com equilíbrio local N–M, linearização tangente-afim e Newton constitutivo embutido em cada avaliação do equilíbrio global**;
 - molas nodais `kx`, `ky`, `kr` no solver Linear/P‑Delta;
 - casos de ação e combinações customizadas, incluindo escalonamento de `followerEnd` antes da solução não linear;
 - análise Linear, P‑Delta ou Geometricamente Não Linear co‑rotacional selecionável;

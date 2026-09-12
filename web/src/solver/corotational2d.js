@@ -243,11 +243,13 @@ function prepare(project,initialImperfection=null){
   return{nodes,nominalNodes,map,elements,prescribed,free,nd,F,imperfection};
 }
 
-function assemble(prepared,u,loadFactor=1){
+function assemble(prepared,u,loadFactor=1,options={}){
   const Kint=zeros(prepared.nd),Kext=zeros(prepared.nd),fint=Array(prepared.nd).fill(0),follower=Array(prepared.nd).fill(0),states=[];
   for(const item of prepared.elements){
     const initialBasic=item.thermal.initialBasic.map(v=>v*loadFactor),qNode=item.idx.map(i=>u[i]);
-    const connected=corotationalConnectedElementState({X1:Number(item.a.x),Y1:Number(item.a.y),X2:Number(item.b.x),Y2:Number(item.b.y),qGlobal:qNode,E:item.E,A:item.A,I:item.I,initialBasic,pGlobal:item.pGlobal,loadFactor,releases:item.e.releases||{},rotationalSprings:item.e.rotationalSprings||{},rotationalSpringMoments:item.e.rotationalSpringMoments||{}}),state=connected.state;
+    const connectionArgs={X1:Number(item.a.x),Y1:Number(item.a.y),X2:Number(item.b.x),Y2:Number(item.b.y),qGlobal:qNode,E:item.E,A:item.A,I:item.I,initialBasic,pGlobal:item.pGlobal,loadFactor,releases:item.e.releases||{},rotationalSprings:item.e.rotationalSprings||{},rotationalSpringMoments:item.e.rotationalSpringMoments||{}};
+    const connected=typeof options.connectionResolver==='function'?options.connectionResolver({item,qNode,initialBasic,loadFactor,connectionArgs,solveConnected:(overrides={})=>corotationalConnectedElementState({...connectionArgs,...overrides})}):corotationalConnectedElementState(connectionArgs),state=connected?.state;
+    if(!state||!Array.isArray(connected?.gradient)||!Array.isArray(connected?.tangent))throw new Error(`Co-rotacional: resolvedor de ligação retornou estado inválido em ${item.e.id}.`);
     addSub(Kint,connected.tangent,item.idx);connected.gradient.forEach((v,k)=>{fint[item.idx[k]]+=v});
     const followerStates=item.followers.map(load=>{
       const current=followerEndLoadState({px:load.px,py:load.py,end:load.end,l:state.l,c:state.c,s:state.s});
@@ -259,8 +261,8 @@ function assemble(prepared,u,loadFactor=1){
   return{Kint,Kext,fint,follower,states};
 }
 
-function residualAt(prepared,u,loadFactor){
-  const assembled=assemble(prepared,u,loadFactor),external=prepared.F.map((v,i)=>loadFactor*(v+assembled.follower[i])),residual=external.map((v,i)=>v-assembled.fint[i]),K=addMatrix(assembled.Kint,assembled.Kext,-loadFactor);
+function residualAt(prepared,u,loadFactor,options={}){
+  const assembled=assemble(prepared,u,loadFactor,options),external=prepared.F.map((v,i)=>loadFactor*(v+assembled.follower[i])),residual=external.map((v,i)=>v-assembled.fint[i]),K=addMatrix(assembled.Kint,assembled.Kext,-loadFactor);
   return{...assembled,K,external,residual,norm:normInf(prepared.free.map(i=>residual[i]))};
 }
 
@@ -276,26 +278,27 @@ export function solveFrameCorotational2D(project,scenarioId,options={}){
   for(let step=1;step<=steps;step++){
     const lambda=step/steps;let converged=false,iteration=0;
     for(iteration=1;iteration<=maxIterations;iteration++){
-      const current=residualAt(prepared,u,lambda),scale=residualScale(prepared,current,lambda);
+      const current=residualAt(prepared,u,lambda,options),scale=residualScale(prepared,current,lambda);
       if(current.norm<=tolerance*scale){converged=true;last=current;break}
       const Kff=prepared.free.map(i=>prepared.free.map(j=>current.K[i][j])),rf=prepared.free.map(i=>current.residual[i]);let du;
       try{du=solveLinear(Kff,rf)}catch(e){throw new Error(`Co-rotacional: tangente singular no passo ${step}, iteração ${iteration}. ${e.message||e}`)}
       let eta=1,next=null;
       if(lineSearch){
         for(let ls=0;ls<7;ls++){
-          const trial=[...u];prepared.free.forEach((d,k)=>{trial[d]+=eta*du[k]});const candidate=residualAt(prepared,trial,lambda);
+          const trial=[...u];prepared.free.forEach((d,k)=>{trial[d]+=eta*du[k]});const candidate=residualAt(prepared,trial,lambda,options);
           if(candidate.norm<current.norm||eta<=1/64){next={trial,candidate};break}eta*=.5;
         }
       }
-      if(!next){const trial=[...u];prepared.free.forEach((d,k)=>{trial[d]+=du[k]});next={trial,candidate:residualAt(prepared,trial,lambda)}}
+      if(!next){const trial=[...u];prepared.free.forEach((d,k)=>{trial[d]+=du[k]});next={trial,candidate:residualAt(prepared,trial,lambda,options)}}
       next.trial.forEach((v,i)=>{u[i]=v});last=next.candidate;
       if(u.some(v=>!Number.isFinite(v)||Math.abs(v)>1e4))throw new Error(`Co-rotacional: resposta não física no passo ${step}.`);
     }
-    if(!converged){const current=residualAt(prepared,u,lambda),scale=residualScale(prepared,current,lambda);if(current.norm<=tolerance*scale){converged=true;last=current}}
+    if(!converged){const current=residualAt(prepared,u,lambda,options),scale=residualScale(prepared,current,lambda);if(current.norm<=tolerance*scale){converged=true;last=current}}
     if(!converged)throw new Error(`Co-rotacional não convergiu no passo ${step}/${steps} em ${maxIterations} iterações.`);
-    history.push({step,loadFactor:lambda,iterations:iteration,residualNorm:last.norm});
+    const materialLocalIterations=Math.max(0,...(last.states||[]).map(x=>Number(x.connected?.materialLocalIterations)||0));
+    history.push({step,loadFactor:lambda,iterations:iteration,residualNorm:last.norm,materialLocalIterations});
   }
-  last=residualAt(prepared,u,1);
+  last=residualAt(prepared,u,1,options);
   const reactions=prepared.nodes.map((n,i)=>({nodeId:n.id,fx:last.fint[3*i]-last.external[3*i],fy:last.fint[3*i+1]-last.external[3*i+1],mz:last.fint[3*i+2]-last.external[3*i+2]})),displacements=prepared.nodes.map((n,i)=>({nodeId:n.id,ux:u[3*i],uy:u[3*i+1],rz:u[3*i+2]}));
   const initialDisplacements=prepared.imperfection?prepared.nominalNodes.map((n,i)=>({nodeId:n.id,ux:prepared.imperfection.vector[3*i],uy:prepared.imperfection.vector[3*i+1],rz:prepared.imperfection.vector[3*i+2]})):null;
   const totalDisplacements=prepared.imperfection?prepared.nominalNodes.map((n,i)=>({nodeId:n.id,ux:prepared.imperfection.vector[3*i]+u[3*i],uy:prepared.imperfection.vector[3*i+1]+u[3*i+1],rz:prepared.imperfection.vector[3*i+2]+u[3*i+2]})):null;
@@ -303,10 +306,10 @@ export function solveFrameCorotational2D(project,scenarioId,options={}){
   const elementForces=last.states.map(({item,state,connected,followerStates})=>{
     const endGlobal=state.internal.map((v,k)=>v-item.pGlobal[k]),endLocal=globalVectorToLocal(endGlobal,state.c,state.s);
     const followerEnds=followerStates.map(({load,current})=>({id:load.id,end:2,px:load.px,py:load.py,currentGlobal:{fx:current.fx,fy:current.fy},alpha:state.alpha,tangentMaxAbs:current.tangentMaxAbs,consistentExternalTangent:true}));
-    return{elementId:item.e.id,type:'frame2d',N1:endLocal[0],V1:endLocal[1],M1:endLocal[2],N2:endLocal[3],V2:endLocal[4],M2:endLocal[5],basicForces:{N:state.basicForces[0],M1:state.basicForces[1],M2:state.basicForces[2]},connectionRotations:connected.connectionRotations,connectionCondensation:{internalResidual:connected.internalConnectionResidual,stiffnesses:connected.stiffnesses},corotational:{L0:state.L0,l:state.l,alpha:state.alpha,dAlpha:state.dAlpha,basic:state.basic,initialBasic:state.initialBasic,elasticBasic:state.elasticBasic,referenceImperfection:prepared.imperfection?{enabled:true}:null},loadSummary:{...item.summary,thermal:item.thermal.summary,followerEnds},equivalentNodalLoad:{referenceLocal:item.pLocal,global:item.pGlobal}};
+    return{elementId:item.e.id,type:'frame2d',N1:endLocal[0],V1:endLocal[1],M1:endLocal[2],N2:endLocal[3],V2:endLocal[4],M2:endLocal[5],basicForces:{N:state.basicForces[0],M1:state.basicForces[1],M2:state.basicForces[2]},connectionRotations:connected.connectionRotations,connectionCondensation:{internalResidual:connected.internalConnectionResidual,stiffnesses:connected.stiffnesses,materialLocalIterations:Number(connected.materialLocalIterations)||0,materialResidual:Number(connected.materialResidual)||0,materialMeta:connected.materialConnectionMeta||null},corotational:{L0:state.L0,l:state.l,alpha:state.alpha,dAlpha:state.dAlpha,basic:state.basic,initialBasic:state.initialBasic,elasticBasic:state.elasticBasic,referenceImperfection:prepared.imperfection?{enabled:true}:null},loadSummary:{...item.summary,thermal:item.thermal.summary,followerEnds},equivalentNodalLoad:{referenceLocal:item.pLocal,global:item.pGlobal}};
   });
   const followerCount=prepared.elements.reduce((n,e)=>n+e.followers.length,0),flexibleEndCount=prepared.elements.reduce((n,item)=>n+connectionStiffnesses(item.e.releases||{},item.e.rotationalSprings||{}).filter(Number.isFinite).length,0);
   const imperfectionMeta=prepared.imperfection?{enabled:true,source:prepared.imperfection.source||'explicit',mode:prepared.imperfection.mode||null,referenceScenarioId:prepared.imperfection.referenceScenarioId||null,criticalFactor:prepared.imperfection.criticalFactor||null,amplitude:prepared.imperfection.maxTranslation,amplitudeMm:prepared.imperfection.maxTranslation*1000,reference:'stress-free imperfect geometry',rotations:'stored as initial nodal orientation metadata'}:null;
-  const base={type:'frame2d-corotational-experimental',solverVersion:'0.13.6-exp',scenario:resolved.scenario,dofs:prepared.nd,activeDofs:prepared.free.length,displacements,initialDisplacements,totalDisplacements,initialGeometry,reactions,elementForces,imperfection:imperfectionMeta,nonlinear:{formulation:'2D co-rotational Euler-Bernoulli',steps,maxIterations,tolerance,lineSearch,loadModel:'reference-dead mechanical loads + thermal initial strain/curvature + follower end forces',followerLoads:{count:followerCount,externalTangent:'consistent',supported:'element end 2 concentrated force'},endConnections:{flexibleEndCount,method:'internal end rotations + Schur condensation',experimental:true},imperfection:imperfectionMeta,history,converged:true}};
+  const base={type:'frame2d-corotational-experimental',solverVersion:'0.13.6-exp',scenario:resolved.scenario,dofs:prepared.nd,activeDofs:prepared.free.length,displacements,initialDisplacements,totalDisplacements,initialGeometry,reactions,elementForces,imperfection:imperfectionMeta,nonlinear:{formulation:'2D co-rotational Euler-Bernoulli',steps,maxIterations,tolerance,lineSearch,loadModel:'reference-dead mechanical loads + thermal initial strain/curvature + follower end forces',followerLoads:{count:followerCount,externalTangent:'consistent',supported:'element end 2 concentrated force'},endConnections:{flexibleEndCount,method:'internal end rotations + Schur condensation',customResolver:typeof options.connectionResolver==='function',experimental:true},imperfection:imperfectionMeta,history,converged:true}};
   return{...base,elementResponses:buildCorotationalResponses(p,base,41)};
 }

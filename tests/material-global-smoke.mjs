@@ -33,13 +33,13 @@ function steelCantilever({axial=0,moment=2200,section={id:'R200x400',name:'Retan
 // equilibrar o momento de ponta e preservar o equilíbrio global.
 {
   const applied=2200,p=steelCantilever({moment:applied}),r=solve(p,'LC1');
-  assert(r.solverVersion==='0.14.2-exp',`v0.14.2 global: solverVersion inesperada ${r.solverVersion}`);
+  assert(r.solverVersion==='0.15.0-exp',`v0.14.2 global: solverVersion inesperada ${r.solverVersion}`);
   assert(r.materialNonlinearity?.enabled,'v0.14 global: metadado de não linearidade material ausente');
-  assert(r.materialNonlinearity.linearization==='tangent','v0.14.2 global: linearização tangente não foi ativada');
-  assert(String(r.materialNonlinearity.globalStrategy||'').includes('affine'),'v0.14.2 global: estratégia afim não registrada');
+  assert(String(r.materialNonlinearity.linearization||'').includes('tangent-affine'),'v0.15 global: linearização tangente-afim não foi ativada');
+  assert(String(r.materialNonlinearity.globalStrategy||'').includes('embedded'),'v0.15 global: estratégia material embutida não registrada');
   assert(r.materialNonlinearity.supportedSectionFamilies?.includes('i'),'v0.14.2 global: perfil I/H não declarado no escopo');
   assert(r.materialNonlinearity.hingeCount===1,'v0.14 global: contagem de rótulas incorreta');
-  assert(r.materialNonlinearity.outerIterations>=2,'v0.14 global: iteração constitutiva externa não executada');
+  assert(r.materialNonlinearity.coupling==='embedded-local-newton','v0.15 global: acoplamento material embutido não ativado');assert(r.materialNonlinearity.outerIterations===0,'v0.15 global: não deveria existir iteração material global externa');assert(r.materialNonlinearity.maxLocalIterations>=2,'v0.15 global: Newton constitutivo local não foi executado');
   const rec=r.materialNonlinearity.records[0],force=r.elementForces.find(x=>x.elementId==='E1'),conn=force.connectionRotations.find(x=>x.end===2),reaction=r.reactions.find(x=>x.nodeId==='N1');
   assert(conn?.type==='fiber-hinge','v0.14 global: ligação não foi marcada como fiber-hinge');
   assert(rec.sectionFamily==='rect','v0.14.2 global: família retangular não rastreada');
@@ -51,7 +51,7 @@ function steelCantilever({axial=0,moment=2200,section={id:'R200x400',name:'Retan
   near(reaction.mz,-applied,Math.max(.2,Math.abs(applied)*5e-4),'v0.14 global: reação de momento');
   assert(Math.abs(rec.rotation)>1e-5,'v0.14 global: rotação plástica/relativa não desenvolvida');
   assert(rec.tangent<rec.secantStiffness,'v0.14 global: tangente pós-escoamento deveria ser inferior à secante');
-  console.log('v0.14.2 — rótula retangular global em flexão OK','M=',rec.constitutiveMoment,'theta=',rec.rotation,'fibras=',rec.yieldedFibers,'outer=',r.materialNonlinearity.outerIterations);
+  console.log('v0.15 — rótula retangular global em flexão OK','M=',rec.constitutiveMoment,'theta=',rec.rotation,'fibras=',rec.yieldedFibers,'outer=',r.materialNonlinearity.outerIterations);
 }
 
 // 2) Interação N-M: o esforço normal recuperado pelo elemento é repassado à
@@ -76,4 +76,16 @@ function steelCantilever({axial=0,moment=2200,section={id:'R200x400',name:'Retan
   console.log('v0.14.2 — perfil I/H global OK','M=',rec.constitutiveMoment,'theta=',rec.rotation,'fibras=',rec.yieldedFibers,'outer=',r.materialNonlinearity.outerIterations);
 }
 
-console.log('Todos os smoke tests globais de rótula de fibras do AstraStruct v0.14.2 passaram.');
+// 4) Regressão embedded vs modo externo legado.
+{
+  const pEmbedded=steelCantilever({axial:-600,moment:1900}),rEmbedded=solve(pEmbedded,'LC1'),pOuter=steelCantilever({axial:-600,moment:1900});
+  pOuter.settings.materialCoupling='outer';
+  const rOuter=solve(pOuter,'LC1'),a=rEmbedded.materialNonlinearity.records[0],b=rOuter.materialNonlinearity.records[0],uA=rEmbedded.displacements.find(x=>x.nodeId==='N2'),uB=rOuter.displacements.find(x=>x.nodeId==='N2');
+  near(a.constitutiveMoment,b.constitutiveMoment,Math.max(.2,Math.abs(a.constitutiveMoment)*8e-4),'v0.15 regressão: momento embedded vs outer');
+  near(a.rotation,b.rotation,Math.max(2e-6,Math.abs(a.rotation)*2e-3),'v0.15 regressão: rotação embedded vs outer');
+  near(uA.rz,uB.rz,Math.max(2e-6,Math.abs(uA.rz)*2e-3),'v0.15 regressão: rotação nodal embedded vs outer');
+  assert(rOuter.materialNonlinearity.coupling==='outer-compatibility','v0.15 regressão: fallback externo não identificado');
+  console.log('v0.15 — embedded vs outer OK','M=',a.constitutiveMoment,'theta=',a.rotation,'local=',rEmbedded.materialNonlinearity.maxLocalIterations,'outer=',rOuter.materialNonlinearity.outerIterations);
+}
+
+console.log('Todos os smoke tests globais de rótula de fibras do AstraStruct v0.15 passaram.');

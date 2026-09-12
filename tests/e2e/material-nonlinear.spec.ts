@@ -62,6 +62,7 @@ test('v0.14 fiber hinge is configured, guarded, solved and traced through postpr
   await expect(page.getByTestId('material-nonlinear-controls')).toContainText('1 rótula');
   await page.getByTestId('analysis-linear').click();await expect(page.getByTestId('material-mode-warning')).toContainText('exige Geom. não linear');await expect(page.getByTestId('analysis-apply')).toBeDisabled();
   await page.getByTestId('analysis-corotational').click();await expect(page.getByTestId('analysis-apply')).toBeEnabled();
+  await expect(page.getByTestId('material-coupling')).toHaveValue('embedded');
   await page.getByTestId('material-max-iterations').fill('32');await page.getByTestId('material-tolerance').fill('0.00001');await page.getByTestId('material-relaxation').fill('0.70');await page.getByTestId('analysis-apply').click();
   await expect.poll(async()=>{const p=await storedProject(page);return [Number(p?.settings?.materialMaxIterations),Number(p?.settings?.materialTolerance),Number(p?.settings?.materialRelaxation),p?.settings?.analysisType]}).toEqual([32,1e-5,.7,'corotational']);
 
@@ -74,11 +75,11 @@ test('v0.14 fiber hinge is configured, guarded, solved and traced through postpr
 
   await openCommand(page,'Diagramas/envelopes');
   const post=page.getByTestId('panel-nonlinear-postprocess');await expect(post).toBeVisible();
-  const materialNote=page.getByTestId('material-postprocess-note');await expect(materialNote).toContainText('Não linearidade material v0.14');await expect(materialNote).toContainText('fibras escoadas=');await expect(materialNote).toContainText('equilíbrio local N–M');await expect(post).toContainText('0.14.2-exp');
+  const materialNote=page.getByTestId('material-postprocess-note');await expect(materialNote).toContainText('Não linearidade material v0.15');await expect(materialNote).toContainText('fibras escoadas=');await expect(materialNote).toContainText('equilíbrio local N–M');await expect(post).toContainText('0.15.0-exp');
   await post.locator('button[aria-label="Fechar"]').click();
 
   await openCommand(page,'Relatório técnico');
-  const report=page.getByTestId('panel-nonlinear-report');await expect(report).toBeVisible();await expect(report).toContainText('0.14.2-exp');
+  const report=page.getByTestId('panel-nonlinear-report');await expect(report).toBeVisible();await expect(report).toContainText('0.15.0-exp');
   const materialReport=page.getByTestId('material-nonlinear-report');await expect(materialReport).toContainText('aço bilinear monotônico');
   const constitutiveMoment=Number(await page.getByTestId('material-hinge-moment').first().textContent());expect(Math.abs(constitutiveMoment-2200)).toBeLessThan(.2);
   await expect(page.getByTestId('material-hinge-yielded').first()).toContainText('/100');

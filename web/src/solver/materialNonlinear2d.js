@@ -495,4 +495,4 @@ export function solveFrameCorotationalFiberHinges2D(project, scenarioId, options
   return decorateEmbeddedResult(result, hinges, effectiveOptions);
 }
 
-export const MATERIAL_NONLINEAR_VERSION = '0.17.0-exp';
+export const MATERIAL_NONLINEAR_VERSION = '0.22.0-exp';

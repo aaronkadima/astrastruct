@@ -71,23 +71,31 @@ export function rigidBodyDisplacement3D(node,rotationVector=[0,0,0],translation=
 function materialFor(project,e){const m=(project.materials||[]).find(x=>x.id===e.materialId);if(!m)throw new Error(`Co-rotacional 3D: material ausente em ${e.id}.`);return m}
 function sectionFor(project,e){return(project.sections||[]).find(s=>s.id===e.sectionId)||{}}
 function prop(e,s,key,fallback){const v=Number(e?.[key]??s?.[key]??fallback);return Number.isFinite(v)?v:0}
-function properties(project,e,L0){const m=materialFor(project,e),s=sectionFor(project,e),E=Number(m.E),nu=Number(m.nu),G=Number(m.G)||(Number.isFinite(nu)?E/(2*(1+nu)):0),A=prop(e,s,'A'),Iy=prop(e,s,'Iy',e.I??s.I),Iz=prop(e,s,'Iz',e.I??s.I),J=prop(e,s,'J');for(const [k,v] of Object.entries({E,G,A,Iy,Iz,J,L0}))if(!(Number(v)>0))throw new Error(`Co-rotacional 3D ${e.id}: propriedade ${k} deve ser positiva.`);return{E,G,A,Iy,Iz,J}}
+function properties(project,e,L0){const material=materialFor(project,e),section=sectionFor(project,e),E=Number(material.E),nu=Number(material.nu),G=Number(material.G)||(Number.isFinite(nu)?E/(2*(1+nu)):0),A=prop(e,section,'A'),Iy=prop(e,section,'Iy',e.I??section.I),Iz=prop(e,section,'Iz',e.I??section.I),J=prop(e,section,'J');for(const [k,v] of Object.entries({E,G,A,Iy,Iz,J,L0}))if(!(Number(v)>0))throw new Error(`Co-rotacional 3D ${e.id}: propriedade ${k} deve ser positiva.`);return{E,G,A,Iy,Iz,J,material,section}}
+function thermalInitialState(project,e,p,L0){
+  let dT=0,gradientY=0,gradientZ=0;for(const load of(project.elementLoads||[]).filter(l=>l.elementId===e.id&&l.kind==='thermal')){dT+=Number(load.dT)||0;gradientY+=Number(load.dTGradientY??load.dTGradient)||0;gradientZ+=Number(load.dTGradientZ)||0}
+  const alpha=Number(p.material?.alpha)||0,eps0=alpha*dT,hY=Number(e.h??e.depth??p.section?.h??p.section?.depth)||0,hZ=Number(e.b??e.width??p.section?.b??p.section?.width)||0;
+  if(Math.abs(gradientY)>EPS&&!(hY>0))throw new Error(`Co-rotacional 3D térmico: gradiente local-y em ${e.id} requer altura h/depth positiva.`);
+  if(Math.abs(gradientZ)>EPS&&!(hZ>0))throw new Error(`Co-rotacional 3D térmico: gradiente local-z em ${e.id} requer largura b/width positiva.`);
+  const kappaZ=Math.abs(gradientY)>EPS?-alpha*gradientY/hY:0,kappaY=Math.abs(gradientZ)>EPS?alpha*gradientZ/hZ:0;
+  return{dT,gradientY,gradientZ,alpha,eps0,kappaY,kappaZ,axial:eps0*L0,ry1:kappaY*L0/2,ry2:-kappaY*L0/2,rz1:-kappaZ*L0/2,rz2:kappaZ*L0/2,hY,hZ};
+}
 
 /** Elastic local resisting forces associated with the co-rotated basic state. */
 export function corotationalFrame3DInternalForce(project,e,a,b,elementDisplacements=[]){
-  const k=corotationalFrame3DKinematics(a,b,e,elementDisplacements),p=properties(project,e,k.initialLength),L0=k.initialLength,L=k.currentLength,t1=k.endRotations.i,t2=k.endRotations.j;
-  const N=p.E*p.A/L0*k.axial,Ti=p.G*p.J/L0*(t1[0]-t2[0]),Tj=-Ti;
-  const Myi=p.E*p.Iy/L0*(4*t1[1]+2*t2[1]),Myj=p.E*p.Iy/L0*(2*t1[1]+4*t2[1]);
-  const Mzi=p.E*p.Iz/L0*(4*t1[2]+2*t2[2]),Mzj=p.E*p.Iz/L0*(2*t1[2]+4*t2[2]);
+  const k=corotationalFrame3DKinematics(a,b,e,elementDisplacements),p=properties(project,e,k.initialLength),L0=k.initialLength,L=k.currentLength,t1=k.endRotations.i,t2=k.endRotations.j,thermal=thermalInitialState(project,e,p,L0),e1y=t1[1]-thermal.ry1,e2y=t2[1]-thermal.ry2,e1z=t1[2]-thermal.rz1,e2z=t2[2]-thermal.rz2;
+  const N=p.E*p.A/L0*(k.axial-thermal.axial),Ti=p.G*p.J/L0*(t1[0]-t2[0]),Tj=-Ti;
+  const Myi=p.E*p.Iy/L0*(4*e1y+2*e2y),Myj=p.E*p.Iy/L0*(2*e1y+4*e2y);
+  const Mzi=p.E*p.Iz/L0*(4*e1z+2*e2z),Mzj=p.E*p.Iz/L0*(2*e1z+4*e2z);
   const Vyi=(Mzi+Mzj)/L,Vyj=-Vyi,Vzi=-(Myi+Myj)/L,Vzj=-Vzi;
   const local=[-N,Vyi,Vzi,Ti,Myi,Mzi,N,Vyj,Vzj,Tj,Myj,Mzj],T=transform12(k.currentAxes.R),global=matVec(transpose(T),local);
-  return{kinematics:k,properties:p,local,global,N,Vy1:Vyi,Vz1:Vzi,T1:Ti,My1:Myi,Mz1:Mzi,Vy2:Vyj,Vz2:Vzj,T2:Tj,My2:Myj,Mz2:Mzj};
+  return{kinematics:k,properties:p,thermal,local,global,N,Vy1:Vyi,Vz1:Vzi,T1:Ti,My1:Myi,Mz1:Mzi,Vy2:Vyj,Vz2:Vzj,T2:Tj,My2:Myj,Mz2:Mzj};
 }
 
 function validateGlobalScope(project){
   if(!(project.nodes||[]).length||!(project.elements||[]).length)throw new Error('Co-rotacional 3D: modelo vazio.');
   if((project.elements||[]).some(e=>e.type!=='frame3d'))throw new Error('Co-rotacional 3D v0.30 experimental suporta somente elementos frame3d.');
-  if((project.elementLoads||[]).length)throw new Error('Co-rotacional 3D v0.30 experimental: cargas de barra devem ser preparadas como cargas mortas equivalentes antes da solução.');
+  const unsupported=(project.elementLoads||[]).find(l=>l.kind!=='thermal');if(unsupported)throw new Error(`Co-rotacional 3D v0.30 experimental: carga de barra '${unsupported.kind||'desconhecida'}' deve ser preparada como carga morta equivalente antes da solução.`);
   if((project.nodeSprings||[]).length||(project.settlements||[]).length)throw new Error('Co-rotacional 3D v0.30 experimental: molas nodais e recalques ainda não são suportados.');
   for(const e of project.elements||[])if(e.releases&&Object.values(e.releases).some(Boolean))throw new Error(`Co-rotacional 3D v0.30 experimental: releases ainda não suportados em ${e.id}.`);
   for(const s of project.supports||[])for(const key of ['ux','uy','uz','rx','ry','rz'])if(s[key]&&Math.abs(Number(s[`${key}Value`])||0)>1e-12)throw new Error('Co-rotacional 3D v0.30 experimental: apoios devem possuir deslocamentos prescritos nulos.');
@@ -95,7 +103,7 @@ function validateGlobalScope(project){
 
 function modelAssembly(project,u){
   const nodes=project.nodes||[],map=new Map(nodes.map((n,i)=>[n.id,i])),Fint=Array(nodes.length*6).fill(0),responses=[];
-  for(const e of project.elements||[]){const i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Co-rotacional 3D: elemento ${e.id} referencia nó inexistente.`);const idx=[0,1,2,3,4,5].map(k=>6*i+k).concat([0,1,2,3,4,5].map(k=>6*j+k)),ue=idx.map(k=>u[k]),r=corotationalFrame3DInternalForce(project,e,nodes[i],nodes[j],ue);idx.forEach((g,k)=>{Fint[g]+=r.global[k]});responses.push({elementId:e.id,type:'frame3d',N1:-r.local[0],N2:r.local[6],Vy1:r.Vy1,Vz1:r.Vz1,T1:r.T1,My1:r.My1,Mz1:r.Mz1,Vy2:r.Vy2,Vz2:r.Vz2,T2:r.T2,My2:r.My2,Mz2:r.Mz2,localForces:r.local,localDisplacements:r.kinematics.basic,currentAxes:r.kinematics.currentAxes,currentLength:r.kinematics.currentLength,initialLength:r.kinematics.initialLength})}
+  for(const e of project.elements||[]){const i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Co-rotacional 3D: elemento ${e.id} referencia nó inexistente.`);const idx=[0,1,2,3,4,5].map(k=>6*i+k).concat([0,1,2,3,4,5].map(k=>6*j+k)),ue=idx.map(k=>u[k]),r=corotationalFrame3DInternalForce(project,e,nodes[i],nodes[j],ue);idx.forEach((g,k)=>{Fint[g]+=r.global[k]});responses.push({elementId:e.id,type:'frame3d',N1:-r.local[0],N2:r.local[6],Vy1:r.Vy1,Vz1:r.Vz1,T1:r.T1,My1:r.My1,Mz1:r.Mz1,Vy2:r.Vy2,Vz2:r.Vz2,T2:r.T2,My2:r.My2,Mz2:r.Mz2,thermal:r.thermal,localForces:r.local,localDisplacements:r.kinematics.basic,currentAxes:r.kinematics.currentAxes,currentLength:r.kinematics.currentLength,initialLength:r.kinematics.initialLength})}
   return{Fint,responses};
 }
 function externalVector(project,map){const F=Array((project.nodes||[]).length*6).fill(0);for(const l of project.loads||[]){const i=map.get(l.nodeId);if(i==null)continue;const vals=[l.fx,l.fy,l.fz,l.mx,l.my,l.mz];for(let k=0;k<6;k++)F[6*i+k]+=Number(vals[k])||0}return F}
@@ -128,14 +136,14 @@ export function solveFrameCorotational3D(project,options={}){
   for(let step=1;step<=steps;step++){
     const lambda=step/steps;let converged=false,residualNorm=Infinity,iterations=0,lastAsymmetry=null;
     for(let iteration=1;iteration<=maxIterations;iteration++){
-      iterations=iteration;const assembled=modelAssembly(project,u),target=Fref.map(v=>lambda*v),residual=target.map((v,i)=>v-assembled.Fint[i]);residualNorm=maxFree(residual,free);const scaleR=Math.max(1,maxFree(target,free));
+      iterations=iteration;const assembled=modelAssembly(project,u),target=Fref.map(v=>lambda*v),residual=target.map((v,i)=>v-assembled.Fint[i]);residualNorm=maxFree(residual,free);const scaleR=Math.max(1,maxFree(target,free),maxFree(assembled.Fint,free));
       if(residualNorm<=tolerance*scaleR){converged=true;last=assembled;break}
       const K=numericalCorotational3DTangent(project,u,{fdStep,scheme:tangentScheme,base:assembled.Fint});lastAsymmetry=tangentAsymmetry(K,free);const du=solveConstrained(K,residual,prescribed).u;if(du.some(v=>!Number.isFinite(v)))throw new Error(`Co-rotacional 3D: incremento não finito no passo ${step}.`);
       let alpha=1,best=u.map((v,i)=>v+du[i]),bestNorm=Infinity;
       if(lineSearch){for(let cut=0;cut<8;cut++){const trial=u.map((v,i)=>v+alpha*du[i]),fi=modelAssembly(project,trial).Fint,rr=target.map((v,i)=>v-fi[i]),n=maxFree(rr,free);if(n<bestNorm){bestNorm=n;best=trial}if(n<residualNorm)break;alpha*=.5}}
       u=best;if(Math.max(...u.map(Math.abs))>1e4)throw new Error('Co-rotacional 3D divergiu: deslocamentos/rotações não físicos.');
     }
-    if(!converged){const a=modelAssembly(project,u),target=Fref.map(v=>lambda*v),r=target.map((v,i)=>v-a.Fint[i]);residualNorm=maxFree(r,free);if(residualNorm<=tolerance*Math.max(1,maxFree(target,free))){converged=true;last=a}}
+    if(!converged){const a=modelAssembly(project,u),target=Fref.map(v=>lambda*v),r=target.map((v,i)=>v-a.Fint[i]);residualNorm=maxFree(r,free);if(residualNorm<=tolerance*Math.max(1,maxFree(target,free),maxFree(a.Fint,free))){converged=true;last=a}}
     if(!converged)throw new Error(`Co-rotacional 3D não convergiu no passo ${step}/${steps} após ${maxIterations} iterações (‖r‖∞=${residualNorm.toExponential(3)}).`);
     history.push({step,lambda,iterations,residualNorm,tangentAsymmetry:lastAsymmetry});
   }

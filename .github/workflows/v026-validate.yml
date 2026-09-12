@@ -5,6 +5,7 @@ on:
     branches: [feat/v026-3d-structural-foundation]
     paths:
       - scripts/tmp_v026_patch.py
+      - scripts/tmp_v026_fix.py
       - .github/workflows/v026-validate.yml
 
 permissions:
@@ -22,7 +23,9 @@ jobs:
         with:
           node-version: 24
       - name: Apply v0.26 integration patch
-        run: python3 scripts/tmp_v026_patch.py
+        run: |
+          python3 scripts/tmp_v026_patch.py
+          python3 scripts/tmp_v026_fix.py
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Typecheck and module validation

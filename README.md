@@ -1,3 +1,7 @@
+## AstraStruct v0.29 — co-rotacional espacial 3D experimental
+
+A v0.29 introduz grandes deslocamentos e rotações rígidas para pórticos `frame3d`, com triedro co-rotacional transportado, rotações relativas por Rodrigues/log SO(3), Newton-Raphson incremental e tangente numérica consistente. O escopo é elástico e deliberadamente protegido: `frame3d` puro, controle por carga e cargas nodais/uniformes de referência. Veja `docs/corotational3d-v029.md`.
+
 ## AstraStruct v0.28 — P-Delta espacial 3D
 
 A v0.28 acrescenta análise de segunda ordem elástica para pórticos `frame3d`, com iteração do esforço normal e matriz geométrica consistente nos dois planos de flexão. O escopo permanece deliberadamente limitado a `frame3d` puro; imperfeição modal, plasticidade e co-rotacional 3D ficam para etapas posteriores. Veja `docs/pdelta3d-v028.md`.
@@ -28,7 +32,7 @@ A v0.25 acrescenta pré-processamento de acelerogramas (remoção de média/detr
 > **Linha dinâmica v0.23–v0.25:** análise modal, Newmark-β/Rayleigh, aceleração uniforme de base, pseudo-espectros Sa/Sv/Sd, SRSS/CQC e pré-processamento X+Y.
 AstraStruct é uma plataforma web **assembly-first** para modelagem, análise, dimensionamento e futura verificação/detalhamento de estruturas de concreto armado e aço.
 
-> **Estado atual — v0.28 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
+> **Estado atual — v0.29 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
 
 ## Executar online
 

@@ -38,7 +38,11 @@ async function undoModel(page:Page){
 
 async function newProject(page:Page){
   const direct=page.locator('button[aria-label="Novo projeto"]:visible').first();
-  if(await visible(direct)) await direct.click(); else await openCommand(page,'Novo');
+  if(await visible(direct)) await direct.click();
+  else {
+    await page.getByRole('button',{name:'Arquivo',exact:true}).click();
+    await page.getByRole('menuitem',{name:'Novo projeto',exact:true}).click();
+  }
   await expect.poll(async()=>(await storedCounts(page)).nodes).toBe(0);
   await expect.poll(async()=>(await storedCounts(page)).elements).toBe(0);
 }

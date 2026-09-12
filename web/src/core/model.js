@@ -50,7 +50,7 @@ export function emptyProject() {
       arcLengthMonitorNodeId: null, arcLengthMonitorDof: 'uy', arcLengthInitialLoadIncrement: 0.05, arcLengthInitialSign: 1, arcLengthTargetIterations: 6, arcLengthMaxCutbacks: 8, arcLengthMinRadiusFactor: 0.02, arcLengthMaxRadiusFactor: 4, arcLengthConstraintTolerance: 1e-6,
       stabilityTracking: true, stabilityEigenTolerance: 0.05, stabilityAsymmetryTolerance: 1e-6, stabilityMaxDofs: 120, stabilityModeCount: 4, stabilityClusterTolerance: 0.03, stabilityMacThreshold: 0.25, branchExploreEnabled: false, branchExploreAmplitude: 0.08, branchExploreMaxIterations: 30, branchExploreMaxEvents: 3, branchSwitchEnabled: false, branchSwitchSign: 1, branchSwitchAmplitude: 0.08,
       materialMaxIterations: 30, materialTolerance: 1e-6, materialRelaxation: 1, materialCoupling: 'embedded',
-      dynamicMassFormulation: 'consistent', modalModes: 6, dynamicDampingRatio: 0.02, dynamicRayleighMode1: 1, dynamicRayleighMode2: 2, dynamicTimeStep: 0.01, dynamicDuration: 1, dynamicMonitorNodeId: null, dynamicMonitorDof: 'uy', dynamicHistoryPoints: [{t:0,scale:0},{t:0.1,scale:1},{t:1,scale:0}],
+      dynamicMassFormulation: 'consistent', modalModes: 6, dynamicDampingRatio: 0.02, dynamicRayleighMode1: 1, dynamicRayleighMode2: 2, dynamicTimeStep: 0.01, dynamicDuration: 1, dynamicMonitorNodeId: null, dynamicMonitorDof: 'uy', dynamicHistoryPoints: [{t:0,scale:0},{t:0.1,scale:1},{t:1,scale:0}], dynamicExcitationType: 'load-pattern', dynamicGroundMotionDirection: 'x', dynamicGroundMotionPoints: [{t:0,accelG:0},{t:0.05,accelG:0.15},{t:0.10,accelG:0},{t:0.15,accelG:-0.10},{t:0.20,accelG:0}], responseSpectrumCombination: 'cqc', responseSpectrumPeriodMin: 0.02, responseSpectrumPeriodMax: 4, responseSpectrumPeriodPoints: 80,
       imperfection: { enabled: false, source: 'bucklingMode', scenarioId: null, mode: 1, amplitudeMm: 10 }
     },
     meta: { solverVersion: '0.13.6-exp', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
@@ -74,7 +74,7 @@ export function normalizeProject(input) {
   p.connections = Array.isArray(p.connections) ? p.connections : [];
   p.settings = { ...base.settings, ...(p.settings || {}), imperfection: { ...base.settings.imperfection, ...(p.settings?.imperfection || {}) } };
   const analysisType=String(p.settings.analysisType||'linear');
-  p.settings.analysisType = ['pdelta','corotational','modal','time-history'].includes(analysisType) ? analysisType : 'linear';
+  p.settings.analysisType = ['pdelta','corotational','modal','time-history','response-spectrum'].includes(analysisType) ? analysisType : 'linear';
   p.settings.pDeltaMaxIterations = Math.max(2, Math.min(100, Math.round(Number(p.settings.pDeltaMaxIterations) || 30)));
   p.settings.pDeltaTolerance = Math.max(1e-12, Number(p.settings.pDeltaTolerance) || 1e-8);
   p.settings.nonlinearSteps = Math.max(1, Math.min(200, Math.round(Number(p.settings.nonlinearSteps) || 20)));
@@ -128,6 +128,14 @@ export function normalizeProject(input) {
   p.settings.dynamicMonitorDof = ['ux','uy','rz'].includes(p.settings.dynamicMonitorDof) ? p.settings.dynamicMonitorDof : 'uy';
   p.settings.dynamicHistoryPoints = (Array.isArray(p.settings.dynamicHistoryPoints)?p.settings.dynamicHistoryPoints:[]).map(x=>({t:Number(x?.t),scale:Number(x?.scale)})).filter(x=>Number.isFinite(x.t)&&Number.isFinite(x.scale)).sort((a,b)=>a.t-b.t).slice(0,200);
   if(p.settings.dynamicHistoryPoints.length<2)p.settings.dynamicHistoryPoints=[{t:0,scale:0},{t:.1,scale:1},{t:1,scale:0}];
+  p.settings.dynamicExcitationType = p.settings.dynamicExcitationType === 'base-acceleration' ? 'base-acceleration' : 'load-pattern';
+  p.settings.dynamicGroundMotionDirection = p.settings.dynamicGroundMotionDirection === 'y' ? 'y' : 'x';
+  p.settings.dynamicGroundMotionPoints = (Array.isArray(p.settings.dynamicGroundMotionPoints)?p.settings.dynamicGroundMotionPoints:[]).map(x=>({t:Number(x?.t),accelG:Number(x?.accelG??x?.accelerationG??x?.scale)})).filter(x=>Number.isFinite(x.t)&&Number.isFinite(x.accelG)).sort((a,b)=>a.t-b.t).slice(0,5000);
+  if(p.settings.dynamicGroundMotionPoints.length<2)p.settings.dynamicGroundMotionPoints=[{t:0,accelG:0},{t:.05,accelG:.15},{t:.10,accelG:0},{t:.15,accelG:-.10},{t:.20,accelG:0}];
+  p.settings.responseSpectrumCombination = p.settings.responseSpectrumCombination === 'srss' ? 'srss' : 'cqc';
+  p.settings.responseSpectrumPeriodMin = Math.max(0.001, Number(p.settings.responseSpectrumPeriodMin) || .02);
+  p.settings.responseSpectrumPeriodMax = Math.max(p.settings.responseSpectrumPeriodMin, Number(p.settings.responseSpectrumPeriodMax) || 4);
+  p.settings.responseSpectrumPeriodPoints = Math.max(10, Math.min(300, Math.round(Number(p.settings.responseSpectrumPeriodPoints) || 80)));
   p.settings.imperfection.enabled = !!p.settings.imperfection.enabled;
   p.settings.imperfection.source = p.settings.imperfection.source === 'bucklingMode' ? 'bucklingMode' : 'bucklingMode';
   p.settings.imperfection.scenarioId = p.settings.imperfection.scenarioId || null;

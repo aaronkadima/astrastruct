@@ -6,7 +6,7 @@ type Props={project:any;result:any;onClose:()=>void};
 const num=(v:any,f=0)=>Number.isFinite(Number(v))?Number(v):f;
 const fmt=(v:any,d=3)=>{const n=Number(v);if(!Number.isFinite(n))return'—';const a=Math.abs(n);return a>=1e4||(a>0&&a<1e-3)?n.toExponential(3):n.toFixed(d)};
 const fmtStiffness=(v:any)=>{const n=Number(v);if(!Number.isFinite(n))return'—';return Math.abs(n)<1e7?n.toLocaleString('en-US',{useGrouping:false,maximumFractionDigits:3}):n.toExponential(3)};
-const maxTranslation=(rows:any[]=[])=>(Math.max(0,...rows.map(d=>Math.hypot(num(d.ux),num(d.uy))))*1000);
+const maxTranslation=(rows:any[]|null|undefined)=>Math.max(0,...(Array.isArray(rows)?rows:[]).map(d=>Math.hypot(num(d.ux),num(d.uy))))*1000;
 
 function MiniChart({points,field,label,unit,factor=1}:{points:any[];field:string;label:string;unit:string;factor?:number}){
   if(!points?.length)return <div className="chart-card empty-state">Sem dados.</div>;

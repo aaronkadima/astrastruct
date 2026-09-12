@@ -1,0 +1,39 @@
+name: AstraStruct v0.25 ground-motion validation
+on:
+  push:
+    branches: [feat/v025-ground-motion-processing]
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply v0.25 implementation
+        run: python scripts/tmp_v025_patch.py
+      - name: Install dependencies
+        run: npm install
+      - name: Typecheck and module validation
+        run: npm run check
+      - name: v0.25 ground-motion benchmark
+        run: node tests/ground-motion-v025-smoke.mjs
+      - name: Full structural regression
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Desktop E2E regression
+        run: npx playwright test --project=desktop-chromium
+      - name: Commit validated v0.25 permanent files
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add web/src/core/model.js web/src/solver/dynamics2d.js web/src/solver/index.js app/src/AnalysisPanelV13.tsx app/src/DynamicsPostprocessPanel.tsx app/src/App.tsx tests/ground-motion-v025-smoke.mjs tests/e2e/ground-motion-v025.spec.ts tests/seismic-spectrum-smoke.mjs tests/dynamics-smoke.mjs tests/e2e/dynamics.spec.ts tests/e2e/seismic-spectrum.spec.ts package.json README.md docs/ground-motion-v025.md
+          if ! git diff --cached --quiet; then
+            git commit -m "feat: add AstraStruct v0.25 ground-motion processing"
+            git push
+          fi

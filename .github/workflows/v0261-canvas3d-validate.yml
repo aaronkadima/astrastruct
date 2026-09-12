@@ -5,6 +5,7 @@ on:
     branches: [feat/v0261-3d-canvas]
     paths:
       - scripts/tmp_v0261_canvas3d_patch.py
+      - scripts/tmp_v0261_canvas3d_layout_fix.py
       - .github/workflows/v0261-canvas3d-validate.yml
 
 permissions:
@@ -22,7 +23,9 @@ jobs:
         with:
           node-version: 24
       - name: Apply Canvas 3D integration patch
-        run: python3 scripts/tmp_v0261_canvas3d_patch.py
+        run: |
+          python3 scripts/tmp_v0261_canvas3d_patch.py
+          python3 scripts/tmp_v0261_canvas3d_layout_fix.py
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Typecheck and validate modules

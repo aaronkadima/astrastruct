@@ -1,0 +1,78 @@
+name: AstraStruct v0.14.2 section UI upgrade
+
+on:
+  push:
+    branches: [feat/v0142-steel-fiber-sections]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/v0142-steel-fiber-sections
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply UI, library and documentation alignment
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p=Path('app/src/InspectorPanel.tsx')
+          s=p.read_text()
+          old="""  const material=project.materials.find((m:any)=>m.id===draft.materialId),section=project.sections.find((s:any)=>s.id===draft.sectionId),fiberEligible=entity.type==='frame2d'&&String(material?.type||'').toLowerCase()==='steel'&&num(section?.b??section?.width)>0&&num(section?.h??section?.depth)>0;"""
+          new="""  const material=project.materials.find((m:any)=>m.id===draft.materialId),section=project.sections.find((s:any)=>s.id===draft.sectionId),sectionFamily=String(section?.family||'').toLowerCase(),fiberFamilyEligible=['rect','i','h','ih','rhs'].includes(sectionFamily),fiberEligible=entity.type==='frame2d'&&String(material?.type||'').toLowerCase()==='steel'&&fiberFamilyEligible&&num(section?.b??section?.width)>0&&num(section?.h??section?.depth)>0;"""
+          if old not in s: raise SystemExit('Inspector eligibility anchor not found')
+          s=s.replace(old,new,1)
+          s=s.replace('<h4>Rótulas de fibras · v0.14</h4>','<h4>Rótulas de fibras · v0.14.2</h4>',1)
+          old_note='Disponível nesta versão somente para <b>aço</b> com seção retangular paramétrica contendo <b>b</b> e <b>h</b>.'
+          new_note='Disponível para <b>aço</b> com seção paramétrica <b>retangular</b>, <b>I/H</b> ou <b>RHS</b>. Perfis I/H usam h, b, tw e tf; RHS usa h, b e t.'
+          if old_note not in s: raise SystemExit('Inspector note anchor not found')
+          s=s.replace(old_note,new_note,1)
+          p.write_text(s)
+
+          p=Path('tests/e2e/material-nonlinear.spec.ts')
+          s=p.read_text().replace('0.14.1-exp','0.14.2-exp')
+          p.write_text(s)
+
+          p=Path('web/src/core/model.js')
+          s=p.read_text()
+          anchor="""  { id: 'steel_generic', name: 'Aço — seção genérica', family: 'steel', A: 0.012, I: 0.000220 },\n"""
+          addition=anchor+"""  { id: 'steel_i_400x200_demo', name: 'Aço — perfil I 400 × 200 mm (exemplo)', family: 'i', h: 0.400, b: 0.200, tw: 0.010, tf: 0.016, A: 0.010080, I: 0.00027759616 },\n"""
+          if anchor not in s: raise SystemExit('default section anchor not found')
+          s=s.replace(anchor,addition,1)
+          p.write_text(s)
+
+          p=Path('README.md')
+          s=p.read_text()
+          old='> **Estado atual — v0.13.5 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.'
+          new='> **Estado atual — v0.14.2 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.'
+          if old not in s: raise SystemExit('README state anchor not found')
+          s=s.replace(old,new,1)
+          anchor='- **rótulas e ligações rotacionais semirrígidas no co‑rotacional v0.13.5, com rotação interna de extremidade e condensação estática de Schur**;\n'
+          extra=anchor+'- **rótulas concentradas de fibras de aço v0.14.2 para seções retangulares, I/H e RHS, com equilíbrio local N–M e linearização tangente-afim**;\n'
+          if anchor not in s: raise SystemExit('README feature anchor not found')
+          s=s.replace(anchor,extra,1)
+          p.write_text(s)
+          PY
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck and validate modules
+        run: npm run check
+      - name: Run structural solver tests
+        run: npm test
+      - name: Build React/Vite application
+        run: npm run build
+      - name: Commit validated alignment
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/src/InspectorPanel.tsx tests/e2e/material-nonlinear.spec.ts web/src/core/model.js README.md
+          git commit -m "feat: expose v0.14.2 steel fiber section families" || exit 0
+          git push origin HEAD:feat/v0142-steel-fiber-sections

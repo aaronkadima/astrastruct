@@ -61,6 +61,7 @@ export function resolveShapeField3D(result,bucklingView,modeIndex=0){
   if(result?.dimension==='3d'&&result?.analysisType==='modal'){
     const modes=result.modal?.modes||result.modes||[],mode=modes[Math.max(0,Math.min(modes.length-1,modeIndex))];if(mode)return{kind:'modal',label:`Modo ${mode.mode??(modeIndex+1)}`,map:fieldMap(mode.displacements),mode};
   }
+  if(result?.dimension==='3d'&&Array.isArray(result.totalDisplacements)&&result?.pDelta?.imperfection?.enabled)return{kind:'deformed',label:'Deformada total · u₀ + Δu',map:fieldMap(result.totalDisplacements),mode:null};
   if(result?.dimension==='3d'&&Array.isArray(result.displacements))return{kind:'deformed',label:'Deformada',map:fieldMap(result.displacements),mode:null};
   return{kind:'model',label:'Modelo',map:new Map(),mode:null};
 }

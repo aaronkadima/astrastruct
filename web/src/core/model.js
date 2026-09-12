@@ -140,7 +140,8 @@ export function normalizeProject(input) {
     };
     if (releases.rz1) rotationalSprings.rz1 = 0;
     if (releases.rz2) rotationalSprings.rz2 = 0;
-    return { ...e, releases, rotationalSprings };
+    const rawDp=e.distributedPlasticity||{},integrationPoints=[3,5].includes(Math.round(Number(rawDp.integrationPoints)))?Math.round(Number(rawDp.integrationPoints)):5,distributedPlasticity={enabled:!!rawDp.enabled,integrationPoints,nFibers:Math.max(8,Math.min(400,Math.round(Number(rawDp.nFibers)||80))),hardeningRatio:Math.max(1e-6,Math.min(.25,Math.abs(Number(rawDp.hardeningRatio)||.01)))};
+    return { ...e, releases, rotationalSprings, distributedPlasticity };
   });
   p.supports = p.supports.map(s => ({
     ...s,

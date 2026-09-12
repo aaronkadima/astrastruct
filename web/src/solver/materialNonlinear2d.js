@@ -273,7 +273,7 @@ function decorateEmbeddedResult(result, hinges, options = {}) {
   return {
     ...result,
     type: 'frame2d-corotational-fiber-hinge-experimental',
-    solverVersion: options.controlMode === 'arc-length' ? '0.19.0-exp' : '0.16.0-exp',
+    solverVersion: result?.distributedPlasticity?.enabled ? '0.20.0-exp' : (options.controlMode === 'arc-length' ? '0.19.0-exp' : '0.16.0-exp'),
     materialNonlinearity,
     nonlinear: {
       ...(result.nonlinear || {}),

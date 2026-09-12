@@ -37,10 +37,11 @@ function solveStructuralModel(sourceProject,resolvedProject,scenarioId) {
 }
 
 export function solve(project, scenarioId) {
-  const analysisType=project.settings?.analysisType||'linear';
+  const analysisType=project.settings?.analysisType||'linear',fiberHinges=activeFiberHinges(project);
+  if(fiberHinges.length&&analysisType!=='corotational')throw new Error('Rótulas de fibras v0.14 exigem análise Geom. não linear (co-rotacional). Selecione esse modo antes de executar a análise.');
   if(analysisType==='corotational'){
     const s=project.settings||{},initialImperfection=buildModalImperfection(project,scenarioId),options={steps:s.nonlinearSteps,maxIterations:s.nonlinearMaxIterations,tolerance:s.nonlinearTolerance,lineSearch:s.nonlinearLineSearch,initialImperfection,materialMaxIterations:s.materialMaxIterations,materialTolerance:s.materialTolerance,materialRelaxation:s.materialRelaxation};
-    const result=activeFiberHinges(project).length?solveFrameCorotationalFiberHinges2D(project,scenarioId,options):solveFrameCorotational2D(project,scenarioId,options);
+    const result=fiberHinges.length?solveFrameCorotationalFiberHinges2D(project,scenarioId,options):solveFrameCorotational2D(project,scenarioId,options);
     return{...result,analysisType:'corotational',solverVersion:result.solverVersion||'0.13.6-exp'};
   }
   const resolved = resolveScenario(project, scenarioId);

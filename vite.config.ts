@@ -2,9 +2,11 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
 
+const basePath = process.env.ASTRA_BASE_PATH || '/astrastruct/';
+
 export default defineConfig({
   root: 'app',
-  base: '/astrastruct/',
+  base: basePath,
   plugins: [react()],
   build: {
     outDir: '../dist',

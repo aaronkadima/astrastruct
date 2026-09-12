@@ -1,0 +1,45 @@
+name: v0261 Canvas 3D validation
+
+on:
+  push:
+    branches: [feat/v0261-3d-canvas]
+    paths:
+      - scripts/tmp_v0261_canvas3d_patch.py
+      - .github/workflows/v0261-canvas3d-validate.yml
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/v0261-3d-canvas
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply Canvas 3D integration patch
+        run: python3 scripts/tmp_v0261_canvas3d_patch.py
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck and validate modules
+        run: npm run check
+      - name: Run full structural regression
+        run: npm test
+      - name: Build production application
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run desktop E2E regression
+        run: npx playwright test --project=desktop-chromium
+      - name: Commit validated permanent integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md package.json app/src/App.tsx app/src/styles.css tests/e2e/spatial-canvas3d-v0261.spec.ts web/src/core/version.js
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "feat: integrate AstraStruct v0.26.1 Canvas 3D"
+          git push origin HEAD:feat/v0261-3d-canvas

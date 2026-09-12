@@ -1,10 +1,10 @@
 # AstraStruct
 
 
-> **v0.18 experimental:** estabilidade tangente sobre Arc-Length/Riks, detecção espectral de singularidades, classificação de ponto-limite/bifurcação candidata e troca de ramo modal opcional.
+> **v0.19 experimental:** estabilidade tangente multimodal sobre Arc-Length/Riks, rastreamento por MAC, agrupamento de modos quase degenerados, exploração bilateral ±φ e troca de ramo modal opcional.
 AstraStruct é uma plataforma web **assembly-first** para modelagem, análise, dimensionamento e futura verificação/detalhamento de estruturas de concreto armado e aço.
 
-> **Estado atual — v0.18.0 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
+> **Estado atual — v0.19.0 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
 
 ## Executar online
 
@@ -27,8 +27,9 @@ A interface React/Vite é construída, testada e publicada automaticamente em `d
 - **rótulas e ligações rotacionais semirrígidas no co‑rotacional v0.13.5, com rotação interna de extremidade e condensação estática de Schur**;
 - **rótulas concentradas de fibras de aço v0.16 para seções retangulares, I/H e RHS, com equilíbrio local N–M, linearização tangente-afim e Newton constitutivo embutido em cada avaliação do equilíbrio global**;
 - **pushover por controle de deslocamento v0.16, com fator de carga λ como incógnita, curva capacidade λ–u, rastreamento da sequência de plastificação e recuperação do estado final no fator de carga convergido**;
-- **Arc-Length/Riks esférico v0.18, com raio adaptativo, cutback, continuidade de ramo e travessia de pontos-limite**;
-- **estabilidade tangente v0.18, com autovalor crítico da parte simétrica escalada, classificação de ponto-limite/bifurcação candidata e semeadura modal experimental de ramo; para tangentes não simétricas o resultado é apenas candidato a singularidade não conservativa**;
+- **Arc-Length/Riks esférico v0.19, com raio adaptativo, cutback, continuidade de ramo e travessia de pontos-limite**;
+- **estabilidade tangente multimodal v0.19, com múltiplos autovalores críticos, rastreamento por MAC, agrupamento de subespaços quase degenerados, exploração local dos ramos +φ/−φ e semeadura modal experimental; para tangentes não simétricas o resultado permanece apenas candidato a singularidade não conservativa**;
+- documentação metodológica da estabilidade multimodal em `docs/multimode-stability-v019.md`;
 - molas nodais `kx`, `ky`, `kr` no solver Linear/P‑Delta;
 - casos de ação e combinações customizadas, incluindo escalonamento de `followerEnd` antes da solução não linear;
 - análise Linear, P‑Delta ou Geometricamente Não Linear co‑rotacional selecionável;

@@ -9,6 +9,7 @@ import './modeling.css';
 import './results.css';
 import './buckling.css';
 import './modern.css';
+import './modern-layout-fix.css';
 import './modernShell';
 
 const root = document.getElementById('root');

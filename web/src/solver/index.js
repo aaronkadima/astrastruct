@@ -5,7 +5,7 @@ import { solveFramePDelta2D } from './pdelta2d.js';
 import { solveBuckling2D } from './buckling2d.js';
 import { solveFrameCorotational2D, solveFrameCorotationalDisplacementControl2D, solveFrameCorotationalArcLength2D } from './corotational2d.js';
 import { activeFiberHinges, solveFrameCorotationalFiberHinges2D } from './materialNonlinear2d.js';
-import { solveModal2D, solveTimeHistory2D } from './dynamics2d.js';
+import { solveModal2D, solveTimeHistory2D, solveResponseSpectrum2D } from './dynamics2d.js';
 import { resolveScenario } from './scenario.js';
 import { buildElementResponses } from './postprocess.js';
 
@@ -40,13 +40,17 @@ function solveStructuralModel(sourceProject,resolvedProject,scenarioId) {
 export function solve(project, scenarioId) {
   const analysisType=project.settings?.analysisType||'linear',fiberHinges=activeFiberHinges(project),s=project.settings||{};
   if(analysisType==='modal'){
-    if(fiberHinges.length)throw new Error('Dinâmica modal v0.23 é linear-elástica; desative as rótulas de fibras.');
+    if(fiberHinges.length)throw new Error('Dinâmica modal v0.24 é linear-elástica; desative as rótulas de fibras.');
     const result=solveModal2D(project,{modes:s.modalModes,massFormulation:s.dynamicMassFormulation});
     const resolved=resolveScenario(project,scenarioId);return{...result,scenario:resolved.scenario,analysisType:'modal'};
   }
+  if(analysisType==='response-spectrum'){
+    if(fiberHinges.length)throw new Error('Espectro de resposta v0.24 é linear-elástico; desative as rótulas de fibras.');
+    return solveResponseSpectrum2D(project,{massFormulation:s.dynamicMassFormulation,modes:s.modalModes,dampingRatio:s.dynamicDampingRatio,timeStep:s.dynamicTimeStep,direction:s.dynamicGroundMotionDirection,groundMotionPoints:s.dynamicGroundMotionPoints,combination:s.responseSpectrumCombination,periodMin:s.responseSpectrumPeriodMin,periodMax:s.responseSpectrumPeriodMax,periodCount:s.responseSpectrumPeriodPoints});
+  }
   if(analysisType==='time-history'){
-    if(fiberHinges.length)throw new Error('História temporal v0.23 é linear-elástica; desative as rótulas de fibras.');
-    return solveTimeHistory2D(project,scenarioId,{massFormulation:s.dynamicMassFormulation,dampingRatio:s.dynamicDampingRatio,rayleighMode1:s.dynamicRayleighMode1,rayleighMode2:s.dynamicRayleighMode2,timeStep:s.dynamicTimeStep,duration:s.dynamicDuration,monitorNodeId:s.dynamicMonitorNodeId,monitorDof:s.dynamicMonitorDof,historyPoints:s.dynamicHistoryPoints});
+    if(fiberHinges.length)throw new Error('História temporal v0.24 é linear-elástica; desative as rótulas de fibras.');
+    return solveTimeHistory2D(project,scenarioId,{massFormulation:s.dynamicMassFormulation,dampingRatio:s.dynamicDampingRatio,rayleighMode1:s.dynamicRayleighMode1,rayleighMode2:s.dynamicRayleighMode2,timeStep:s.dynamicTimeStep,duration:s.dynamicDuration,monitorNodeId:s.dynamicMonitorNodeId,monitorDof:s.dynamicMonitorDof,historyPoints:s.dynamicHistoryPoints,excitationType:s.dynamicExcitationType,groundMotionDirection:s.dynamicGroundMotionDirection,groundMotionPoints:s.dynamicGroundMotionPoints});
   }
   if(fiberHinges.length&&analysisType!=='corotational')throw new Error('Rótulas de fibras v0.16 exigem análise Geom. não linear (co-rotacional). Selecione esse modo antes de executar a análise.');
   if(analysisType==='corotational'){

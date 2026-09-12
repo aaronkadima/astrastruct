@@ -1,10 +1,10 @@
 # AstraStruct
 
 
-> **v0.23 experimental:** fundação de dinâmica estrutural linear com massas consistente/concentrada, análise modal, participação de massa, amortecimento de Rayleigh e integração temporal Newmark-β.
+> **v0.24 experimental:** dinâmica estrutural linear com análise modal, Newmark-β/Rayleigh, aceleração sísmica uniforme de base, pseudo-espectros Sa/Sv/Sd e combinação modal SRSS/CQC.
 AstraStruct é uma plataforma web **assembly-first** para modelagem, análise, dimensionamento e futura verificação/detalhamento de estruturas de concreto armado e aço.
 
-> **Estado atual — v0.23.0 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
+> **Estado atual — v0.24.0 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
 
 ## Executar online
 
@@ -37,6 +37,8 @@ A interface React/Vite é construída, testada e publicada automaticamente em `d
 - documentação das rótulas concentradas cíclicas e demanda acumulada em `docs/cyclic-hinges-v022.md`;
 - **dinâmica estrutural linear v0.23 com Kφ=ω²Mφ, massas modais efetivas, Rayleigh e Newmark average-acceleration**;
 - documentação do núcleo dinâmico em `docs/structural-dynamics-v023.md`;
+- **excitação sísmica de base e análise espectral v0.24**, com importação CSV de acelerograma, resposta relativa por `-Mr a_g(t)`, pseudo-espectros Sa/Sv/Sd e combinação modal SRSS/CQC;
+- documentação metodológica sísmica em `docs/seismic-spectrum-v024.md`;
 - molas nodais `kx`, `ky`, `kr` no solver Linear/P‑Delta;
 - casos de ação e combinações customizadas, incluindo escalonamento de `followerEnd` antes da solução não linear;
 - análise Linear, P‑Delta ou Geometricamente Não Linear co‑rotacional selecionável;

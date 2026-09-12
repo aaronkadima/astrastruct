@@ -101,17 +101,17 @@ test('co-rotational mode accepts a reference point member load and traces it in 
 });
 
 test('co-rotational mode accepts thermal initial strain and traces the free expansion',async({page})=>{
-  await page.goto('./');await installThermalCantilever(page);await enableCorotational(page);await expect.poll(async()=>{const p=await persistedProject(page);return p?.meta?.solverVersion}).toBe('0.13.5-exp');await page.getByTestId('analyze-button').click();await expect(page.getByTestId('nonlinear-result-metric')).toBeVisible();
+  await page.goto('./');await installThermalCantilever(page);await enableCorotational(page);await expect.poll(async()=>{const p=await persistedProject(page);return p?.meta?.solverVersion}).toBe('0.13.6-exp');await page.getByTestId('analyze-button').click();await expect(page.getByTestId('nonlinear-result-metric')).toBeVisible();
   await openCommand(page,'Diagramas/envelopes');const post=page.getByTestId('panel-nonlinear-postprocess'),thermal=page.getByTestId('thermal-postprocess-note');await expect(thermal).toContainText('ΔT=25.000 °C');await expect(thermal).toContainText('εT=2.500e-4');await expect(post).toContainText('estado térmico inicial');await post.locator('button[aria-label="Fechar"]').click();
-  await openCommand(page,'Relatório técnico');const report=page.getByTestId('panel-nonlinear-report');await expect(report).toContainText('0.13.5-exp');await expect(page.getByTestId('nonlinear-thermal-model')).toContainText('deformação axial e curvatura iniciais');
+  await openCommand(page,'Relatório técnico');const report=page.getByTestId('panel-nonlinear-report');await expect(report).toContainText('0.13.6-exp');await expect(page.getByTestId('nonlinear-thermal-model')).toContainText('deformação axial e curvatura iniciais');
 });
 
 test('follower force is created in UI, follows current chord and uses consistent external tangent',async({page})=>{
   await page.goto('./');await installFollowerCantilever(page);await openCommand(page,'Tipo de análise');await page.getByTestId('analysis-corotational').click();await expect(page.getByTestId('follower-empty')).toBeVisible();await page.getByTestId('follower-add').click();await page.getByTestId('follower-px').fill('0');await page.getByTestId('follower-py').fill('-10');await expect(page.getByTestId('follower-load-note')).toContainText('Kint − λKext');await page.getByTestId('analysis-apply').click();
-  await expect.poll(async()=>{const p=await persistedProject(page);const f=p?.elementLoads?.find((l:any)=>l.kind==='followerEnd');return [p?.settings?.analysisType,f?.end,f?.px,f?.py,p?.meta?.solverVersion]}).toEqual(['corotational',2,0,-10,'0.13.5-exp']);
+  await expect.poll(async()=>{const p=await persistedProject(page);const f=p?.elementLoads?.find((l:any)=>l.kind==='followerEnd');return [p?.settings?.analysisType,f?.end,f?.px,f?.py,p?.meta?.solverVersion]}).toEqual(['corotational',2,0,-10,'0.13.6-exp']);
   await openCommand(page,'Tipo de análise');await page.getByTestId('analysis-linear').click();await expect(page.getByTestId('follower-mode-warning')).toContainText('Força seguidora exige Geom. não linear');await expect(page.getByTestId('analysis-apply')).toBeDisabled();await page.getByTestId('analysis-corotational').click();await page.getByTestId('analysis-apply').click();
   await page.getByTestId('analyze-button').click();await expect(page.getByTestId('nonlinear-result-metric')).toBeVisible();await openCommand(page,'Diagramas/envelopes');const post=page.getByTestId('panel-nonlinear-postprocess'),follower=page.getByTestId('follower-postprocess-note');await expect(follower).toContainText('Px=0.000 kN');await expect(follower).toContainText('Py=-10.000 kN');await expect(follower).toContainText('Kint − λKext');await post.locator('button[aria-label="Fechar"]').click();
-  await openCommand(page,'Relatório técnico');const report=page.getByTestId('panel-nonlinear-report');await expect(report).toContainText('0.13.5-exp');await expect(page.getByTestId('nonlinear-follower-model')).toContainText('Kext=dP/dq');
+  await openCommand(page,'Relatório técnico');const report=page.getByTestId('panel-nonlinear-report');await expect(report).toContainText('0.13.6-exp');await expect(page.getByTestId('nonlinear-follower-model')).toContainText('Kext=dP/dq');
 });
 
 test('co-rotational mode accepts and traces a semirigid rotational connection',async({page})=>{

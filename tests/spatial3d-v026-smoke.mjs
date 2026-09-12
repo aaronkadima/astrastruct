@@ -7,7 +7,7 @@ const base={materials:[{id:'S',type:'steel',E,nu,density:78.5}],sections:[{id:'S
 
 // 1) Cantilever bending about local z (global Y load) + torsion.
 {
- const p={...base,nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:L,y:0,z:0}],elements:[{id:'E1',type:'frame3d',n1:'N1',n2:'N2',materialId:'S',sectionId:'SEC',A,Iy,Iz,J}],supports:[{nodeId:'N1',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],loads:[{nodeId:'N2',fx:0,fy:-P,fz:0,mx:T,my:0,mz:0}],elementLoads:[]};
+ const p={...base,nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:L,y:0,z:0}],elements:[{id:'E1',type:'frame3d',n1:'N1',n2:'N2',materialId:'S',sectionId:'SEC',A,Iy,Iz,J,orientation:{up:[0,1,0]}}],supports:[{nodeId:'N1',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],loads:[{nodeId:'N2',fx:0,fy:-P,fz:0,mx:T,my:0,mz:0}],elementLoads:[]};
  const r=solveSpatial3D(p),d=r.displacements.find(x=>x.nodeId==='N2');
  close(d.uy,-P*L**3/(3*E*Iz),2e-12,'frame3d uy cantilever');
  close(d.rz,-P*L**2/(2*E*Iz),2e-12,'frame3d rz cantilever');
@@ -17,7 +17,7 @@ const base={materials:[{id:'S',type:'steel',E,nu,density:78.5}],sections:[{id:'S
 
 // 2) Cantilever bending in orthogonal plane uses Iy and the expected right-hand rotation sign.
 {
- const p={...base,nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:L,y:0,z:0}],elements:[{id:'E1',type:'frame3d',n1:'N1',n2:'N2',materialId:'S',sectionId:'SEC',A,Iy,Iz,J}],supports:[{nodeId:'N1',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],loads:[{nodeId:'N2',fz:-P}],elementLoads:[]};
+ const p={...base,nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:L,y:0,z:0}],elements:[{id:'E1',type:'frame3d',n1:'N1',n2:'N2',materialId:'S',sectionId:'SEC',A,Iy,Iz,J,orientation:{up:[0,1,0]}}],supports:[{nodeId:'N1',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],loads:[{nodeId:'N2',fz:-P}],elementLoads:[]};
  const d=solveSpatial3D(p).displacements[1];
  close(d.uz,-P*L**3/(3*E*Iy),2e-12,'frame3d uz cantilever');
  close(d.ry,P*L**2/(2*E*Iy),2e-12,'frame3d ry cantilever');
@@ -48,7 +48,7 @@ const base={materials:[{id:'S',type:'steel',E,nu,density:78.5}],sections:[{id:'S
 // 5) Uniform local qy gives classical fixed-end balance on a fixed-fixed member.
 {
  const q=-8;
- const p={...base,nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:L,y:0,z:0}],elements:[{id:'E1',type:'frame3d',n1:'N1',n2:'N2',materialId:'S',sectionId:'SEC',A,Iy,Iz,J}],supports:[{nodeId:'N1',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true},{nodeId:'N2',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],loads:[],elementLoads:[{elementId:'E1',kind:'uniform',qx:0,qy:q,qz:0}]};
+ const p={...base,nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:L,y:0,z:0}],elements:[{id:'E1',type:'frame3d',n1:'N1',n2:'N2',materialId:'S',sectionId:'SEC',A,Iy,Iz,J,orientation:{up:[0,1,0]}}],supports:[{nodeId:'N1',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true},{nodeId:'N2',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],loads:[],elementLoads:[{elementId:'E1',kind:'uniform',qx:0,qy:q,qz:0}]};
  const r=solveSpatial3D(p);close(r.reactions[0].fy,-q*L/2,1e-9,'uniform reaction 1');close(r.reactions[1].fy,-q*L/2,1e-9,'uniform reaction 2');close(Math.abs(r.reactions[0].mz),Math.abs(q)*L*L/12,1e-9,'uniform fixed-end moment');
 }
 

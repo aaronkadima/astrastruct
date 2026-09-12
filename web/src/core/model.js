@@ -47,6 +47,7 @@ export function emptyProject() {
       nonlinearSteps: 20, nonlinearMaxIterations: 35, nonlinearTolerance: 1e-8, nonlinearLineSearch: true,
       nonlinearControlMode: 'load', displacementControlNodeId: null, displacementControlDof: 'uy', displacementControlTarget: -0.05, displacementControlTolerance: 1e-7,
       arcLengthMonitorNodeId: null, arcLengthMonitorDof: 'uy', arcLengthInitialLoadIncrement: 0.05, arcLengthInitialSign: 1, arcLengthTargetIterations: 6, arcLengthMaxCutbacks: 8, arcLengthMinRadiusFactor: 0.02, arcLengthMaxRadiusFactor: 4, arcLengthConstraintTolerance: 1e-6,
+      stabilityTracking: true, stabilityEigenTolerance: 0.05, stabilityAsymmetryTolerance: 1e-6, stabilityMaxDofs: 120, branchSwitchEnabled: false, branchSwitchSign: 1, branchSwitchAmplitude: 0.08,
       materialMaxIterations: 30, materialTolerance: 1e-6, materialRelaxation: 1, materialCoupling: 'embedded',
       imperfection: { enabled: false, source: 'bucklingMode', scenarioId: null, mode: 1, amplitudeMm: 10 }
     },
@@ -91,6 +92,13 @@ export function normalizeProject(input) {
   p.settings.arcLengthMinRadiusFactor = Math.max(1e-4, Math.min(1, Number(p.settings.arcLengthMinRadiusFactor) || 0.02));
   p.settings.arcLengthMaxRadiusFactor = Math.max(1, Number(p.settings.arcLengthMaxRadiusFactor) || 4);
   p.settings.arcLengthConstraintTolerance = Math.max(1e-10, Number(p.settings.arcLengthConstraintTolerance) || 1e-6);
+  p.settings.stabilityTracking = p.settings.stabilityTracking !== false;
+  p.settings.stabilityEigenTolerance = Math.max(1e-5, Math.min(1, Math.abs(Number(p.settings.stabilityEigenTolerance) || 0.05)));
+  p.settings.stabilityAsymmetryTolerance = Math.max(1e-12, Math.min(0.1, Math.abs(Number(p.settings.stabilityAsymmetryTolerance) || 1e-6)));
+  p.settings.stabilityMaxDofs = Math.max(6, Math.min(500, Math.round(Number(p.settings.stabilityMaxDofs) || 120)));
+  p.settings.branchSwitchEnabled = !!p.settings.branchSwitchEnabled;
+  p.settings.branchSwitchSign = Number(p.settings.branchSwitchSign) < 0 ? -1 : 1;
+  p.settings.branchSwitchAmplitude = Math.max(1e-4, Math.min(0.45, Math.abs(Number(p.settings.branchSwitchAmplitude) || 0.08)));
   p.settings.materialMaxIterations = Math.max(3, Math.min(80, Math.round(Number(p.settings.materialMaxIterations) || 30)));
   p.settings.materialTolerance = Math.max(1e-10, Number(p.settings.materialTolerance) || 1e-6);
   p.settings.materialRelaxation = Math.max(.2, Math.min(1, Number(p.settings.materialRelaxation) || 1));

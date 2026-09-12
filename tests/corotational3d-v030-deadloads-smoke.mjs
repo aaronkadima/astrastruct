@@ -31,9 +31,9 @@ function model(elementLoads=[]){return{nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:L
  close(tip.uz,expected,Math.max(2e-8,Math.abs(expected)*.01),'self-weight tip deflection');close(r.reactions[0].fz,w*L,2e-5,'self-weight reaction');close(Math.abs(f.My1),w*L*L/2,5e-4,'self-weight fixed moment');assert.equal(f.loadSummary[0].kind,'selfWeight');close(f.loadSummary[0].w,w,1e-12,'self-weight intensity');
 }
 
-// Unsupported thermal element action remains explicitly protected in v0.30.
+// Non-conservative follower action remains explicitly protected until its 3D tangent is implemented.
 {
- const p=model([{id:'T',elementId:'E1',kind:'thermal',dT:25}]);assert.throws(()=>solveFrameCorotational3DWithDeadLoads(p),/thermal.*ainda não é suportada|carga de barra 'thermal'/i);
+ const p=model([{id:'F',elementId:'E1',kind:'followerEnd',end:2,px:0,py:-2,pz:0}]);assert.throws(()=>solveFrameCorotational3DWithDeadLoads(p),/followerEnd.*ainda não é suportada|carga de barra 'followerEnd'/i);
 }
 
 console.log('v0.30 co-rotational 3D dead element loads smoke: OK');

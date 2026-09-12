@@ -490,8 +490,8 @@ export function solveFrameCorotationalFiberHinges2D(project, scenarioId, options
   validateHinges(project, hinges);
   if (pathControl && options.materialCoupling === 'outer') throw new Error('Controle de caminho v0.17 com rótulas de fibras requer acoplamento material embutido; o modo externo v0.14 permanece apenas para controle de carga.');
   if (options.materialCoupling === 'outer') return solveOuterCompatibility(project, scenarioId, hinges, options);
-  const connectionResolver = embeddedConnectionResolver(project, hinges, options);
-  const result = solveGlobal(project, scenarioId, { ...options, connectionResolver });
+  const connectionResolver = embeddedConnectionResolver(project, hinges, effectiveOptions);
+  const result = solveGlobal(project, scenarioId, { ...effectiveOptions, connectionResolver });
   return decorateEmbeddedResult(result, hinges, effectiveOptions);
 }
 

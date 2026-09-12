@@ -20,6 +20,8 @@ assert.equal(result.solverVersion,'0.22.0-exp');
 assert.equal(result.materialNonlinearity.cyclic,true);
 assert(result.materialNonlinearity.cumulativeDissipatedEnergy>0,'global cyclic hinge should dissipate energy');
 assert(result.materialNonlinearity.maxEquivalentPlasticStrain>0,'global cyclic hinge should accumulate plastic demand');
+const virgin=solveFrameCorotationalFiberHinges2D(project,'LC1',{controlMode:'displacement',steps:5,maxIterations:100,tolerance:1e-8,absoluteTolerance:1e-9,lineSearch:true,displacementTolerance:1e-7,displacementControl:{nodeId:'N2',dof:'uy',targetDisplacement:-.06},cyclicProtocol:{enabled:true,targets:[-.06],stepsPerSegment:5},materialMaxIterations:50,materialTolerance:1e-5,materialRelaxation:.75});
+assert(result.materialNonlinearity.cumulativeDissipatedEnergy>virgin.materialNonlinearity.cumulativeDissipatedEnergy,'prior reversals must increase committed dissipated energy');
 assert(result.pushover.cyclicProtocol.enabled,'cyclic protocol metadata should be retained');
 assert.equal(result.pushover.curve.length,15);
 assert(Math.abs(result.displacements.find(d=>d.nodeId==='N2').uy-targets.at(-1))<1e-6,'final displacement should reach last cyclic target');

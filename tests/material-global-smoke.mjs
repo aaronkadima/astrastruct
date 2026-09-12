@@ -33,7 +33,7 @@ function steelCantilever({axial=0,moment=2200,section={id:'R200x400',name:'Retan
 // equilibrar o momento de ponta e preservar o equilíbrio global.
 {
   const applied=2200,p=steelCantilever({moment:applied}),r=solve(p,'LC1');
-  assert(r.solverVersion==='0.15.0-exp',`v0.14.2 global: solverVersion inesperada ${r.solverVersion}`);
+  assert(r.solverVersion==='0.16.0-exp',`v0.16 global: solverVersion inesperada ${r.solverVersion}`);
   assert(r.materialNonlinearity?.enabled,'v0.14 global: metadado de não linearidade material ausente');
   assert(String(r.materialNonlinearity.linearization||'').includes('tangent-affine'),'v0.15 global: linearização tangente-afim não foi ativada');
   assert(String(r.materialNonlinearity.globalStrategy||'').includes('embedded'),'v0.15 global: estratégia material embutida não registrada');
@@ -88,4 +88,4 @@ function steelCantilever({axial=0,moment=2200,section={id:'R200x400',name:'Retan
   console.log('v0.15 — embedded vs outer OK','M=',a.constitutiveMoment,'theta=',a.rotation,'local=',rEmbedded.materialNonlinearity.maxLocalIterations,'outer=',rOuter.materialNonlinearity.outerIterations);
 }
 
-console.log('Todos os smoke tests globais de rótula de fibras do AstraStruct v0.15 passaram.');
+console.log('Todos os smoke tests globais de rótula de fibras do AstraStruct v0.16 passaram.');

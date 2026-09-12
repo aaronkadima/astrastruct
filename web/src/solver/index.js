@@ -3,7 +3,7 @@ import { solveFrame2D } from './frame2d.js';
 import { solveMixed2D } from './mixed2d.js';
 import { solveFramePDelta2D } from './pdelta2d.js';
 import { solveBuckling2D } from './buckling2d.js';
-import { solveFrameCorotational2D } from './corotational2d.js';
+import { solveFrameCorotational2D, solveFrameCorotationalDisplacementControl2D } from './corotational2d.js';
 import { activeFiberHinges, solveFrameCorotationalFiberHinges2D } from './materialNonlinear2d.js';
 import { resolveScenario } from './scenario.js';
 import { buildElementResponses } from './postprocess.js';
@@ -38,10 +38,10 @@ function solveStructuralModel(sourceProject,resolvedProject,scenarioId) {
 
 export function solve(project, scenarioId) {
   const analysisType=project.settings?.analysisType||'linear',fiberHinges=activeFiberHinges(project);
-  if(fiberHinges.length&&analysisType!=='corotational')throw new Error('Rótulas de fibras v0.15 exigem análise Geom. não linear (co-rotacional). Selecione esse modo antes de executar a análise.');
+  if(fiberHinges.length&&analysisType!=='corotational')throw new Error('Rótulas de fibras v0.16 exigem análise Geom. não linear (co-rotacional). Selecione esse modo antes de executar a análise.');
   if(analysisType==='corotational'){
-    const s=project.settings||{},initialImperfection=buildModalImperfection(project,scenarioId),options={steps:s.nonlinearSteps,maxIterations:s.nonlinearMaxIterations,tolerance:s.nonlinearTolerance,lineSearch:s.nonlinearLineSearch,initialImperfection,materialMaxIterations:s.materialMaxIterations,materialTolerance:s.materialTolerance,materialRelaxation:s.materialRelaxation,materialCoupling:s.materialCoupling};
-    const result=fiberHinges.length?solveFrameCorotationalFiberHinges2D(project,scenarioId,options):solveFrameCorotational2D(project,scenarioId,options);
+    const s=project.settings||{},initialImperfection=buildModalImperfection(project,scenarioId),controlMode=s.nonlinearControlMode==='displacement'?'displacement':'load',options={steps:s.nonlinearSteps,maxIterations:s.nonlinearMaxIterations,tolerance:s.nonlinearTolerance,lineSearch:s.nonlinearLineSearch,initialImperfection,controlMode,displacementTolerance:s.displacementControlTolerance,displacementControl:{nodeId:s.displacementControlNodeId,dof:s.displacementControlDof,targetDisplacement:s.displacementControlTarget},materialMaxIterations:s.materialMaxIterations,materialTolerance:s.materialTolerance,materialRelaxation:s.materialRelaxation,materialCoupling:s.materialCoupling};
+    const result=fiberHinges.length?solveFrameCorotationalFiberHinges2D(project,scenarioId,options):(controlMode==='displacement'?solveFrameCorotationalDisplacementControl2D(project,scenarioId,options):solveFrameCorotational2D(project,scenarioId,options));
     return{...result,analysisType:'corotational',solverVersion:result.solverVersion||'0.13.6-exp'};
   }
   const resolved = resolveScenario(project, scenarioId);

@@ -1,3 +1,7 @@
+## AstraStruct v0.25.1 — consolidação arquitetural
+
+A v0.25.1 consolida schema/migrations, `AnalysisConfig`, `ElementRegistry`, `SolverRegistry`, contratos de análise/resultados e a interface do futuro `RuleEngine`. Não acrescenta novos métodos numéricos; o objetivo é preparar Frame 3D, shells, componentes e regras normativas sem ampliar o acoplamento do núcleo 2D. Veja `docs/architecture-v0251.md`.
+
 ## AstraStruct v0.25 — tratamento de registros sísmicos
 
 A v0.25 acrescenta pré-processamento de acelerogramas (remoção de média/detrend linear, taper, filtros high/low-pass RC zero-phase, reamostragem e escala), componentes simultâneas X+Y, biblioteca de registros persistida no JSON do projeto, combinação direcional SRSS ou envelope 100/30 e comparação do espectro do registro com um espectro-alvo fornecido pelo usuário. O núcleo continua linear-elástico e não representa movimento diferencial de múltiplos apoios.
@@ -5,10 +9,10 @@ A v0.25 acrescenta pré-processamento de acelerogramas (remoção de média/detr
 # AstraStruct
 
 
-> **v0.24 experimental:** dinâmica estrutural linear com análise modal, Newmark-β/Rayleigh, aceleração sísmica uniforme de base, pseudo-espectros Sa/Sv/Sd e combinação modal SRSS/CQC.
+> **Linha dinâmica v0.23–v0.25:** análise modal, Newmark-β/Rayleigh, aceleração uniforme de base, pseudo-espectros Sa/Sv/Sd, SRSS/CQC e pré-processamento X+Y.
 AstraStruct é uma plataforma web **assembly-first** para modelagem, análise, dimensionamento e futura verificação/detalhamento de estruturas de concreto armado e aço.
 
-> **Estado atual — v0.24.0 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
+> **Estado atual — v0.25.1 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
 
 ## Executar online
 

@@ -18,4 +18,4 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - name: Run nonlinear browser regressions
-        run: npx playwright test tests/e2e/cyclic-hysteresis.spec.ts tests/e2e/distributed-plasticity.spec.ts tests/e2e/stability-bifurcation.spec.ts tests/e2e/arc-length.spec.ts tests/e2e/pushover.spec.ts tests/e2e/material-nonlinear.spec.ts --project=chromium
+        run: npx playwright test tests/e2e/cyclic-hysteresis.spec.ts tests/e2e/distributed-plasticity.spec.ts tests/e2e/stability-bifurcation.spec.ts tests/e2e/arc-length.spec.ts tests/e2e/pushover.spec.ts tests/e2e/material-nonlinear.spec.ts --project=desktop-chromium

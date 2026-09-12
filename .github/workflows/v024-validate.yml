@@ -20,6 +20,7 @@ jobs:
           for name in ['app/src/AnalysisPanelV13.tsx','app/src/DynamicsPostprocessPanel.tsx']:
               p=Path(name);p.write_text(p.read_text().replace('\\"','"'))
           p=Path('tests/dynamics-smoke.mjs');p.write_text(p.read_text().replace("'0.23.0-exp'","'0.24.0-exp'"))
+          p=Path('app/src/App.tsx');p.write_text(p.read_text().replace("['modal','time-history'].includes(project.settings?.analysisType)","['modal','time-history','response-spectrum'].includes(project.settings?.analysisType)"))
           PY
       - run: npm install
       - name: Typecheck and module validation

@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: astrastruct-pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   assemble-site:

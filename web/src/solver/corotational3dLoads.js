@@ -35,16 +35,16 @@ export function pointLoadVector3D(px=0,py=0,pz=0,L=0,xi=.5){
 }
 
 /**
- * Converts supported frame3d element loads into constant global equivalent nodal
- * loads defined on the initial configuration. This makes them dead loads rather
- * than follower loads. Returned metadata is used to recover element end actions.
+ * Converts mechanical frame3d element actions into constant global equivalent
+ * nodal dead loads on the reference configuration. Thermal actions are kept on
+ * the element because the co-rotational kernel treats them as initial strains.
  */
 export function prepareCorotational3DDeadLoads(project){
-  const out=clone(project),nodes=out.nodes||[],map=new Map(nodes.map(n=>[n.id,n])),synthetic=[],metadata=new Map();
+  const out=clone(project),nodes=out.nodes||[],map=new Map(nodes.map(n=>[n.id,n])),synthetic=[],metadata=new Map(),thermalLoads=(out.elementLoads||[]).filter(l=>l.kind==='thermal');
   for(const e of out.elements||[]){
     if(e.type!=='frame3d')continue;
     const a=map.get(e.n1),b=map.get(e.n2);if(!a||!b)throw new Error(`Co-rotacional 3D: elemento ${e.id} referencia nó inexistente.`);
-    const axes=spatialAxes(a,b,e),T=transform12(axes.R),loads=(out.elementLoads||[]).filter(l=>l.elementId===e.id);let pl=zeros12();const summary=[];
+    const axes=spatialAxes(a,b,e),T=transform12(axes.R),loads=(out.elementLoads||[]).filter(l=>l.elementId===e.id&&l.kind!=='thermal');let pl=zeros12();const summary=[];
     for(const load of loads){
       let p=null;
       if(load.kind==='uniform'){
@@ -52,7 +52,7 @@ export function prepareCorotational3DDeadLoads(project){
       }else if(load.kind==='point'){
         const px=Number(load.px)||0,py=Number(load.py)||0,pz=Number(load.pz)||0,xi=Math.max(0,Math.min(1,Number(load.xi??.5)));p=pointLoadVector3D(px,py,pz,axes.L,xi);summary.push({kind:'point',px,py,pz,xi});
       }else if(load.kind==='selfWeight'){
-        const mat=materialFor(out,e),gamma=Number(load.gamma)||Number(mat.density)||0,factor=Number.isFinite(Number(load.weightFactor))?Number(load.weightFactor):1;if(!(gamma>=0))throw new Error(`Co-rotacional 3D ${e.id}: peso específico inválido.`);
+        const mat=materialFor(out,e),gamma=Number(load.gamma)||Number(mat.density)||0,factor=Number.isFinite(Number(load.weightFactor??load.factor))?Number(load.weightFactor??load.factor):1;if(!(gamma>=0))throw new Error(`Co-rotacional 3D ${e.id}: peso específico inválido.`);
         const w=gamma*areaFor(out,e)*factor,qGlobal=[0,0,-w],qLocal=matVec(axes.R,qGlobal);p=uniformLoadVector3D(qLocal[0],qLocal[1],qLocal[2],axes.L);summary.push({kind:'selfWeight',gamma,factor,w,gravity:[0,0,-1],qLocal});
       }else if(Math.abs(Number(load.dT)||0)+Math.abs(Number(load.dTGradient)||0)+Math.abs(Number(load.px)||0)+Math.abs(Number(load.py)||0)+Math.abs(Number(load.pz)||0)+Math.abs(Number(load.qx)||0)+Math.abs(Number(load.qy)||0)+Math.abs(Number(load.qz)||0)>EPS||load.kind){
         throw new Error(`Co-rotacional 3D v0.30: carga de barra '${load.kind||'desconhecida'}' ainda não é suportada.`);
@@ -66,7 +66,7 @@ export function prepareCorotational3DDeadLoads(project){
       metadata.set(e.id,{elementId:e.id,initialAxes:axes,localEquivalent:pl,globalEquivalent:pg,summary});
     }
   }
-  out.loads=[...(out.loads||[]),...synthetic];out.elementLoads=[];
+  out.loads=[...(out.loads||[]),...synthetic];out.elementLoads=thermalLoads;
   return{project:out,metadata};
 }
 

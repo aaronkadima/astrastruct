@@ -24,9 +24,10 @@ const lumped=solveModal2D(project,{modes:2,massFormulation:'lumped'}),expectedLu
 assert(Math.abs(lumped.modes[0].omega/expectedLumped-1)<1e-10,'lumped axial bar benchmark failed');
 assert(lumped.modes[0].frequencyHz>0&&lumped.modes[0].period>0,'frequency and period must be positive');
 
-const omega=10,free=newmarkLinearSystem({M:[[1]],C:[[0]],K:[[omega*omega]],forceAtTime:()=>[0],dt:.001,duration:.5,u0:[1],v0:[0]});
-const exact=Math.cos(omega*.5),uEnd=free.final.u[0];
-assert(Math.abs(uEnd-exact)<3e-5,`Newmark free vibration mismatch: ${uEnd} vs ${exact}`);
+const omega=10,dt=.001,duration=.5,free=newmarkLinearSystem({M:[[1]],C:[[0]],K:[[omega*omega]],forceAtTime:()=>[0],dt,duration,u0:[1],v0:[0]}),uEnd=free.final.u[0];
+const discretePhase=2*Math.atan(omega*dt/2),exactDiscrete=Math.cos(free.steps*discretePhase),exactContinuum=Math.cos(omega*duration);
+assert(Math.abs(uEnd-exactDiscrete)<2e-11,`Newmark discrete amplification mismatch: ${uEnd} vs ${exactDiscrete}`);
+assert(Math.abs(uEnd-exactContinuum)<5e-5,`Newmark phase-dispersion error exceeded O(dt²) benchmark: ${uEnd} vs ${exactContinuum}`);
 const energies=free.history.map(r=>r.totalMechanicalEnergy),energyDrift=(Math.max(...energies)-Math.min(...energies))/energies[0];
 assert(energyDrift<2e-8,`average-acceleration energy drift too high: ${energyDrift}`);
 

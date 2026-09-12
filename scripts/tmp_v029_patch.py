@@ -43,4 +43,19 @@ replace_once(
     '> **Estado atual — v0.29 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.'
 )
 
+# UI metadata and 3D result note must track the active solver generation.
+replace_once('app/src/App.tsx','<small>v0.27 · modal + estabilidade 3D</small>','<small>v0.29 · co-rotacional 3D</small>')
+replace_once(
+    'app/src/App.tsx',
+    '<div className="panel-note">Fundação 3D linear v0.26 com visualização espacial interativa v0.26.1. Use o Canvas 3D para orbitar, inspecionar a deformada e mapear N/V/M/T.</div>',
+    '<div className="panel-note">{result.analysisType===\'corotational\'?\'Co-rotacional 3D experimental v0.29: grandes deslocamentos/rotações com recuperação N/V/M/T na configuração corrente.\':result.analysisType===\'pdelta\'?\'P-Delta espacial 3D v0.28: segunda ordem elástica com rigidez geométrica biaxial.\':\'Fundação 3D linear v0.26 com visualização espacial interativa v0.26.1.\'} Use o Canvas 3D para orbitar, inspecionar a deformada e mapear N/V/M/T.</div>'
+)
+
+# Mobile 3D UX: keep Stability reachable and result controls above the floating results drawer.
+css=Path('app/src/styles.css')
+s=css.read_text()
+mobile_fix='\n@media(max-width:760px){.top-actions .icon-btn[aria-label="Estabilidade"]{display:grid!important}.spatial3d-result-controls{z-index:45}}\n'
+if mobile_fix.strip() not in s:
+    css.write_text(s+mobile_fix)
+
 print('v0.29 integration patch applied')

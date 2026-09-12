@@ -18,7 +18,7 @@ test('v0.23 modal and time-history workflow exposes frequencies, participation a
   await page.getByTestId('analyze-button').click();
   const modalResults=page.getByTestId('dynamic-results-modal');await expect(modalResults).toBeVisible();await expect(modalResults).toContainText('dynamic-modal2d');await expect(modalResults).toContainText('Hz');await expect(page.locator('[role="alert"]')).toHaveCount(0);
   await openCommand(page,'Diagramas/envelopes');
-  const modalPost=page.getByTestId('panel-dynamics-postprocess');await expect(modalPost).toContainText('Dinâmica estrutural · v0.24');await expect(page.getByTestId('dynamic-first-frequency')).toBeVisible();await expect(page.getByTestId('dynamic-modal-table')).toContainText('Mef,X');await modalPost.locator('button[aria-label="Fechar"]').click();
+  const modalPost=page.getByTestId('panel-dynamics-postprocess');await expect(modalPost).toContainText('Dinâmica estrutural · v0.25');await expect(page.getByTestId('dynamic-first-frequency')).toBeVisible();await expect(page.getByTestId('dynamic-modal-table')).toContainText('Mef,X');await modalPost.locator('button[aria-label="Fechar"]').click();
 
   await openCommand(page,'Tipo de análise');
   await page.getByTestId('analysis-time-history').click();

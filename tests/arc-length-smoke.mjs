@@ -21,7 +21,7 @@ function shallowArch(){
 
 {
   const p=shallowArch(),r=solve(p,'LC1'),curve=r.arcLength?.curve||[],L0=Math.hypot(1,.1),EA=200e6*1e-4;
-  assert(r.solverVersion==='0.18.0-exp',`arc-length: versão inesperada ${r.solverVersion}`);
+  assert(r.solverVersion==='0.19.0-exp',`arc-length: versão inesperada ${r.solverVersion}`);
   assert(r.arcLength?.enabled&&r.arcLength.method==='crisfield-spherical','arc-length: metadados ausentes');
   assert(curve.length===32,'arc-length: número de passos incorreto');
   for(const row of curve){
@@ -49,7 +49,7 @@ function fiberCantilever(){
 }
 {
   const r=solve(fiberCantilever(),'LC1');
-  assert(r.solverVersion==='0.18.0-exp','arc-length material: versão incorreta');
+  assert(r.solverVersion==='0.19.0-exp','arc-length material: versão incorreta');
   assert(r.materialNonlinearity?.coupling==='embedded-local-newton','arc-length material: acoplamento local não preservado');
   assert(r.arcLength?.curve?.length===10,'arc-length material: curva ausente');
   assert(Number.isFinite(r.arcLength.finalLoadFactor),'arc-length material: lambda final inválido');

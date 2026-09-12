@@ -1,0 +1,34 @@
+name: AstraStruct v0.21 cyclic UI
+on:
+  push:
+    branches: [feat/v021-cyclic-hysteresis]
+permissions:
+  contents: write
+jobs:
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply UI patch once
+        run: |
+          if [ -f scripts/tmp_v021_ui_patch.py ]; then python scripts/tmp_v021_ui_patch.py; fi
+      - name: Install dependencies
+        run: npm install
+      - name: Validate modules and TypeScript
+        run: npm run check
+      - name: Run structural regression suite
+        run: npm test
+      - name: Build application
+        run: npm run build
+      - name: Commit validated UI
+        run: |
+          if ! git diff --quiet; then
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add app/src/InspectorPanel.tsx app/src/AnalysisPanelV13.tsx app/src/NonlinearPostprocessPanel.tsx app/src/NonlinearReportPanel.tsx
+            git commit -m "feat: expose v0.21 cyclic hysteresis controls and results"
+            git push
+          fi

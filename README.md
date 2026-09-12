@@ -1,3 +1,7 @@
+## AstraStruct v0.26.1 — Canvas 3D espacial
+
+A v0.26.1 substitui a projeção XY temporária do núcleo 3D por um Canvas 3D interativo com câmera orbital, perspectiva/ortográfica, vistas ISO/XY/XZ/YZ, cargas, apoios, eixos locais, deformada espacial e mapas N/V/M/T. O contrato visual também está preparado para animar formas modais e de flambagem 3D quando esses solvers forem integrados. Veja `docs/canvas3d-v0261.md`.
+
 ## AstraStruct v0.26 — fundação estrutural 3D
 
 A v0.26 introduz o primeiro kernel espacial linear: `truss3d` e `frame3d`, 6 DOFs por nó, transformação local/global robusta, axial, torção e flexão biaxial, cargas nodais 3D e distribuídas locais, cenários/combinações e recuperação `N/Vy/Vz/T/My/Mz`. Recursos não lineares e dinâmicos 3D permanecem fora do escopo desta versão. Veja `docs/spatial3d-v026.md`.
@@ -16,7 +20,7 @@ A v0.25 acrescenta pré-processamento de acelerogramas (remoção de média/detr
 > **Linha dinâmica v0.23–v0.25:** análise modal, Newmark-β/Rayleigh, aceleração uniforme de base, pseudo-espectros Sa/Sv/Sd, SRSS/CQC e pré-processamento X+Y.
 AstraStruct é uma plataforma web **assembly-first** para modelagem, análise, dimensionamento e futura verificação/detalhamento de estruturas de concreto armado e aço.
 
-> **Estado atual — v0.25.1 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
+> **Estado atual — v0.26.1 experimental:** ambiente de engenharia em desenvolvimento. Resultados requerem validação independente antes de qualquer uso profissional.
 
 ## Executar online
 

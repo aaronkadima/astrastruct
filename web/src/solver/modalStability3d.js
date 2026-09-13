@@ -1,5 +1,6 @@
 import { zeros, addSub, mul } from './matrix.js';
 import { spatialAxes, frame3DLocalStiffness, solveSpatial3D } from './spatial3d.js';
+import { shell4Element, shell4MassMatrix } from './shell4.js';
 import { resolveScenario } from './scenario.js';
 import { condenseEndConnections3D, endConnectionKinematicMap3D } from './endConnections3d.js';
 
@@ -27,7 +28,10 @@ function trussPrepared(project,e,a,b){
   const axes=spatialAxes(a,b,e),mat=materialFor(project,e),sec=sectionFor(project,e),E=Number(mat.E),A=prop(e,sec,'A');if(!(E>0&&A>0))throw new Error(`3D modal: ${e.id} requer E e A positivos.`);
   const k=zeros(12),d=axes.ex,c=E*A/axes.L;for(let r=0;r<3;r++)for(let q=0;q<3;q++){const v=c*d[r]*d[q];k[r][q]+=v;k[r][6+q]-=v;k[6+r][q]-=v;k[6+r][6+q]+=v}return{axes,mat,sec,E,A,kg:k};
 }
+function shellNodeIds(e){return(Array.isArray(e.nodeIds)&&e.nodeIds.length===4?e.nodeIds:[e.n1,e.n2,e.n3,e.n4]).filter(Boolean)}
+function shellPrepared(project,e,nodes){const mat=materialFor(project,e),sec=sectionFor(project,e),E=Number(mat.E),nu=Number(mat.nu),thickness=Number(e.thickness??e.t??sec.thickness??sec.t);if(!(E>0&&Number.isFinite(nu)&&thickness>0))throw new Error(`Dinâmica 3D shell4: ${e.id} requer E, nu e espessura positivos/válidos.`);const shell=shell4Element({nodes,E,nu,thickness,pressure:0,shearCorrection:e.shearCorrection??5/6,drillingFactor:e.drillingFactor??1e-6,element:e});return{...shell,mat,sec,E,nu,thickness}}
 function elementIdx(i,j){return[0,1,2,3,4,5,6,7,8,9,10,11].map(k=>k<6?6*i+k:6*j+k-6)}
+function shellIdx(map,e){const ids=shellNodeIds(e);if(ids.length!==4||new Set(ids).size!==4)throw new Error(`Dinâmica 3D shell4: ${e.id} requer quatro nós distintos.`);const idx=[];for(const id of ids){const i=map.get(id);if(i==null)throw new Error(`Dinâmica 3D shell4: ${e.id} referencia nó inexistente ${id}.`);for(let k=0;k<6;k++)idx.push(6*i+k)}return{ids,idx}}
 function addBlock(M,idx,Q,scale=1){for(let i=0;i<idx.length;i++)for(let j=0;j<idx.length;j++)M[idx[i]][idx[j]]+=scale*Q[i][j]}
 
 export function frame3DMassLocal({totalMass,L,rotaryMass,formulation='consistent'}){
@@ -50,10 +54,10 @@ function truss3DMassGlobal(totalMass,formulation='consistent'){
   if(kind==='lumped'){for(const i of [0,1,2,6,7,8])M[i][i]=totalMass/2;return M}
   for(let a=0;a<3;a++){M[a][a]+=totalMass/3;M[a][6+a]+=totalMass/6;M[6+a][a]+=totalMass/6;M[6+a][6+a]+=totalMass/3}return M;
 }
-function prescribed(project,map,frameNodes){
+function prescribed(project,map,rotationalNodes){
   const out=new Map(),fields=['ux','uy','uz','rx','ry','rz'];
   for(const s of project.supports||[]){const i=map.get(s.nodeId);if(i==null)continue;fields.forEach((f,k)=>{if(s[f])out.set(6*i+k,Number(s[`${f}Value`])||0)})}
-  for(const [nodeId,i] of map){if(frameNodes.has(nodeId))continue;for(let k=3;k<6;k++)if(!out.has(6*i+k))out.set(6*i+k,0)}
+  for(const [nodeId,i] of map){if(rotationalNodes.has(nodeId))continue;for(let k=3;k<6;k++)if(!out.has(6*i+k))out.set(6*i+k,0)}
   return out;
 }
 function cholesky(A,label){
@@ -79,18 +83,21 @@ function normalizedDisplay(full,nodes){let max=0,signValue=0;for(let i=0;i<nodes
 function influence(free,offset){return free.map(d=>d%6===offset?1:0)}
 
 export function assembleDynamicSystem3D(project,{massFormulation='consistent'}={}){
-  const nodes=project.nodes||[],elements=project.elements||[];if(!nodes.length||!elements.length)throw new Error('Dinâmica 3D v0.27: modelo sem nós ou elementos.');if(elements.some(e=>!['frame3d','truss3d'].includes(e.type)))throw new Error('Dinâmica 3D v0.27 aceita apenas frame3d/truss3d.');
-  if((project.settlements||[]).length)throw new Error('Dinâmica 3D v0.27 ainda não admite recalques/deslocamentos impostos.');
-  const nd=6*nodes.length,K=zeros(nd),M=zeros(nd),map=new Map(nodes.map((n,i)=>[n.id,i])),frameNodes=new Set(),kind=massFormulation==='lumped'?'lumped':'consistent';
-  for(const e of elements){const i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Dinâmica 3D: ${e.id} referencia nó inexistente.`);const a=nodes[i],b=nodes[j],idx=elementIdx(i,j),prep=e.type==='frame3d'?framePrepared(project,e,a,b):trussPrepared(project,e,a,b),gamma=Number(prep.mat.density);if(!(gamma>0))throw new Error(`Dinâmica 3D: ${e.id} requer density>0 kN/m³.`);const rho=gamma/G0;
-    addSub(K,prep.kg,idx);
-    if(e.type==='frame3d'){frameNodes.add(e.n1);frameNodes.add(e.n2);const A=prep.A,Ip=Math.max(EPS,Number(e.Ip??prep.sec.Ip)||prep.Iy+prep.Iz),rotary=rho*Ip*prep.axes.L,ml=frame3DMassLocal({totalMass:rho*A*prep.axes.L,L:prep.axes.L,rotaryMass:rotary,formulation:kind}),mlEff=projectByMap(ml,prep.B),mg=mm(transpose(prep.T),mm(mlEff,prep.T));addSub(M,mg,idx)}
+  const nodes=project.nodes||[],elements=project.elements||[];if(!nodes.length||!elements.length)throw new Error('Dinâmica 3D: modelo sem nós ou elementos.');if(elements.some(e=>!['frame3d','truss3d','shell4'].includes(e.type)))throw new Error('Dinâmica 3D aceita frame3d, truss3d e shell4.');
+  if((project.settlements||[]).length)throw new Error('Dinâmica 3D ainda não admite recalques/deslocamentos impostos.');
+  const nd=6*nodes.length,K=zeros(nd),M=zeros(nd),map=new Map(nodes.map((n,i)=>[n.id,i])),rotationalNodes=new Set(),kind=massFormulation==='lumped'?'lumped':'consistent';let shellCount=0;
+  for(const e of elements){
+    if(e.type==='shell4'){
+      const {ids,idx}=shellIdx(map,e),shellNodes=ids.map(id=>nodes[map.get(id)]),prep=shellPrepared(project,e,shellNodes),gamma=Number(prep.mat.density);if(!(gamma>0))throw new Error(`Dinâmica 3D: ${e.id} requer density>0 kN/m³.`);const rho=gamma/G0,mass=shell4MassMatrix({nodes:shellNodes,massDensity:rho,thickness:prep.thickness,formulation:kind,drillingRotaryFactor:e.drillingRotaryFactor??1e-6,element:e});addSub(K,prep.kg,idx);addSub(M,mass.mg,idx);ids.forEach(id=>rotationalNodes.add(id));shellCount++;continue;
+    }
+    const i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Dinâmica 3D: ${e.id} referencia nó inexistente.`);const a=nodes[i],b=nodes[j],idx=elementIdx(i,j),prep=e.type==='frame3d'?framePrepared(project,e,a,b):trussPrepared(project,e,a,b),gamma=Number(prep.mat.density);if(!(gamma>0))throw new Error(`Dinâmica 3D: ${e.id} requer density>0 kN/m³.`);const rho=gamma/G0;addSub(K,prep.kg,idx);
+    if(e.type==='frame3d'){rotationalNodes.add(e.n1);rotationalNodes.add(e.n2);const A=prep.A,Ip=Math.max(EPS,Number(e.Ip??prep.sec.Ip)||prep.Iy+prep.Iz),rotary=rho*Ip*prep.axes.L,ml=frame3DMassLocal({totalMass:rho*A*prep.axes.L,L:prep.axes.L,rotaryMass:rotary,formulation:kind}),mlEff=projectByMap(ml,prep.B),mg=mm(transpose(prep.T),mm(mlEff,prep.T));addSub(M,mg,idx)}
     else addSub(M,truss3DMassGlobal(rho*prep.A*prep.axes.L,kind),idx);
   }
   for(const nm of project.nodalMasses||[]){const i=map.get(nm.nodeId);if(i==null)continue;const vals=[nm.mx,nm.my,nm.mz,nm.mrx,nm.mry,nm.mrz??nm.mr];for(let k=0;k<6;k++)M[6*i+k][6*i+k]+=Math.max(0,Number(vals[k])||0)}
-  const fixed=prescribed(project,map,frameNodes);for(const [d,v] of fixed)if(Math.abs(v)>1e-12)throw new Error('Dinâmica 3D v0.27 requer apoios homogêneos; deslocamentos prescritos não nulos não são suportados.');
-  const free=Array.from({length:nd},(_,i)=>i).filter(i=>!fixed.has(i));if(!free.length)throw new Error('Dinâmica 3D: não existem DOFs livres.');if(free.length>300)throw new Error(`Dinâmica 3D v0.27 limita a análise a 300 DOFs livres; modelo atual: ${free.length}.`);
-  const Kf=free.map(i=>free.map(j=>K[i][j])),Mf=free.map(i=>free.map(j=>M[i][j]));cholesky(symmetrize(Kf),'Dinâmica modal 3D');return{nodes,elements,nd,K,M,free,Kf,Mf,massFormulation:kind,gravity:G0,connectionAware:true};
+  const fixed=prescribed(project,map,rotationalNodes);for(const [d,v] of fixed)if(Math.abs(v)>1e-12)throw new Error('Dinâmica 3D requer apoios homogêneos; deslocamentos prescritos não nulos não são suportados.');
+  const free=Array.from({length:nd},(_,i)=>i).filter(i=>!fixed.has(i));if(!free.length)throw new Error('Dinâmica 3D: não existem DOFs livres.');if(free.length>300)throw new Error(`Dinâmica 3D limita a análise a 300 DOFs livres; modelo atual: ${free.length}.`);
+  const Kf=free.map(i=>free.map(j=>K[i][j])),Mf=free.map(i=>free.map(j=>M[i][j]));cholesky(symmetrize(Kf),'Dinâmica modal 3D');return{nodes,elements,nd,K,M,free,Kf,Mf,massFormulation:kind,gravity:G0,connectionAware:true,shellCount,hasShell:shellCount>0};
 }
 
 export function solveModal3D(project,options={}){
@@ -98,7 +105,7 @@ export function solveModal3D(project,options={}){
   if(!positive.length)throw new Error('Dinâmica modal 3D: nenhuma massa modal positiva foi encontrada.');let cumX=0,cumY=0,cumZ=0;
   const modes=positive.slice(0,requested).map((cand,k)=>{let x=solveUpperLT(L,eig.vectors.map(r=>r[cand.index])),gm=dot(x,mul(sys.Mf,x));if(!(gm>EPS))throw new Error('Dinâmica modal 3D: massa generalizada degenerada.');x=x.map(v=>v/Math.sqrt(gm));gm=1;const omega=Math.sqrt(1/cand.mu),frequencyHz=omega/(2*Math.PI),period=1/frequencyHz,gk=dot(x,mul(sys.Kf,x)),px=dot(x,mul(sys.Mf,rx)),py=dot(x,mul(sys.Mf,ry)),pz=dot(x,mul(sys.Mf,rz)),effX=px*px,effY=py*py,effZ=pz*pz,rxm=Mx>EPS?effX/Mx:0,rym=My>EPS?effY/My:0,rzm=Mz>EPS?effZ/Mz:0;cumX+=rxm;cumY+=rym;cumZ+=rzm;const fullMass=Array(sys.nd).fill(0);sys.free.forEach((d,i)=>fullMass[d]=x[i]);const display=normalizedDisplay(fullMass,sys.nodes);return{mode:k+1,omega,frequencyHz,period,eigenvalue:omega*omega,generalizedMass:gm,generalizedStiffness:gk,participation:{x:px,y:py,z:pz,effectiveMassX:effX,effectiveMassY:effY,effectiveMassZ:effZ,effectiveMassRatioX:rxm,effectiveMassRatioY:rym,effectiveMassRatioZ:rzm,cumulativeMassRatioX:cumX,cumulativeMassRatioY:cumY,cumulativeMassRatioZ:cumZ},massNormalizedVector:fullMass,vector:display,displacements:sys.nodes.map((n,i)=>({nodeId:n.id,ux:display[6*i],uy:display[6*i+1],uz:display[6*i+2],rx:display[6*i+3],ry:display[6*i+4],rz:display[6*i+5]}))}});
   const releaseCount=(project.elements||[]).reduce((s,e)=>s+Object.values(e.releases||{}).filter(Boolean).length,0),semiRigidConnectionCount=(project.elements||[]).reduce((s,e)=>s+Object.values(e.rotationalSprings||{}).filter(v=>v!==null&&v!==undefined&&Number(v)>0).length,0);
-  return{type:'dynamic-modal3d',dimension:'3d',analysisType:'modal',solverVersion:'0.27.0',dofs:sys.nd,freeDofs:sys.free.length,massFormulation:sys.massFormulation,gravity:G0,densityConvention:'material.density interpreted as unit weight [kN/m³]; mass density = density/g',connectionAware:true,releaseCount,semiRigidConnectionCount,eigenIterations:eig.iterations,totalParticipatingMass:{x:Mx,y:My,z:Mz},modes,displacements:modes[0]?.displacements||[],modal:{modes,requestedModes:requested,connectionKinematics:'massless end-connection static condensation projected into stiffness and consistent/lumped member mass'}};
+  return{type:'dynamic-modal3d',dimension:'3d',analysisType:'modal',solverVersion:sys.hasShell?'0.30.0':'0.27.0',dofs:sys.nd,freeDofs:sys.free.length,massFormulation:sys.massFormulation,gravity:G0,densityConvention:'material.density interpreted as unit weight [kN/m³]; mass density = density/g',connectionAware:true,shellCount:sys.shellCount,releaseCount,semiRigidConnectionCount,eigenIterations:eig.iterations,totalParticipatingMass:{x:Mx,y:My,z:Mz},modes,displacements:modes[0]?.displacements||[],modal:{modes,requestedModes:requested,connectionKinematics:'massless end-connection static condensation projected into stiffness and consistent/lumped member mass',shellMass:sys.hasShell?'shell4 surface mass rho*t with Mindlin rotary inertia rho*t^3/12; optional drilling regularization':null}};
 }
 
 export function frame3DLocalGeometricStiffness(N,L){

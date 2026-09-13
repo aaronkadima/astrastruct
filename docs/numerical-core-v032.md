@@ -1,203 +1,161 @@
 # AstraStruct v0.32 — Numerical Core 2
 
-## 1. Escopo
+## Escopo
 
-A v0.32 substitui a fundação numérica densa e implícita por um núcleo explícito, diagnosticável e reutilizável. Esta versão **não** cria a interface universal de elementos, Section Engine, malha geral, novos elementos físicos ou novas verificações normativas. Esses blocos permanecem reservados às versões posteriores do roadmap.
+A v0.32 substitui a fundação numérica densa e implícita por um núcleo explícito, diagnosticável e reutilizável. Ela não cria a interface universal de elementos, Section Engine, malha geral, novos elementos físicos ou novas regras normativas. Esses blocos permanecem nas versões posteriores do roadmap.
 
-A cadeia implementada nesta versão é:
+Cadeia desta versão:
 
 `CSR/assembly → linear solver/diagnostics → DOF manager → constraints/MPC → units → Newton/tolerances → legacy compatibility`
 
-## 2. Matriz esparsa CSR
+## Matriz esparsa CSR
 
-O módulo `web/src/numerics/sparseMatrix.js` implementa:
+`web/src/numerics/sparseMatrix.js` fornece `SparseMatrixBuilder` e `SparseMatrixCSR`, com montagem incremental de termos e blocos, armazenamento `rowPtr/colIdx/values`, produto matriz-vetor, diagonal, transposição, identidade e conversão denso→CSR. Para `nnz` termos não nulos, o produto matriz-vetor é `O(nnz)`.
 
-- `SparseMatrixBuilder`: montagem incremental por pares `(i,j)` e blocos locais;
-- `SparseMatrixCSR`: armazenamento `rowPtr`, `colIdx`, `values`;
-- produto matriz-vetor sem materializar matriz densa;
-- acesso à diagonal, transposição, identidade e conversão denso→CSR;
-- descarte opcional controlado por tolerância na montagem.
+## Solver linear direto
 
-Para uma matriz com `nnz` termos não nulos, o produto matriz-vetor tem custo proporcional a `O(nnz)`.
-
-## 3. Solver linear direto
-
-`solveSparseDirect()` usa eliminação com pivotamento parcial escalonado sobre linhas esparsas mutáveis. Para a coluna `k`, a linha pivô maximiza
+`solveSparseDirect()` usa eliminação com pivotamento parcial escalonado sobre linhas esparsas mutáveis. Na coluna `k`, a seleção de linha maximiza
 
 `|a_ik| / s_i`,
 
-onde `s_i` é a escala da linha. Um pivô é considerado inadequado quando
+onde `s_i` é a escala original da linha.
 
-`|p_k| <= max(tol_abs, tol_rel * S)`,
+### Singularidade versus mau condicionamento
 
-em que `S` representa a escala global da matriz.
+Sistemas estruturais misturam DOFs translacionais e rotacionais e, por isso, podem apresentar rigidezes com ordens de grandeza muito diferentes sem constituir mecanismo. A v0.32 separa duas situações:
 
-A solução retorna, além de `x`:
+1. **singularidade numérica efetiva:** o pivô cai abaixo da tolerância absoluta configurada; a solução é interrompida com `NumericalSingularityError`;
+2. **mau condicionamento/escala heterogênea:** razões de pivôs ou pivôs escalonados ficam pequenas, mas o pivô continua resolvível; a solução prossegue e `diagnostics.illConditioned=true` é reportado.
 
-- método utilizado;
-- resíduo absoluto e relativo;
-- menor e maior pivô;
-- razão entre pivôs;
-- estimativa de posto quando a solução é concluída;
-- diagnóstico estrutural da matriz.
+A tolerância relativa é, portanto, um **indicador diagnóstico** e não um limiar global que compare cada pivô à maior rigidez da matriz. Isso evita falsos mecanismos em modelos com escalas físicas mistas.
 
-Singularidade ou quase-singularidade não propaga `NaN` ou `Infinity`: é lançada `NumericalSingularityError`, com `code = ASTRA_NUMERICAL_SINGULARITY`, índice do pivô, limiar e estimativa de posto.
+O retorno inclui resíduo absoluto/relativo, menor e maior pivô, `pivotRatio`, `minScaledPivot`, estimativa de posto e diagnóstico matricial. Singularidade não é propagada como `NaN` ou `Infinity`.
 
-## 4. Conjugate Gradient
+## Conjugate Gradient
 
-`solveConjugateGradient()` é disponibilizado para sistemas simétricos definidos positivos, com precondicionamento diagonal de Jacobi. O critério é
+`solveConjugateGradient()` atende sistemas simétricos definidos positivos com precondicionamento diagonal de Jacobi. O critério é
 
-`||r||_2 <= max(tol_abs, tol_rel ||b||_2)`.
+`||r||₂ <= max(tol_abs, tol_rel ||b||₂)`.
 
-Curvatura não positiva (`p^T A p <= 0`) é tratada como condição incompatível com CG/SPD e produz diagnóstico explícito.
+Curvatura não positiva (`pᵀAp <= 0`) é rejeitada explicitamente. O modo `auto` pode preferir CG em matrizes simétricas grandes, mantendo o solver direto como caminho geral.
 
-O modo `auto` pode selecionar CG para matrizes simétricas suficientemente grandes e mantém o solver direto como caminho robusto geral.
+## Diagnósticos
 
-## 5. Diagnóstico matricial
+`web/src/numerics/diagnostics.js` fornece normas, produto escalar, resíduo relativo, erro de simetria, linhas nulas, amplitudes da diagonal/matriz e erros tipados:
 
-`web/src/numerics/diagnostics.js` fornece:
+- `ASTRA_NUMERICAL_SINGULARITY`;
+- `ASTRA_NONLINEAR_NONCONVERGENCE`.
 
-- `normInf`, `norm2`, `dot`;
-- resíduo relativo de equilíbrio;
-- erro relativo de simetria;
-- linhas nulas;
-- amplitudes diagonal/matriz;
-- razão de escala diagonal;
-- erros tipados de singularidade e não convergência.
+O diagnóstico permite distinguir mecanismo/restrição insuficiente de um sistema apenas mal escalonado.
 
-O objetivo é substituir mensagens genéricas por informação utilizável para distinguir mecanismo estrutural, restrição insuficiente, mau condicionamento e incompatibilidade do algoritmo.
+## DOF Manager
 
-## 6. DOF Manager
-
-`DofManager` desacopla a numeração global da hipótese fixa `nó × número de DOFs`.
-
-Cada grau de liberdade é identificado por:
+`DofManager` abandona a premissa rígida `nó × número fixo de DOFs` e registra
 
 `owner + label → globalIndex`.
 
-O gerenciador suporta registro genérico, registro nodal, consulta por proprietário, descrição reversa e validação do tamanho de vetores globais. Isso prepara o núcleo para futuras famílias de elementos sem introduzir a API de elementos da v0.33.
+Há registro genérico/nodal, consulta por proprietário, descrição reversa e validação de vetores globais. Isso prepara a infraestrutura sem antecipar a Component/Element API da v0.33.
 
-## 7. Restrições e MPC
+## Restrições e MPC
 
-`ConstraintManager` representa:
-
-- deslocamentos prescritos;
-- `equalDOF` mestre–escravo;
-- MPC linear genérica
+`ConstraintManager` representa deslocamentos prescritos, `equalDOF` mestre–escravo e MPC linear
 
 `u_s = c + Σ a_j u_j`.
 
-### 7.1 Transformação exata
+### Transformação exata
 
-O método padrão resolve recursivamente as relações e monta
+As relações são resolvidas recursivamente na forma
 
-`u = T q + c`.
+`u = Tq + c`.
 
-O sistema original
+Para `Ku=F`:
 
-`K u = F`
+`K_r = Tᵀ K T`
 
-é reduzido para
+`F_r = Tᵀ(F - Kc)`.
 
-`K_r = T^T K T`,
+Após resolver `q`, reconstrói-se `u`. Dependências cíclicas são rejeitadas.
 
-`F_r = T^T (F - K c)`.
+### Penalty
 
-Após a solução de `q`, os DOFs físicos são reconstruídos por `u = Tq + c`. Dependências cíclicas são rejeitadas explicitamente.
+Para `Cu=d`:
 
-### 7.2 Penalty
+`K_p = K + αCᵀC`
 
-Para uma equação de restrição
+`F_p = F + αCᵀd`.
 
-`C u = d`,
-
-o método penalty acrescenta
-
-`K_p = K + α C^T C`,
-
-`F_p = F + α C^T d`.
-
-O valor `α` pode ser informado; caso contrário é escalado a partir da diagonal da matriz.
-
-### 7.3 Multiplicadores de Lagrange
+### Multiplicadores de Lagrange
 
 O sistema aumentado é
 
-`[ K  C^T ] [u] = [F]`
+`[K Cᵀ; C 0] [u; λ] = [F; d]`.
 
-`[ C   0  ] [λ]   [d]`.
+A transformação é o método padrão; penalty e Lagrange ficam disponíveis como estratégias explícitas.
 
-O método preserva a imposição exata e retorna os multiplicadores separadamente.
+## Sistema dimensional
 
-## 8. Sistema dimensional
+`web/src/numerics/units.js` valida e converte comprimento, área, inércia, força, tensão, momento, força por comprimento, tempo, temperatura, velocidade e aceleração. Conversões entre dimensões incompatíveis são rejeitadas antes do solver.
 
-`web/src/numerics/units.js` introduz validação dimensional e conversão explícita para grandezas estruturais recorrentes: comprimento, área, inércia, força, tensão, momento, força por comprimento, tempo, temperatura, velocidade e aceleração.
+Exemplos:
 
-A conversão só é aceita quando os vetores dimensionais coincidem. Por exemplo:
-
-- `30 MPa = 30×10^6 Pa`;
+- `30 MPa = 30×10⁶ Pa`;
 - `12.5 kN·m = 12 500 N·m`;
 - `1 g = 9.80665 m/s²`.
 
-Uma tentativa de converter comprimento em força é rejeitada antes de alcançar o solver.
+## Newton e tolerâncias
 
-## 9. Newton e tolerâncias
+`newtonSolve()` implementa:
 
-`newtonSolve()` implementa três estratégias:
+- `full`: tangente atualizada a cada iteração;
+- `modified`: tangente reutilizada, com atualização periódica opcional;
+- `line-search`: Newton completo com redução controlada do passo.
 
-1. `full`: tangente atualizada a cada iteração;
-2. `modified`: tangente reutilizada, com atualização opcional periódica;
-3. `line-search`: Newton completo com redução de passo baseada na norma do resíduo.
-
-Para o estado `x_k`, resolve-se
+Em cada iteração:
 
 `K_t(x_k) Δx = -R(x_k)`
 
-seguido de
+`x_(k+1) = x_k + ηΔx`.
 
-`x_{k+1} = x_k + η Δx`,
+O critério combinado exige convergência de resíduo e incremento, com tolerâncias absolutas/relativas independentes e máximo de iterações explícito. Não convergência gera `NonlinearConvergenceError` com histórico.
 
-com `η=1` nos modos full/modified e `0<η<=1` no line-search.
+## Compatibilidade legada
 
-O critério combinado exige convergência de resíduo e incremento, com tolerâncias absolutas e relativas independentes e limite explícito de iterações. Falhas produzem `NonlinearConvergenceError` com histórico completo.
+`web/src/solver/matrix.js` mantém `zeros`, `solveLinear`, `mul`, `addSub` e `solveConstrained`. Internamente:
 
-## 10. Compatibilidade com os solvers existentes
-
-`web/src/solver/matrix.js` mantém as funções públicas históricas `zeros`, `solveLinear`, `mul`, `addSub` e `solveConstrained`.
-
-Entretanto:
-
-- `solveLinear()` é encaminhado ao solver direto pivotado do Numerical Core 2;
-- `solveConstrained()` transforma o `Map<dof,value>` legado em `ConstraintManager` e usa a transformação exata;
-- o formato histórico `{u,R,free,constrained}` é preservado;
+- `solveLinear()` usa o solver direto pivotado v0.32;
+- `solveConstrained()` converte `Map<dof,value>` em `ConstraintManager` e aplica transformação exata;
+- `{u,R,free,constrained}` é preservado;
 - `numericalDiagnostics` é acrescentado de forma aditiva.
 
-Assim, os solvers atuais recebem a nova fundação sem uma migração prematura para a Component/Element API da v0.33.
+Assim os kernels existentes recebem a nova fundação sem migração prematura para a API de elementos da v0.33.
 
-## 11. Benchmarks determinísticos
+## Benchmarks determinísticos
 
-`tests/numerical-core-v032-smoke.mjs` cobre:
+`tests/numerical-core-v032-smoke.mjs` verifica:
 
-- montagem CSR de matriz tridiagonal SPD;
-- solução direta de um sistema com solução conhecida `[1,2,3]`;
-- solução CG do mesmo sistema e verificação do resíduo;
+- CSR tridiagonal SPD e solução conhecida `[1,2,3]`;
+- solução direta e CG com resíduo;
 - matriz singular de posto 1 com erro tipado;
-- numeração genérica de DOFs;
-- `equalDOF` e deslocamentos prescritos por transformação exata;
+- sistema fortemente multiescala resolvível, marcado como `illConditioned` e não como singular;
+- DOF manager;
+- `equalDOF`, prescrições e transformação exata;
 - solução equivalente por Lagrange;
-- conversões dimensionais e rejeição de dimensões incompatíveis;
+- unidades e rejeição dimensional;
 - Newton para `x²-2=0`;
-- ponte de compatibilidade de `matrix.js`.
+- compatibilidade de `matrix.js`.
 
-## 12. Limites deliberados
+## Limites deliberados
 
-Ficam explicitamente fora da v0.32:
+Ficam fora da v0.32:
 
-- interface universal `Element -> residual/tangent/state/commit/rollback` — v0.33;
-- propriedades e fibras de seção — v0.34;
-- malha/superfície geral — v0.35;
-- novos elementos físicos — v0.36+;
-- modelos constitutivos novos — v0.37+;
-- novas regras normativas — v0.42–v0.43.
+- `Element -> DOFs + residual + tangent + state + commit/rollback` — v0.33;
+- Section Engine — v0.34;
+- Mesh & Surface Engine — v0.35;
+- elementos físicos avançados — v0.36+;
+- concreto armado não linear — v0.37+;
+- shells/contato avançado — v0.38+;
+- novas verificações normativas e combinações — v0.42–v0.43.
 
-Esse limite é parte do gate arquitetural e impede que a v0.32 se transforme em um solver monolítico.
+## Gate de saída
+
+A v0.32 só é encerrada quando `npm run check`, `npm test`, build Vite e regressão Playwright completa estiverem verdes no `develop`, com `tests/release-gate-v032-smoke.mjs` ativo e sem descoberta automática de testes.

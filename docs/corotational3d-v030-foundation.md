@@ -4,7 +4,7 @@
 
 A v0.30 implementa a primeira análise geometricamente não linear espacial do AstraStruct para elementos `frame3d`. O kernel permanece **experimental** na branch `develop`; a produção em `main` continua preservando os solvers 3D consolidados linear, modal/flambagem e P-Delta.
 
-O estágio atual já ultrapassou a fundação cinemática inicial: há equilíbrio global incremental, cargas de barra conservativas, peso próprio, ações térmicas, imperfeição modal sem tensões, força seguidora concentrada espacial, molas nodais lineares e montagem numérica da Jacobiana por elemento.
+O estágio atual já ultrapassou a fundação cinemática inicial: há equilíbrio global incremental, cargas de barra conservativas, peso próprio, ações térmicas, imperfeição modal sem tensões, força seguidora concentrada espacial, molas nodais lineares, recalques/deslocamentos prescritos e montagem numérica da Jacobiana por elemento.
 
 ## Cinemática co-rotacional
 
@@ -64,6 +64,28 @@ e sua contribuição na Jacobiana é exata e diagonal. Rigidezes negativas são 
 
 O editor legado de mecânica já permite `kx`, `ky` e `kr`; os campos espaciais adicionais podem ser preservados no modelo e serão expostos progressivamente na interface 3D dedicada.
 
+## Recalques e deslocamentos prescritos
+
+Recalques não são convertidos em forças equivalentes. O `Scenario Engine` primeiro combina os valores associados aos casos de ação e grava o movimento resultante nos seis DOFs de apoio `ux/uy/uz/rx/ry/rz`.
+
+No passo incremental `λ`, o solver impõe diretamente
+
+`uc(λ) = λ ūc`,
+
+onde `ūc` é o valor prescrito final do cenário. As correções de Newton nesses DOFs permanecem nulas,
+
+`Δuc = 0`,
+
+enquanto os DOFs livres são iterados normalmente até equilíbrio. Dessa forma, cargas mecânicas, ações térmicas, follower loads e movimentos de apoio podem avançar de forma proporcional no mesmo processo incremental.
+
+A reação final é recuperada por
+
+`R = Fint(u) - Fext(u)`
+
+nos DOFs prescritos. Modelos sem nenhum DOF livre também são admitidos: a análise simplesmente percorre a trajetória cinemática prescrita e recupera esforços internos e reações.
+
+A interface rejeita recalques aplicados a componentes que não estejam restritos no apoio do mesmo nó, evitando que um movimento prescrito seja silenciosamente descartado pelo Scenario Engine.
+
 ## Cargas conservativas de barra
 
 O pré-processador `corotational3dLoads.js` transforma ações conservativas na configuração de referência em vetores nodais equivalentes globais fixos:
@@ -119,6 +141,9 @@ Como esperado para uma ação não conservativa, `Keff` não precisa ser simétr
 - ações térmicas uniformes e gradientes, inclusive em combinações de carga;
 - imperfeição modal como referência sem tensões;
 - molas translacionais/rotacionais lineares e recuperação das forças de mola;
+- recalque axial imposto e comparação com `EA/L`;
+- escalonamento de recalque por combinação de casos;
+- solução de modelo totalmente prescrito, sem DOFs livres;
 - força follower sob rotação rígida finita;
 - limite de pequena carga follower;
 - não simetria da Jacobiana externa follower;
@@ -137,26 +162,25 @@ Como esperado para uma ação não conservativa, `Keff` não precisa ser simétr
 - ações térmicas uniformes e gradientes locais;
 - imperfeição modal 3D sem tensões;
 - molas nodais lineares globais `kx/ky/kz/krx/kry/krz` (`kr` como alias de `krz`);
+- recalques e deslocamentos/rotações prescritos nos seis DOFs de apoio;
 - follower concentrada na extremidade 2, `Px/Py/Pz` local;
-- apoios homogêneos com valores prescritos nulos;
-- controle incremental de carga;
+- controle incremental de carga/movimento prescrito;
 - Newton-Raphson com line search.
 
 ## Escopo ainda protegido
 
 - momentos seguidores e follower distribuída;
-- recalques/deslocamentos prescritos não nulos;
 - releases e ligações semirrígidas espaciais;
-- controle de deslocamento e Arc-Length 3D;
+- controle de deslocamento por DOF livre e Arc-Length 3D;
 - plasticidade material, rótulas e plasticidade distribuída 3D;
 - contato, flambagem local e dano/fadiga.
 
 ## Próxima sequência
 
 1. comparar a Jacobiana numérica elemento a elemento com uma tangente co-rotacional analítica/consistente e introduzir a versão analítica somente após equivalência de benchmarks;
-2. ampliar o editor espacial para os seis componentes das molas e os resultados de reação elástica;
+2. ampliar o editor espacial para os seis componentes das molas, recalques e resultados de reação elástica;
 3. adicionar reutilização/caching seguro de propriedades invariantes por elemento para reduzir custo por iteração;
 4. generalizar releases e ligações semirrígidas espaciais;
-5. implementar controle de deslocamento e Arc-Length 3D;
+5. implementar controle de deslocamento em DOF livre e Arc-Length 3D;
 6. posteriormente introduzir não linearidade material 3D e estabilidade pós-crítica mais completa;
 7. somente promover a v0.30 para `main` após benchmarks e regressões de produção permanecerem verdes.

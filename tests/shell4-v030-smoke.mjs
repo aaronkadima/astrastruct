@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { shell4Element, recoverShell4 } from '../web/src/solver/shell4.js';
+import { shell4Element, recoverShell4, recoverShell4At } from '../web/src/solver/shell4.js';
 
 const E=30e6,nu=.2,t=.20,a=4,b=3,area=a*b,nodes=[{id:'N1',x:0,y:0,z:0},{id:'N2',x:a,y:0,z:0},{id:'N3',x:a,y:b,z:0},{id:'N4',x:0,y:b,z:0}];
 const dot=(x,y)=>x.reduce((s,v,i)=>s+v*y[i],0),mv=(A,x)=>A.map(r=>dot(r,x)),quad=(x,A)=>dot(x,mv(A,x));
 const maxAbs=x=>Math.max(0,...x.map(Math.abs));
+const close=(a,b,tol=1e-10)=>assert.ok(Math.abs(a-b)<=tol,`${a} != ${b}`);
 
 // Geometry, symmetry and uniform pressure equivalent loads.
 {
@@ -26,6 +27,16 @@ const maxAbs=x=>Math.max(0,...x.map(Math.abs));
 // field cancels transverse shear at the element center, where shear is integrated.
 {
   const kappa=.001,e=shell4Element({nodes,E,nu,thickness:t,element:{id:'S1'}}),u=Array(24).fill(0);for(let i=0;i<4;i++){const x=nodes[i].x;u[6*i+2]=-.5*kappa*x*x;u[6*i+4]=kappa*x}const energy=.5*quad(u,e.kl),db=E*t**3/(12*(1-nu*nu)),expected=.5*db*kappa*kappa*area;assert.ok(Math.abs(energy-expected)/expected<1e-9,`bending energy ${energy} vs ${expected}`);const r=recoverShell4(e,u);assert.ok(Math.abs(r.curvature.kx-kappa)<1e-12);assert.ok(Math.abs(r.transverseShearStrain.gxz)<1e-12);
+}
+
+// Response recovery is available at the center, arbitrary natural coordinates
+// and the four 2x2 Gauss integration points without changing the legacy center API.
+{
+  const e=shell4Element({nodes,E,nu,thickness:t,element:{id:'SG'}}),u=Array(24).fill(0);
+  for(let i=0;i<4;i++){const {x,y}=nodes[i];u[6*i]=.0007*x+.0002*y;u[6*i+1]=-.0001*x+.0004*y;u[6*i+2]=-.00008*x*x-.00004*y*y;u[6*i+3]=.00008*y;u[6*i+4]=.00016*x}
+  const r=recoverShell4(e,u),center=recoverShell4At(e,u,0,0);assert.equal(r.gaussPoints.length,4);close(r.membraneResultants.Nx,center.membraneResultants.Nx);close(r.membraneResultants.Ny,center.membraneResultants.Ny);close(r.bendingMoments.Mx,center.bendingMoments.Mx);close(r.transverseShear.Qx,center.transverseShear.Qx);
+  const expectedSigns=[[-1,-1],[1,-1],[1,1],[-1,1]],g=1/Math.sqrt(3);r.gaussPoints.forEach((p,index)=>{close(p.naturalCoordinates.xi,expectedSigns[index][0]*g,1e-12);close(p.naturalCoordinates.eta,expectedSigns[index][1]*g,1e-12);assert.ok(Number.isFinite(p.detJ)&&p.detJ>0);for(const v of [p.membraneResultants.Nx,p.membraneResultants.Ny,p.membraneResultants.Nxy,p.bendingMoments.Mx,p.bendingMoments.My,p.bendingMoments.Mxy,p.transverseShear.Qx,p.transverseShear.Qy])assert.ok(Number.isFinite(v))});
+  assert.throws(()=>recoverShell4At(e,u,1.1,0),/\[-1, 1\]/);assert.throws(()=>recoverShell4At(e,u,0,-1.01),/\[-1, 1\]/);
 }
 
 // Pressure resultant follows the local shell normal after 3D transformation.

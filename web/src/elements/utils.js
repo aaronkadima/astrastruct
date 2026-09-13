@@ -4,6 +4,7 @@ export const transpose=A=>A[0].map((_,j)=>A.map(row=>row[j]));
 export const mm=(A,B)=>A.map(row=>B[0].map((_,j)=>row.reduce((s,v,k)=>s+v*B[k][j],0)));
 export const matVec=(A,x)=>A.map(row=>row.reduce((s,v,i)=>s+v*x[i],0));
 export const subtract=(a,b)=>a.map((v,i)=>v-b[i]);
+export const sub=(a,b)=>subtract(a,b);
 export const add=(a,b)=>a.map((v,i)=>v+b[i]);
 export const scale=(a,s)=>a.map(v=>v*s);
 export const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);

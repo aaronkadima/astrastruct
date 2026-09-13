@@ -2,7 +2,7 @@ export {};
 
 const ROOT='.inspector-panel';
 
-type InspectorEntity={panel:HTMLElement;id:string;type:string;isNode:boolean;is3d:boolean};
+type InspectorEntity={panel:HTMLElement;id:string;type:string;isNode:boolean;is3d:boolean;isShell:boolean};
 
 const nextFrame=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));
 function directText(label:Element){return [...label.childNodes].filter(n=>n.nodeType===Node.TEXT_NODE).map(n=>n.textContent||'').join(' ').replace(/\s+/g,' ').trim()}
@@ -19,8 +19,8 @@ function entity():InspectorEntity|null{
   const id=panel.querySelector<HTMLElement>('.inspector-title b')?.textContent?.trim()||'';
   const type=panel.querySelector<HTMLElement>('.inspector-title small')?.textContent?.trim()||'';
   if(!id||!type)return null;
-  const spatial=panel.classList.contains('spatial-inspector')||!!document.querySelector('.spatial3d-canvas');
-  return{panel,id,type,isNode:type.toLowerCase().startsWith('nó'),is3d:spatial};
+  const spatial=panel.classList.contains('spatial-inspector')||!!document.querySelector('.spatial3d-canvas'),isShell=type.toLowerCase().startsWith('shell4');
+  return{panel,id,type,isNode:type.toLowerCase().startsWith('nó'),is3d:spatial,isShell};
 }
 function supportValue2D(panel:HTMLElement){
   const ux=!!check(panel,'Ux')?.checked,uy=!!check(panel,'Uy')?.checked,rz=!!check(panel,'Rz')?.checked;
@@ -58,9 +58,10 @@ async function applyNode(host:HTMLElement,e:InspectorEntity){
   await applyFreshInspector();
 }
 async function applyElement(host:HTMLElement,e:InspectorEntity){
-  const name=host.querySelector<HTMLInputElement>('[data-context-name]'),material=host.querySelector<HTMLSelectElement>('[data-context-material]'),section=host.querySelector<HTMLSelectElement>('[data-context-section]'),qy=host.querySelector<HTMLInputElement>('[data-context-qy]'),qz=host.querySelector<HTMLInputElement>('[data-context-qz]');
-  let fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||e.panel;
-  if(name)await setField(field(fresh,'Nome'),name.value);fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||fresh;if(material)await setField(field(fresh,'Material'),material.value);fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||fresh;if(section)await setField(field(fresh,'Seção'),section.value);fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||fresh;if(qy)await setField(field(fresh,'qy [kN/m]'),qy.value);fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||fresh;if(e.is3d&&qz)await setField(field(fresh,'qz [kN/m]'),qz.value);
+  const name=host.querySelector<HTMLInputElement>('[data-context-name]'),material=host.querySelector<HTMLSelectElement>('[data-context-material]');let fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||e.panel;
+  if(name)await setField(field(fresh,'Nome'),name.value);fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||fresh;if(material)await setField(field(fresh,'Material'),material.value);fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||fresh;
+  if(e.isShell){const thickness=host.querySelector<HTMLInputElement>('[data-context-thickness]'),pressure=host.querySelector<HTMLInputElement>('[data-context-pressure]');if(thickness)await setField(field(fresh,'Espessura t [m]'),thickness.value);fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||fresh;if(pressure)await setField(field(fresh,'p local +z [kN/m²]'),pressure.value);await applyFreshInspector();return}
+  const section=host.querySelector<HTMLSelectElement>('[data-context-section]'),qy=host.querySelector<HTMLInputElement>('[data-context-qy]'),qz=host.querySelector<HTMLInputElement>('[data-context-qz]');if(section)await setField(field(fresh,'Seção'),section.value);fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||fresh;if(qy)await setField(field(fresh,'qy [kN/m]'),qy.value);fresh=document.querySelector<HTMLElement>(`${ROOT} .react-inspector`)||fresh;if(e.is3d&&qz)await setField(field(fresh,'qz [kN/m]'),qz.value);
   await applyFreshInspector();
 }
 function signature(e:InspectorEntity|null){
@@ -69,16 +70,20 @@ function signature(e:InspectorEntity|null){
     const support=e.is3d?supportValue3D(e.panel):supportValue2D(e.panel);
     return`${e.is3d?'node3d':'node'}:${e.id}:${field(e.panel,'X [m]')?.value}:${field(e.panel,'Y [m]')?.value}:${e.is3d?field(e.panel,'Z [m]')?.value:''}:${support}:${field(e.panel,'Fx [kN]')?.value}:${field(e.panel,'Fy [kN]')?.value}:${e.is3d?field(e.panel,'Fz [kN]')?.value:''}`;
   }
+  if(e.isShell)return`shell4:${e.id}:${field(e.panel,'Nome')?.value}:${field(e.panel,'Material')?.value}:${field(e.panel,'Espessura t [m]')?.value}:${field(e.panel,'p local +z [kN/m²]')?.value}`;
   return`${e.is3d?'element3d':'element'}:${e.id}:${field(e.panel,'Nome')?.value}:${field(e.panel,'Material')?.value}:${field(e.panel,'Seção')?.value}:${field(e.panel,'qy [kN/m]')?.value}:${e.is3d?field(e.panel,'qz [kN/m]')?.value:''}`;
 }
 function render(){
   const host=ensureHost();if(!host)return;const e=entity(),sig=signature(e);if(host.dataset.signature===sig)return;host.dataset.signature=sig;
-  if(!e){host.hidden=true;host.innerHTML='';return}host.hidden=false;host.dataset.contextKind=e.isNode?'node':'element';host.dataset.contextId=e.id;host.dataset.contextDimension=e.is3d?'3d':'2d';
+  if(!e){host.hidden=true;host.innerHTML='';return}host.hidden=false;host.dataset.contextKind=e.isNode?'node':e.isShell?'shell':'element';host.dataset.contextId=e.id;host.dataset.contextDimension=e.is3d?'3d':'2d';
   if(e.isNode){
     const x=field(e.panel,'X [m]')?.value??'',y=field(e.panel,'Y [m]')?.value??'',z=field(e.panel,'Z [m]')?.value??'',fx=field(e.panel,'Fx [kN]')?.value??0,fy=field(e.panel,'Fy [kN]')?.value??0,fz=field(e.panel,'Fz [kN]')?.value??0,support=e.is3d?supportValue3D(e.panel):supportValue2D(e.panel);
     const options=e.is3d?'<option value="free">Livre</option><option value="pinned3d">Articulado 3D</option><option value="fixed3d">Engastado 3D</option><option value="custom">Personalizado</option>':'<option value="free">Livre</option><option value="roller-y">Rolete · Uy</option><option value="pinned">Articulado</option><option value="fixed">Engastado</option><option value="custom">Personalizado</option>';
     host.innerHTML=`<span class="context-badge"><b>${esc(e.id)}</b><small>${e.is3d?'Nó 3D':'Nó'}</small></span>${numberField('x','X [m]',x)}${numberField('y','Y [m]',y)}${e.is3d?numberField('z','Z [m]',z):''}<label class="context-field context-support"><span>Apoio</span><select data-context-support>${options}</select></label>${numberField('fx','Fx',fx,true)}${numberField('fy','Fy',fy,true)}${e.is3d?numberField('fz','Fz',fz,true):''}<button type="button" class="context-apply" data-testid="context-apply">Aplicar</button>`;
     (host.querySelector('[data-context-support]') as HTMLSelectElement).value=support;
+  }else if(e.isShell){
+    const name=field(e.panel,'Nome') as HTMLInputElement|null,material=field(e.panel,'Material') as HTMLSelectElement|null,thickness=field(e.panel,'Espessura t [m]') as HTMLInputElement|null,pressure=field(e.panel,'p local +z [kN/m²]') as HTMLInputElement|null;
+    host.innerHTML=`<span class="context-badge"><b>${esc(e.id)}</b><small>Shell4</small></span><label class="context-field context-secondary"><span>Nome</span><input data-context-name type="text" value="${esc(name?.value||e.id)}"></label><label class="context-field"><span>Material</span><select data-context-material>${selectOptions(material)}</select></label>${numberField('thickness','t [m]',thickness?.value??.18)}${numberField('pressure','p [kN/m²]',pressure?.value??0,true)}<button type="button" class="context-apply" data-testid="context-apply">Aplicar</button>`;
   }else{
     const name=field(e.panel,'Nome') as HTMLInputElement|null,material=field(e.panel,'Material') as HTMLSelectElement|null,section=field(e.panel,'Seção') as HTMLSelectElement|null,qy=field(e.panel,'qy [kN/m]') as HTMLInputElement|null,qz=field(e.panel,'qz [kN/m]') as HTMLInputElement|null;
     host.innerHTML=`<span class="context-badge"><b>${esc(e.id)}</b><small>${esc(e.type)}</small></span><label class="context-field context-secondary"><span>Nome</span><input data-context-name type="text" value="${esc(name?.value||e.id)}"></label><label class="context-field"><span>Material</span><select data-context-material>${selectOptions(material)}</select></label><label class="context-field"><span>Seção</span><select data-context-section>${selectOptions(section)}</select></label>${qy?numberField('qy','qy',qy.value,true):''}${e.is3d&&qz?numberField('qz','qz',qz.value,true):''}<button type="button" class="context-apply" data-testid="context-apply">Aplicar</button>`;

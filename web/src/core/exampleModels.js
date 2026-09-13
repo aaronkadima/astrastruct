@@ -8,17 +8,19 @@ const load3d=(id,caseId,nodeId,{fx=0,fy=0,fz=0,mx=0,my=0,mz=0}={})=>({id,caseId,
 const storeyLevels=(count,height)=>Array.from({length:count+1},(_,k)=>({id:`L${k}`,name:k===0?'Base':`Pavimento ${k}`,elevation:k*height,index:k}));
 function ensureSections(p,sections){for(const s of sections)if(!p.sections.some(x=>x.id===s.id))p.sections.push(s)}
 function frame(id,n1,n2,{materialId='steel355',sectionId='steel_space_demo',label=id,orientation}={}){return{id,type:'frame3d',n1,n2,materialId,sectionId,label,...(orientation?{orientation}:{})}}
+function slabPanel(id,nodeIds,{materialId='concrete30',thickness=.15,label=id,levelId=null}={}){return{id,type:'shell4',nodeIds:[...nodeIds],n1:nodeIds[0],n2:nodeIds[1],n3:nodeIds[2],n4:nodeIds[3],materialId,thickness,label,role:'slab',levelId,visualCategory:'slab-panel'}}
 
-export function createGridBuilding3D({name='Edifício paramétrico 3D',xSpans=[5,5,5],ySpans=[4,4],storeys=5,storeyHeight=3,floorLoadPerNode=-18}={}){
-  const xs=sumSpans(positiveList(xSpans,[5,5,5])),ys=sumSpans(positiveList(ySpans,[4,4])),nStoreys=Math.max(1,Math.min(30,Math.round(Number(storeys)||5))),h=Math.max(.5,Number(storeyHeight)||3);
+export function createGridBuilding3D({name='Edifício paramétrico 3D',xSpans=[5,5,5],ySpans=[4,4],storeys=5,storeyHeight=3,floorLoadPerNode=-18,includeSlabs=true,slabThickness=.15}={}){
+  const xs=sumSpans(positiveList(xSpans,[5,5,5])),ys=sumSpans(positiveList(ySpans,[4,4])),nStoreys=Math.max(1,Math.min(30,Math.round(Number(storeys)||5))),h=Math.max(.5,Number(storeyHeight)||3),tSlab=Math.max(.06,Math.min(.60,Number(slabThickness)||.15));
   const p=emptyProject();p.name=name;p.levels=storeyLevels(nStoreys,h);
   ensureSections(p,[
     {id:'rc3d_col_demo',name:'RC 40×60 cm · demonstrativa 3D',family:'rect3d',b:.40,h:.60,A:.24,Iy:.0072,Iz:.0032,J:.0040,I:.0072},
-    {id:'rc3d_beam_demo',name:'RC 30×60 cm · demonstrativa 3D',family:'rect3d',b:.30,h:.60,A:.18,Iy:.0054,Iz:.00135,J:.0016,I:.0054}
+    {id:'rc3d_beam_demo',name:'RC 30×60 cm · demonstrativa 3D',family:'rect3d',b:.30,h:.60,A:.18,Iy:.0054,Iz:.00135,J:.0016,I:.0054},
+    {id:'rc3d_slab_demo',name:'RC laje maciça · demonstrativa 3D',family:'slab',thickness:tSlab,t:tSlab}
   ]);
   const nodeId=(ix,iy,k)=>`N_${ix}_${iy}_${k}`;p.nodes=[];p.elements=[];p.supports=[];p.loads=[];
   for(let k=0;k<=nStoreys;k++)for(let iy=0;iy<ys.length;iy++)for(let ix=0;ix<xs.length;ix++)p.nodes.push({id:nodeId(ix,iy,k),x:xs[ix],y:ys[iy],z:k*h,levelId:`L${k}`});
-  let eid=1;
+  let eid=1,sid=1;
   for(let iy=0;iy<ys.length;iy++)for(let ix=0;ix<xs.length;ix++){
     p.supports.push(fixed3d(nodeId(ix,iy,0)));
     for(let k=0;k<nStoreys;k++)p.elements.push(frame(`C${eid++}`,nodeId(ix,iy,k),nodeId(ix,iy,k+1),{materialId:'concrete30',sectionId:'rc3d_col_demo',label:`Pilar ${ix+1}-${iy+1} · P${k+1}`}));
@@ -26,10 +28,12 @@ export function createGridBuilding3D({name='Edifício paramétrico 3D',xSpans=[5
   for(let k=1;k<=nStoreys;k++){
     for(let iy=0;iy<ys.length;iy++)for(let ix=0;ix<xs.length-1;ix++)p.elements.push(frame(`B${eid++}`,nodeId(ix,iy,k),nodeId(ix+1,iy,k),{materialId:'concrete30',sectionId:'rc3d_beam_demo',label:`Viga X · P${k}`}));
     for(let ix=0;ix<xs.length;ix++)for(let iy=0;iy<ys.length-1;iy++)p.elements.push(frame(`B${eid++}`,nodeId(ix,iy,k),nodeId(ix,iy+1,k),{materialId:'concrete30',sectionId:'rc3d_beam_demo',label:`Viga Y · P${k}`,orientation:{up:[0,0,1]}}));
+    if(includeSlabs)for(let iy=0;iy<ys.length-1;iy++)for(let ix=0;ix<xs.length-1;ix++)p.elements.push(slabPanel(`S${sid++}`,[nodeId(ix,iy,k),nodeId(ix+1,iy,k),nodeId(ix+1,iy+1,k),nodeId(ix,iy+1,k)],{thickness:tSlab,levelId:`L${k}`,label:`Laje ${ix+1}-${iy+1} · P${k}`}));
     if(Math.abs(Number(floorLoadPerNode)||0)>EPS)for(let iy=0;iy<ys.length;iy++)for(let ix=0;ix<xs.length;ix++)p.loads.push(load3d(`G_${ix}_${iy}_${k}`,'LC1',nodeId(ix,iy,k),{fz:Number(floorLoadPerNode)}));
   }
+  const slabCount=includeSlabs?(xs.length-1)*(ys.length-1)*nStoreys:0;
   p.loadCases=[{id:'LC1',name:'Gravidade demonstrativa',type:'permanent'}];p.loadCombinations=[];p.settings.analysisType='linear';p.settings.activeLoadCaseId='LC1';p.settings.analysisScenarioId='LC1';
-  p.meta={...(p.meta||{}),exampleKind:'building-grid',storeys:nStoreys,storeyHeight:h,exampleNote:'Modelo demonstrativo. Seções e ações devem ser verificadas pelo projetista.'};return normalizeProject(p);
+  p.meta={...(p.meta||{}),exampleKind:'building-grid',storeys:nStoreys,storeyHeight:h,slabPanels:slabCount,slabThickness:tSlab,slabAnalysis:'shell4',floorLoadRepresentation:'nodal-compatible',exampleNote:'Modelo demonstrativo com vigas, pilares e lajes shell4. A carga de pavimento permanece nodal nesta revisão para compatibilidade; seções e ações devem ser verificadas pelo projetista.'};return normalizeProject(p);
 }
 
 export function createPlanBuilding3D({name='Edifício por traçado de planta',planNodes=[],planEdges=[],storeys=3,storeyHeight=3,floorLoadPerNode=-12}={}){
@@ -41,10 +45,10 @@ export function createPlanBuilding3D({name='Edifício por traçado de planta',pl
   for(let k=0;k<=nStoreys;k++)for(const n of cleanNodes)p.nodes.push({id:nid(n.id,k),x:n.x,y:n.y,z:k*h,levelId:`L${k}`});
   for(const n of cleanNodes){p.supports.push(fixed3d(nid(n.id,0)));for(let k=0;k<nStoreys;k++)p.elements.push(frame(`C${eid++}`,nid(n.id,k),nid(n.id,k+1),{materialId:'concrete30',sectionId:'rc3d_col_demo',label:`Pilar ${n.id} · P${k+1}`}))}
   for(let k=1;k<=nStoreys;k++){for(const e of edges)p.elements.push(frame(`B${eid++}`,nid(e.n1,k),nid(e.n2,k),{materialId:'concrete30',sectionId:'rc3d_beam_demo',label:`${e.id} · P${k}`}));if(Math.abs(Number(floorLoadPerNode)||0)>EPS)for(const n of cleanNodes)p.loads.push(load3d(`G_${n.id}_${k}`,'LC1',nid(n.id,k),{fz:Number(floorLoadPerNode)}))}
-  p.loadCases=[{id:'LC1',name:'Gravidade demonstrativa',type:'permanent'}];p.loadCombinations=[];p.settings.analysisType='linear';p.settings.activeLoadCaseId='LC1';p.settings.analysisScenarioId='LC1';p.meta={...(p.meta||{}),exampleKind:'building-plan',storeys:nStoreys,storeyHeight:h,plan:{nodes:cleanNodes,edges},exampleNote:'Gerado a partir de traçado 2D extrudado por pavimentos.'};return normalizeProject(p);
+  p.loadCases=[{id:'LC1',name:'Gravidade demonstrativa',type:'permanent'}];p.loadCombinations=[];p.settings.analysisType='linear';p.settings.analysisScenarioId='LC1';p.settings.activeLoadCaseId='LC1';p.meta={...(p.meta||{}),exampleKind:'building-plan',storeys:nStoreys,storeyHeight:h,plan:{nodes:cleanNodes,edges},exampleNote:'Gerado a partir de traçado 2D extrudado por pavimentos.'};return normalizeProject(p);
 }
 
-export function demoFiveStoreyBuilding3D(){return createGridBuilding3D({name:'Exemplo · edifício RC de 5 pavimentos',xSpans:[5,5,5],ySpans:[4,4],storeys:5,storeyHeight:3,floorLoadPerNode:-20})}
+export function demoFiveStoreyBuilding3D(){return createGridBuilding3D({name:'Exemplo · edifício RC de 5 pavimentos',xSpans:[5,5,5],ySpans:[4,4],storeys:5,storeyHeight:3,floorLoadPerNode:-20,includeSlabs:true,slabThickness:.15})}
 
 export function demoSteelWarehouse3D(){
   const p=emptyProject();p.name='Exemplo · galpão metálico 3D';ensureSections(p,[{id:'steel3d_portal_demo',name:'Aço · pórtico de galpão demonstrativo',family:'steel3d',A:.018,Iy:.00075,Iz:.00115,J:.00008,I:.00115},{id:'steel3d_tie_demo',name:'Aço · travamento demonstrativo',family:'steel3d',A:.008,Iy:.00008,Iz:.00008,J:.00002,I:.00008}]);

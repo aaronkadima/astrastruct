@@ -7,6 +7,7 @@ const midpoint=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2,z:(a.z+b.z)/2});
 const centroid=points=>({x:points.reduce((s,p)=>s+p.x,0)/points.length,y:points.reduce((s,p)=>s+p.y,0)/points.length,z:points.reduce((s,p)=>s+p.z,0)/points.length});
 function safe(value){return String(value).replace(/[^a-zA-Z0-9_.-]+/g,'_')}
 function uniqueId(base,used){let id=String(base),i=2;while(used.has(id))id=`${base}_${i++}`;used.add(id);return id}
+function commonGroup(a,b){return a?.group!=null&&b?.group!=null&&String(a.group)===String(b.group)?String(a.group):null}
 
 function selectedCellsForScope(mesh,topology,cellIds,scope){
   const allIds=new Set(mesh.cells.map(cell=>cell.id));
@@ -38,7 +39,7 @@ export function refineSurfaceMeshConforming(mesh,{cellIds=null,scope='component'
   const selected=selectedCellsForScope(normalized,topology,cellIds,scope),nodeMap=meshNodeMap(normalized),nodes=normalized.nodes.map(clone),usedNodeIds=new Set(nodes.map(node=>node.id)),usedCellIds=new Set(normalized.cells.map(cell=>cell.id)),midpointByEdge=new Map();let createdEdgeNodes=0,createdCellNodes=0;
   const edgeMidpoint=(aId,bId)=>{
     const key=edgeKey(aId,bId);if(midpointByEdge.has(key))return midpointByEdge.get(key);const a=nodeMap.get(String(aId)),b=nodeMap.get(String(bId));if(!a||!b)throw new Error(`SurfaceRefinement: aresta ${key} referencia nó ausente.`);
-    const id=uniqueId(`${nodePrefix}_${safe(aId)}_${safe(bId)}`,usedNodeIds),node={id,...midpoint(a,b),meta:{generatedBy:'surface-refinement',edgeNodeIds:[String(aId),String(bId)]}};nodes.push(node);nodeMap.set(id,node);midpointByEdge.set(key,id);createdEdgeNodes++;return id;
+    const group=commonGroup(a,b),id=uniqueId(`${nodePrefix}_${safe(aId)}_${safe(bId)}`,usedNodeIds),node={id,...midpoint(a,b),...(group!=null?{group}:{}),meta:{generatedBy:'surface-refinement',edgeNodeIds:[String(aId),String(bId)]}};nodes.push(node);nodeMap.set(id,node);midpointByEdge.set(key,id);createdEdgeNodes++;return id;
   };
   const children=[],kept=[];
   for(const cell of normalized.cells){
@@ -49,7 +50,7 @@ export function refineSurfaceMeshConforming(mesh,{cellIds=null,scope='component'
       defs.forEach((ids,i)=>children.push({id:uniqueId(`${cell.id}_${childSuffix}${i+1}`,usedCellIds),type:'tri3',nodeIds:ids,...(cell.group!=null?{group:cell.group}:{}),sourceElementId,meta:{...baseMeta,childIndex:i}}));
       continue;
     }
-    const [a,b,c,d]=cell.nodeIds,mab=edgeMidpoint(a,b),mbc=edgeMidpoint(b,c),mcd=edgeMidpoint(c,d),mda=edgeMidpoint(d,a),centerId=uniqueId(`${nodePrefix}_${safe(cell.id)}_C`,usedNodeIds),centerNode={id:centerId,...centroid(cell.nodeIds.map(id=>nodeMap.get(String(id)))),meta:{generatedBy:'surface-refinement',parentCellId:cell.id}};nodes.push(centerNode);nodeMap.set(centerId,centerNode);createdCellNodes++;
+    const [a,b,c,d]=cell.nodeIds,mab=edgeMidpoint(a,b),mbc=edgeMidpoint(b,c),mcd=edgeMidpoint(c,d),mda=edgeMidpoint(d,a),centerId=uniqueId(`${nodePrefix}_${safe(cell.id)}_C`,usedNodeIds),centerNode={id:centerId,...centroid(cell.nodeIds.map(id=>nodeMap.get(String(id)))),...(cell.group!=null?{group:cell.group}:{}),meta:{generatedBy:'surface-refinement',parentCellId:cell.id}};nodes.push(centerNode);nodeMap.set(centerId,centerNode);createdCellNodes++;
     const defs=[[a,mab,centerId,mda],[mab,b,mbc,centerId],[centerId,mbc,c,mcd],[mda,centerId,mcd,d]];
     defs.forEach((ids,i)=>children.push({id:uniqueId(`${cell.id}_${childSuffix}${i+1}`,usedCellIds),type:'quad4',nodeIds:ids,...(cell.group!=null?{group:cell.group}:{}),sourceElementId,meta:{...baseMeta,childIndex:i}}));
   }

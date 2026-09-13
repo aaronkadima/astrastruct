@@ -21,6 +21,7 @@ import './workspaceChrome';
 import './contextToolbar';
 import './modelLabBootstrap';
 import './dxfPlanBootstrap';
+import './levelsBootstrap';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('AstraStruct: elemento #root não encontrado.');

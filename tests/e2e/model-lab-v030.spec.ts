@@ -1,5 +1,48 @@
 import {test,expect} from '@playwright/test';
 
+const dxfSample=`0
+SECTION
+2
+HEADER
+9
+$INSUNITS
+70
+4
+0
+ENDSEC
+0
+SECTION
+2
+ENTITIES
+0
+LWPOLYLINE
+8
+ESTRUTURA
+90
+4
+70
+1
+10
+0
+20
+0
+10
+5000
+20
+0
+10
+5000
+20
+4000
+10
+0
+20
+4000
+0
+ENDSEC
+0
+EOF`;
+
 test.describe('v0.30 Lab & Modelos',()=>{
   test('opens examples and isolated-element Lab',async({page},testInfo)=>{
     test.skip(testInfo.project.name!=='desktop-chromium','feature-shell interaction test');
@@ -20,5 +63,16 @@ test.describe('v0.30 Lab & Modelos',()=>{
     test.skip(testInfo.project.name!=='desktop-chromium','feature-shell interaction test');
     await page.goto('./');await page.getByTestId('model-lab-launch').click();const overlay=page.getByTestId('model-lab-overlay');await overlay.getByRole('button',{name:'Lançar edifício'}).click();await overlay.getByRole('button',{name:'Desenhar planta'}).click();await overlay.getByRole('button',{name:'Retângulo 10×8 m'}).click();await overlay.locator('[data-p-storeys]').fill('2');await page.getByTestId('generate-sketch-building').click();
     await expect(page.getByTestId('spatial-canvas-3d')).toBeVisible();const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('astrastruct.project')||'{}'));expect(saved.meta.exampleKind).toBe('building-plan');expect(saved.meta.plan.nodes).toHaveLength(4);expect(saved.meta.plan.edges).toHaveLength(4);expect(saved.nodes).toHaveLength(12);
+  });
+
+  test('imports DXF layers, converts millimetres and extrudes a building',async({page},testInfo)=>{
+    test.skip(testInfo.project.name!=='desktop-chromium','DXF import interaction test');
+    await page.goto('./');await page.getByTestId('model-lab-launch').click();const overlay=page.getByTestId('model-lab-overlay');await overlay.getByRole('button',{name:'Lançar edifício'}).click();
+    const dxfMode=page.getByTestId('dxf-import-mode');await expect(dxfMode).toBeVisible();await dxfMode.click();
+    await page.getByTestId('dxf-plan-file').setInputFiles({name:'estrutura.dxf',mimeType:'text/plain',buffer:Buffer.from(dxfSample)});
+    await expect(overlay.getByText(/4 nós · 4 linhas/)).toBeVisible();await expect(overlay.getByText(/DXF: mm → metros/)).toBeVisible();
+    await overlay.locator('[data-dxf-storeys]').fill('2');await overlay.locator('[data-dxf-name]').fill('E2E DXF 2 pavimentos');await page.getByTestId('generate-dxf-building').click();
+    await expect(page.getByTestId('spatial-canvas-3d')).toBeVisible();const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('astrastruct.project')||'{}'));
+    expect(saved.name).toBe('E2E DXF 2 pavimentos');expect(saved.meta.exampleKind).toBe('building-plan');expect(saved.meta.dxfImport.fileName).toBe('estrutura.dxf');expect(saved.meta.dxfImport.unitsCode).toBe(4);expect(saved.meta.dxfImport.layers).toEqual(['ESTRUTURA']);expect(saved.meta.plan.nodes).toHaveLength(4);expect(saved.nodes).toHaveLength(12);
   });
 });

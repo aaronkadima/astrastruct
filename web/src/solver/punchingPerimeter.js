@@ -5,7 +5,7 @@ function solve3(A,b){
   const M=A.map((r,i)=>[...r,b[i]]),scale=Math.max(EPS,...A.flat().map(v=>Math.abs(v)));
   for(let k=0;k<3;k++){
     let p=k;for(let i=k+1;i<3;i++)if(Math.abs(M[i][k])>Math.abs(M[p][k]))p=i;
-    if(Math.abs(M[p][k])<=scale*1e-13)throw new Error('Punção: perímetro degenerado ou sem rigidez geométrica para distribuir momentos.');
+    if(Math.abs(M[p][k])<=scale*1e-13)throw new Error('Punção: perímetro degenerado ou sem rigidez geométrica para distribuir momentos. Verifique a geometria do perímetro.');
     if(p!==k)[M[p],M[k]]=[M[k],M[p]];
     const d=M[k][k];for(let j=k;j<4;j++)M[k][j]/=d;
     for(let i=0;i<3;i++){if(i===k)continue;const f=M[i][k];for(let j=k;j<4;j++)M[i][j]-=f*M[k][j]}
@@ -50,7 +50,7 @@ function samplePerimeter(points,perEdge=40){
  * q(s)=a+b*x+c*y [force/length]. For a vertical shear resultant V, the
  * sign convention is Mx=∮y q ds and My=-∮x q ds. Stress tau=q/d.
  */
-export function solvePunchingPerimeterDemand({perimeter,effectiveDepth=.20,V=500,Mx=0,My=0,samplesPerEdge=40}={}){
+export function solvePunchingPerimeterDemand({perimeter=[],effectiveDepth=.20,V=500,Mx=0,My=0,samplesPerEdge=40}={}){
   const pts=normalizePerimeter(perimeter),d=Math.max(EPS,finite(effectiveDepth,.20)),ints=perimeterLineIntegrals(pts),G=[[ints.I0,ints.Ix,ints.Iy],[ints.Ix,ints.Ixx,ints.Ixy],[ints.Iy,ints.Ixy,ints.Iyy]],target=[finite(V),-finite(My),finite(Mx)],coeff=solve3(G,target),[a,b,c]=coeff,samples=samplePerimeter(pts,samplesPerEdge).map(p=>{const q=a+b*p.x+c*p.y,tau=q/d;return{...p,q,tau}});
   const min=samples.reduce((m,p)=>p.tau<m.tau?p:m,samples[0]),max=samples.reduce((m,p)=>p.tau>m.tau?p:m,samples[0]),maxAbs=samples.reduce((m,p)=>Math.abs(p.tau)>Math.abs(m.tau)?p:m,samples[0]),average=finite(V)/(ints.I0*d),amplification=Math.abs(average)>EPS?Math.abs(maxAbs.tau/average):null;
   const recovered={V:a*ints.I0+b*ints.Ix+c*ints.Iy,My:-(a*ints.Ix+b*ints.Ixx+c*ints.Ixy),Mx:a*ints.Iy+b*ints.Ixy+c*ints.Iyy},residual={V:finite(V)-recovered.V,Mx:finite(Mx)-recovered.Mx,My:finite(My)-recovered.My},residualNorm=Math.hypot(residual.V,residual.Mx/Math.max(d,1),residual.My/Math.max(d,1));

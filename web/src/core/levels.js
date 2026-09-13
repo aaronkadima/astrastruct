@@ -2,6 +2,7 @@ const EPS=1e-9;
 const clone=v=>JSON.parse(JSON.stringify(v));
 const finite=(v,f=0)=>Number.isFinite(Number(v))?Number(v):f;
 const zOf=n=>finite(n?.z,0);
+const elementNodeIds=e=>e?.type==='shell4'?(Array.isArray(e.nodeIds)&&e.nodeIds.length===4?e.nodeIds:[e.n1,e.n2,e.n3,e.n4]).filter(Boolean):[e?.n1,e?.n2].filter(Boolean);
 
 export function deriveLevels(project,{tolerance=1e-6}={}){
   const tol=Math.max(1e-9,Math.abs(finite(tolerance,1e-6))),declared=Array.isArray(project?.levels)?project.levels:[];
@@ -24,12 +25,12 @@ export function duplicateLevel(project,{sourceLevelId=null,targetElevation=NaN,t
   const targetZ=finite(targetElevation,NaN);if(!Number.isFinite(targetZ))throw new Error('Elevação do novo pavimento deve ser numérica.');const tol=Math.max(1e-8,Math.abs(finite(tolerance,1e-5)));if(levels.some(l=>Math.abs(l.elevation-targetZ)<=tol))throw new Error('Já existe um nível nessa elevação.');
   const sourceNodes=levelNodes(p,source,tol);if(!sourceNodes.length)throw new Error('Pavimento de origem não possui nós.');const sourceIds=new Set(sourceNodes.map(n=>n.id)),usedNodes=new Set((p.nodes||[]).map(n=>n.id)),usedElems=new Set((p.elements||[]).map(e=>e.id)),targetId=uniqueId(`L${levels.length}`,new Set(levels.map(l=>l.id))),target={id:targetId,name:targetName||`Pavimento ${levels.length}`,elevation:targetZ,index:levels.length},nodeMap=new Map();
   for(const n of sourceNodes){const id=uniqueId(`${n.id}_${targetId}`,usedNodes);nodeMap.set(n.id,id);p.nodes.push({...clone(n),id,z:targetZ,levelId:targetId})}
-  const horizontal=(p.elements||[]).filter(e=>sourceIds.has(e.n1)&&sourceIds.has(e.n2));const elementMap=new Map();for(const e of horizontal){const id=uniqueId(`${e.id}_${targetId}`,usedElems);elementMap.set(e.id,id);p.elements.push({...clone(e),id,n1:nodeMap.get(e.n1),n2:nodeMap.get(e.n2),label:`${e.label||e.id} · ${target.name}`})}
+  const horizontal=(p.elements||[]).filter(e=>{const ids=elementNodeIds(e);return ids.length>=2&&ids.every(id=>sourceIds.has(id))});const elementMap=new Map();for(const e of horizontal){const id=uniqueId(`${e.id}_${targetId}`,usedElems),ids=elementNodeIds(e),mapped=ids.map(nid=>nodeMap.get(nid));elementMap.set(e.id,id);if(e.type==='shell4'){p.elements.push({...clone(e),id,nodeIds:mapped,n1:mapped[0],n2:mapped[1],n3:mapped[2],n4:mapped[3],levelId:targetId,label:`${e.label||e.id} · ${target.name}`})}else p.elements.push({...clone(e),id,n1:mapped[0],n2:mapped[1],levelId:targetId,label:`${e.label||e.id} · ${target.name}`})}
   if(connectVertical){const tpl=verticalTemplate(p);if(tpl){for(const n of sourceNodes){const id=uniqueId(`C_${n.id}_${targetId}`,usedElems);p.elements.push({...clone(tpl),id,n1:n.id,n2:nodeMap.get(n.id),label:`Pilar ${source.name} → ${target.name}`,releases:{rx1:false,ry1:false,rz1:false,rx2:false,ry2:false,rz2:false},rotationalSprings:{rx1:null,ry1:null,rz1:null,rx2:null,ry2:null,rz2:null}})}}}
   if(copyLoads){const newLoads=[];for(const l of p.loads||[]){if(!sourceIds.has(l.nodeId))continue;newLoads.push({...clone(l),id:uniqueId(`${l.id||'L'}_${targetId}`,new Set((p.loads||[]).concat(newLoads).map(x=>x.id))),nodeId:nodeMap.get(l.nodeId)})}p.loads.push(...newLoads);const newElementLoads=[];for(const l of p.elementLoads||[]){if(!elementMap.has(l.elementId))continue;newElementLoads.push({...clone(l),id:uniqueId(`${l.id||'EL'}_${targetId}`,new Set((p.elementLoads||[]).concat(newElementLoads).map(x=>x.id))),elementId:elementMap.get(l.elementId)})}p.elementLoads.push(...newElementLoads)}
   p.levels=[...levels,target].sort((a,b)=>a.elevation-b.elevation).map((l,index)=>({...l,index}));p.meta={...(p.meta||{}),levelsUpdatedAt:new Date().toISOString()};return assignLevels(p,{tolerance});
 }
 
 export function levelSummary(project,{tolerance=1e-5}={}){
-  const p=assignLevels(project,{tolerance}),levels=deriveLevels(p,{tolerance});return levels.map(l=>{const nodes=(p.nodes||[]).filter(n=>n.levelId===l.id),ids=new Set(nodes.map(n=>n.id)),elements=(p.elements||[]).filter(e=>ids.has(e.n1)&&ids.has(e.n2));return{...l,nodeCount:nodes.length,horizontalElementCount:elements.length}});
+  const p=assignLevels(project,{tolerance}),levels=deriveLevels(p,{tolerance});return levels.map(l=>{const nodes=(p.nodes||[]).filter(n=>n.levelId===l.id),ids=new Set(nodes.map(n=>n.id)),elements=(p.elements||[]).filter(e=>{const ns=elementNodeIds(e);return ns.length>=2&&ns.every(id=>ids.has(id))});return{...l,nodeCount:nodes.length,horizontalElementCount:elements.length}});
 }

@@ -6,7 +6,7 @@ const zOf=n=>finite(n?.z,0);
 export function deriveLevels(project,{tolerance=1e-6}={}){
   const tol=Math.max(1e-9,Math.abs(finite(tolerance,1e-6))),declared=Array.isArray(project?.levels)?project.levels:[];
   if(declared.length){return declared.map((l,i)=>({id:String(l.id||`L${i}`),name:String(l.name||`Nível ${i}`),elevation:finite(l.elevation),index:Number.isFinite(Number(l.index))?Number(l.index):i})).sort((a,b)=>a.elevation-b.elevation).map((l,i)=>({...l,index:i}))}
-  const zs=[];for(const n of project?.nodes||[]){const z=zOf(n);let group=zs.find(g=>Math.abs(g-z)<=tol);if(!group){group={sum:0,count:0};zs.push(group)}group.sum+=z;group.count++}
+  const zs=[];for(const n of project?.nodes||[]){const z=zOf(n);let group=zs.find(g=>Math.abs(g.sum/g.count-z)<=tol);if(!group){group={sum:0,count:0};zs.push(group)}group.sum+=z;group.count++}
   return zs.map(g=>g.sum/g.count).sort((a,b)=>a-b).map((elevation,index)=>({id:`L${index}`,name:index===0?'Base':`Pavimento ${index}`,elevation,index}));
 }
 

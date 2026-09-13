@@ -41,6 +41,16 @@ test('Model Lab creates a shell4 from four nodes on the same level',async({page}
   await expect.poll(async()=>page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('astrastruct.project')||'{}'),e=(p.elements||[]).find((x:any)=>x.type==='shell4'),l=(p.elementLoads||[]).find((x:any)=>x.elementId===e?.id);return{nodes:e?.nodeIds?.length,unique:new Set(e?.nodeIds||[]).size,t:e?.thickness,p:l?.pressure,mode:p.settings?.analysisType}})).toEqual({nodes:4,unique:4,t:.18,p:-5,mode:'linear'});
 });
 
+test('Model Lab refines shell4 into a conforming 2x2 mesh and preserves pressure',async({page},testInfo)=>{
+  test.skip(testInfo.project.name!=='desktop-chromium','shell4 refinement UI smoke');
+  const launch={...project,id:'shell4-refine',name:'Shell refine',levels:[{id:'L0',name:'Pavimento teste',elevation:0,index:0}],nodes:project.nodes.map(n=>({...n,levelId:'L0'})),elements:project.elements.map(e=>({...e,levelId:'L0'}))};
+  await loadProject(page,launch);await page.getByTestId('model-lab-launch').click();await page.getByTestId('shell4-lab-tab').click();const controls=page.getByTestId('shell4-refinement-controls');await expect(controls).toBeVisible();
+  await controls.locator('[data-shell-refine-x]').fill('2');await controls.locator('[data-shell-refine-y]').fill('2');
+  await Promise.all([page.waitForEvent('framenavigated'),page.getByTestId('refine-shell4-level').click()]);
+  await expect(page.getByTestId('spatial-canvas-3d')).toHaveAttribute('data-shell-count','4');
+  await expect.poll(async()=>page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('astrastruct.project')||'{}');return{nodes:p.nodes?.length,shells:(p.elements||[]).filter((e:any)=>e.type==='shell4').length,loads:(p.elementLoads||[]).filter((l:any)=>l.kind==='surface').length,pressures:[...new Set((p.elementLoads||[]).filter((l:any)=>l.kind==='surface').map((l:any)=>l.pressure))],created:p.meta?.lastShellRefinementReport?.createdNodes,areaError:p.meta?.lastShellRefinementReport?.areaRelativeError}})).toMatchObject({nodes:9,shells:4,loads:4,pressures:[-10],created:5});
+});
+
 test('Model Lab auto-fills a closed rectangular bay with shell4',async({page},testInfo)=>{
   test.skip(testInfo.project.name!=='desktop-chromium','automatic shell panel fill smoke');
   const frame=(id:string,n1:string,n2:string)=>({id,type:'frame3d',n1,n2,materialId:'C',sectionId:'SEC',A:.15,Iy:.004,Iz:.004,J:.002});

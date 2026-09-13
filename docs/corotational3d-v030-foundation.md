@@ -4,7 +4,7 @@
 
 A v0.30 implementa a primeira análise geometricamente não linear espacial do AstraStruct para elementos `frame3d`. O kernel permanece **experimental** na branch `develop`; a produção em `main` continua preservando os solvers 3D consolidados linear, modal/flambagem e P-Delta.
 
-O estágio atual já ultrapassou a fundação cinemática inicial: há equilíbrio global incremental, cargas de barra conservativas, peso próprio, ações térmicas, imperfeição modal sem tensões e força seguidora concentrada espacial.
+O estágio atual já ultrapassou a fundação cinemática inicial: há equilíbrio global incremental, cargas de barra conservativas, peso próprio, ações térmicas, imperfeição modal sem tensões, força seguidora concentrada espacial e montagem numérica da Jacobiana por elemento.
 
 ## Cinemática co-rotacional
 
@@ -34,13 +34,17 @@ com flexão nos dois planos principais pela relação clássica `4EI/L0 – 2EI/
 
 A ação térmica é tratada como deformação inicial. O incremento uniforme produz `εT = α ΔT`; gradientes nos eixos locais produzem curvaturas iniciais nos planos correspondentes. Durante o carregamento incremental, o estado térmico avança com o mesmo fator de carga `λ`.
 
-## Equilíbrio global
+## Equilíbrio global e montagem da Jacobiana
 
-A solução usa Newton-Raphson incremental de carga. A Jacobiana interna é atualmente avaliada por diferença central:
+A solução usa Newton-Raphson incremental de carga. A Jacobiana interna continua sendo uma aproximação por diferenças finitas,
 
-`Kint ≈ ∂Fint/∂q`.
+`Kint ≈ ∂Fint/∂q`,
 
-A escolha continua deliberadamente conservadora para validação: é mais lenta que uma tangente analítica fechada, porém permite verificar a cinemática e o equilíbrio espacial antes da otimização.
+mas a v0.30 não precisa mais reprocessar o modelo completo para cada grau de liberdade global. Cada `frame3d` é diferenciado em seus 12 graus de liberdade e a matriz 12×12 resultante é montada diretamente na Jacobiana global.
+
+Para diferença central, o custo dominante passa de uma reassemblagem global repetida, aproximadamente proporcional a `2 · ndof · nelem`, para `24 · nelem` avaliações de força elementar. Em estruturas com muitos nós essa alteração reduz substancialmente o custo sem mudar a definição matemática da derivada.
+
+O mesmo passo de perturbação usado anteriormente é preservado, e existe um teste de regressão que compara a nova montagem elemento a elemento com a definição global por diferenças finitas, tanto no esquema central quanto no forward.
 
 O line search é aplicado ao incremento de Newton e os resíduos são avaliados somente nos graus de liberdade livres.
 
@@ -62,15 +66,17 @@ O resultado distingue a geometria imperfeita inicial, o incremento `Δu` e a con
 
 ## Força seguidora espacial
 
-A v0.30 passa a aceitar `followerEnd` concentrada na **extremidade 2** do `frame3d`, com componentes locais `Px/Py/Pz`.
+A v0.30 aceita `followerEnd` concentrada na **extremidade 2** do `frame3d`, com componentes locais `Px/Py/Pz`.
 
 A força permanece ligada ao triedro co-rotacionado corrente. Portanto,
 
 `Ff(q) = C(q) · Pf,local`
 
-é dependente da configuração. Sua Jacobiana externa é obtida por diferença central:
+é dependente da configuração. Sua Jacobiana externa é obtida por diferença central,
 
-`Kext ≈ ∂Ff/∂q`.
+`Kext ≈ ∂Ff/∂q`,
+
+mas somente os elementos que possuem carga follower são diferenciados. Cargas follower coincidentes no mesmo elemento são agrupadas antes da diferenciação.
 
 O Newton usa a tangente efetiva não conservativa
 
@@ -94,11 +100,13 @@ Como esperado para uma ação não conservativa, `Keff` não precisa ser simétr
 - equilíbrio de reações em carregamento espacial;
 - carga uniforme e pontual de barra com recuperação de esforços;
 - peso próprio e resultados de teoria de vigas no limite linear;
-- ações térmicas uniformes e gradientes;
+- ações térmicas uniformes e gradientes, inclusive em combinações de carga;
 - imperfeição modal como referência sem tensões;
 - força follower sob rotação rígida finita;
 - limite de pequena carga follower;
 - não simetria da Jacobiana externa follower;
+- equivalência da Jacobiana interna elemento a elemento com a definição global por diferenças finitas;
+- equivalência da Jacobiana follower esparsa com a definição global;
 - integração ao dispatcher, SolverRegistry, painel 3D e regressão E2E desktop/Android/tablet.
 
 ## Escopo aceito atualmente
@@ -127,8 +135,8 @@ Como esperado para uma ação não conservativa, `Keff` não precisa ser simétr
 
 ## Próxima sequência
 
-1. concluir a regressão da força follower e manter a interface sincronizada com o escopo validado;
-2. substituir ou comparar a Jacobiana numérica com uma tangente co-rotacional analítica/consistente para desempenho e robustez;
+1. comparar a Jacobiana numérica elemento a elemento com uma tangente co-rotacional analítica/consistente e introduzir a versão analítica somente após equivalência de benchmarks;
+2. adicionar reutilização/caching seguro de propriedades invariantes por elemento para reduzir custo por iteração;
 3. generalizar releases e ligações semirrígidas espaciais;
 4. implementar controle de deslocamento e Arc-Length 3D;
 5. posteriormente introduzir não linearidade material 3D e estabilidade pós-crítica mais completa;

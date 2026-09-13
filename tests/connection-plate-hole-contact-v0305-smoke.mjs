@@ -4,22 +4,23 @@ import {generateExplicitHoleBoltGroup,solveConnectionPlateHoleAtDisplacement,sol
 const base={length:.40,width:.24,thickness:.012,E:200e6,nu:.30,fy:355e3,hardeningRatio:.02,meshX:8,meshY:6,steps:12,maxIterations:70,cutIntegrationOrder:12,boundarySegments:72,contactNormalStiffness:5e8};
 const bolts=generateExplicitHoleBoltGroup({nx:2,ny:2,spacingX:.08,spacingY:.08,centerX:.20,boltDiameter:.020,gap:.001,contactNormalStiffness:5e8});
 
-// Embedded void area must track four exact circular holes within the cut-cell quadrature tolerance.
 const zero=solveConnectionPlateHoleAtDisplacement({...base,bolts},0);
 assert.equal(zero.converged,true);
 assert.ok(zero.area.analyticalVoid>0);
 const areaErr=Math.abs(zero.area.void-zero.area.analyticalVoid)/zero.area.analyticalVoid;
 assert.ok(areaErr<.08,`void area error ${areaErr}: ${JSON.stringify(zero.area)}`);
 
-// Before gap closure the entire plate can translate essentially rigidly and no boundary pressure is active.
 const free=solveConnectionPlateHoleAtDisplacement({...base,bolts},.0008,zero.u);
 assert.equal(free.converged,true);
 assert.ok(Math.abs(free.appliedLoad)<2e-3,`pre-contact load ${free.appliedLoad}`);
 assert.ok(free.state.holes.every(h=>h.activeArcLength===0&&h.peakPressureMPa===0));
 assert.ok(free.maxVmMPa<.01,`pre-contact vm ${free.maxVmMPa}`);
 
-// After closure, bearing is distributed on the rear side of every circular hole.
 const bearing=solveConnectionPlateHoleAtDisplacement({...base,bolts},.0020,free.u);
+console.log('hole-contact diagnostic',JSON.stringify({
+  appliedLoad:bearing.appliedLoad,totalFx:bearing.totalFx,totalFy:bearing.totalFy,residual:bearing.equilibrium,
+  holes:bearing.state.holes.map(h=>({id:h.id,x:h.x,y:h.y,Fx:h.resultant.fx,Fy:h.resultant.fy,V:h.resultant.magnitude,pmax:h.peakPressureMPa,arc:h.activeArcDegrees,theta:h.contactCentroidAngleDeg,ux:h.meanBoundaryDisplacement.x,uy:h.meanBoundaryDisplacement.y,oval:h.ovalizationMm}))
+}));
 assert.equal(bearing.converged,true);
 assert.ok(bearing.appliedLoad>1,`bearing load ${bearing.appliedLoad}`);
 assert.ok(Math.abs(bearing.equilibrium.relativeFxResidual)<5e-4,JSON.stringify(bearing.equilibrium));
@@ -34,13 +35,11 @@ for(const h of bearing.state.holes){
   assert.ok(h.segments.some(s=>s.active&&s.pressureMPa>0));
 }
 
-// Flexible plate must redistribute load between bolt columns while preserving top/bottom symmetry.
 const fs=bearing.state.holes.map(h=>h.resultant.magnitude);
 assert.ok(Math.abs(fs[0]-fs[2])<2e-2,`left-column y symmetry ${fs}`);
 assert.ok(Math.abs(fs[1]-fs[3])<2e-2,`right-column y symmetry ${fs}`);
 assert.ok(Math.abs(fs[0]-fs[1])>1e-3,`expected flexible-column redistribution ${fs}`);
 
-// Lower fy must trigger a yielded zone while retaining distributed contact diagnostics.
 const elastic=solveConnectionPlateHoleContact({...base,bolts,fy:1e9,edgeDisplacementMax:.0045,steps:9});
 const plastic=solveConnectionPlateHoleContact({...base,bolts,fy:95e3,hardeningRatio:.01,edgeDisplacementMax:.0045,steps:9});
 assert.equal(elastic.diagnostics.converged,true);

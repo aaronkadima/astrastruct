@@ -22,6 +22,7 @@ import './workspaceChrome';
 import './contextToolbar';
 import './modelLabBootstrap';
 import './anchorLabBootstrap';
+import './labStatusBootstrap';
 import './dxfPlanBootstrap';
 import './levelsBootstrap';
 import './shellLabBootstrap';

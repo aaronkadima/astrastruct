@@ -50,3 +50,13 @@ test('spatial Inspector exposes frame3d section and qz properties',async({page},
   const context=page.getByTestId('context-toolbar');await expect(context).toHaveAttribute('data-context-dimension','3d');await expect(context).toHaveAttribute('data-context-kind','element');await expect(context.locator('[data-context-section]')).toBeVisible();await expect(context.locator('[data-context-qz]')).toBeVisible();
   await context.locator('[data-context-qz]').fill('-3.5');await context.getByTestId('context-apply').click();await expect(page.getByTestId('spatial-qz')).toHaveValue('-3.5');
 });
+
+test('spatial Inspector persists released and semi-rigid 3D end rotations',async({page},testInfo)=>{
+  test.skip(testInfo.project.name!=='desktop-chromium','spatial connection editor test');
+  await loadProject(page);await select3D(page,'Selecionar elemento E2');
+  await expect(page.getByTestId('spatial-end-connection-1')).toBeVisible();await expect(page.getByTestId('spatial-end-connection-2')).toBeVisible();
+  await page.getByTestId('spatial-release-rz2').check();await page.getByTestId('spatial-rot-spring-ry2').fill('3200');await page.getByTestId('spatial-element-apply').click();
+  await expect.poll(async()=>page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('astrastruct.project')||'{}');const e=(p.elements||[]).find((x:any)=>x.id==='E2');return{release:e?.releases?.rz2,rz2:e?.rotationalSprings?.rz2,ry2:e?.rotationalSprings?.ry2}})).toEqual({release:true,rz2:0,ry2:3200});
+  await expect(page.getByTestId('spatial-release-rz2')).toBeChecked();await expect(page.getByTestId('spatial-rot-spring-rz2')).toBeDisabled();await expect(page.getByTestId('spatial-rot-spring-ry2')).toHaveValue('3200');
+  await page.getByTestId('analyze-button').click();await expect(page.getByTestId('spatial3d-results')).toBeVisible();
+});

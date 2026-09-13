@@ -1,5 +1,6 @@
 import { spatialAxes } from './spatial3d.js';
 import { zeros, solveConstrained } from './matrix.js';
+import { resolveCorotationalEndMoments3D, rotationalConnectionStiffness3D } from './endConnections3d.js';
 
 const EPS=1e-12;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -15,7 +16,6 @@ const matMul=(A,B)=>A.map(r=>B[0].map((_,j)=>r.reduce((s,v,k)=>s+v*B[k][j],0)));
 const matVec=(A,x)=>A.map(r=>r.reduce((s,v,j)=>s+v*x[j],0));
 const identity3=()=>[[1,0,0],[0,1,0],[0,0,1]];
 const columns=(x,y,z)=>[[x[0],y[0],z[0]],[x[1],y[1],z[1]],[x[2],y[2],z[2]]];
-
 function skew(v){return[[0,-v[2],v[1]],[v[2],0,-v[0]],[-v[1],v[0],0]]}
 function addMatrices(A,B){return A.map((r,i)=>r.map((v,j)=>v+B[i][j]))}
 function scaleMatrix(A,s){return A.map(r=>r.map(v=>v*s))}
@@ -24,190 +24,70 @@ function maxFree(v,free){let m=0;for(const i of free)m=Math.max(m,Math.abs(Numbe
 function addVectors(a,b){return a.map((v,i)=>v+(Number(b[i])||0))}
 function subtractMatrices(A,B,scaleB=1){return A.map((r,i)=>r.map((v,j)=>v-scaleB*B[i][j]))}
 function elementDofs(i,j){return[0,1,2,3,4,5].map(k=>6*i+k).concat([0,1,2,3,4,5].map(k=>6*j+k))}
-function springStiffnesses(spring={}){
-  const values=[Number(spring.kx)||0,Number(spring.ky)||0,Number(spring.kz)||0,Number(spring.krx)||0,Number(spring.kry)||0,Number(spring.krz??spring.kr)||0];
-  if(values.some(v=>v<0))throw new Error(`Mola ${spring.id||spring.nodeId||''}: rigidez não pode ser negativa.`);
-  return values;
-}
+function springStiffnesses(spring={}){const values=[Number(spring.kx)||0,Number(spring.ky)||0,Number(spring.kz)||0,Number(spring.krx)||0,Number(spring.kry)||0,Number(spring.krz??spring.kr)||0];if(values.some(v=>v<0))throw new Error(`Mola ${spring.id||spring.nodeId||''}: rigidez não pode ser negativa.`);return values}
 function addNodalSpringInternal(project,u,map,Fint){for(const spring of project.nodeSprings||[]){const i=map.get(spring.nodeId);if(i==null)continue;const k=springStiffnesses(spring);for(let d=0;d<6;d++)Fint[6*i+d]+=k[d]*(Number(u[6*i+d])||0)}}
 function addNodalSpringTangent(project,map,K){for(const spring of project.nodeSprings||[]){const i=map.get(spring.nodeId);if(i==null)continue;const k=springStiffnesses(spring);for(let d=0;d<6;d++)K[6*i+d][6*i+d]+=k[d]}}
 function recoverNodalSpringForces(project,u,map){return(project.nodeSprings||[]).map(spring=>{const i=map.get(spring.nodeId),k=springStiffnesses(spring),d=i==null?[0,0,0,0,0,0]:[0,1,2,3,4,5].map(j=>Number(u[6*i+j])||0);return{springId:spring.id,nodeId:spring.nodeId,kx:k[0],ky:k[1],kz:k[2],krx:k[3],kry:k[4],krz:k[5],fx:-k[0]*d[0],fy:-k[1]*d[1],fz:-k[2]*d[2],mx:-k[3]*d[3],my:-k[4]*d[4],mz:-k[5]*d[5]}})}
 
-/** Rodrigues exponential map: global rotation vector -> proper orthogonal matrix. */
-export function rotationVectorToMatrix(theta=[0,0,0]){
-  const a=[Number(theta[0])||0,Number(theta[1])||0,Number(theta[2])||0],angle=norm(a);
-  if(angle<1e-10){const K=skew(a);return addMatrices(identity3(),K)}
-  const axis=scale(a,1/angle),K=skew(axis),K2=matMul(K,K);
-  return addMatrices(addMatrices(identity3(),scaleMatrix(K,Math.sin(angle))),scaleMatrix(K2,1-Math.cos(angle)));
-}
-
-/** SO(3) logarithm map, returned in the local coordinates of the supplied matrix. */
-export function matrixToRotationVector(R){
-  const c=clamp((R[0][0]+R[1][1]+R[2][2]-1)/2,-1,1),angle=Math.acos(c);
-  if(angle<1e-9)return[(R[2][1]-R[1][2])/2,(R[0][2]-R[2][0])/2,(R[1][0]-R[0][1])/2];
-  if(Math.PI-angle<1e-6){
-    const xx=Math.max(0,(R[0][0]+1)/2),yy=Math.max(0,(R[1][1]+1)/2),zz=Math.max(0,(R[2][2]+1)/2);let axis=[Math.sqrt(xx),Math.sqrt(yy),Math.sqrt(zz)];
-    if(R[0][1]<0)axis[1]*=-1;if(R[0][2]<0)axis[2]*=-1;if(norm(axis)<EPS)axis=[1,0,0];axis=unit(axis);return scale(axis,angle);
-  }
-  const s=2*Math.sin(angle),axis=[(R[2][1]-R[1][2])/s,(R[0][2]-R[2][0])/s,(R[1][0]-R[0][1])/s];
-  return scale(axis,angle);
-}
-
+export function rotationVectorToMatrix(theta=[0,0,0]){const a=[Number(theta[0])||0,Number(theta[1])||0,Number(theta[2])||0],angle=norm(a);if(angle<1e-10){const K=skew(a);return addMatrices(identity3(),K)}const axis=scale(a,1/angle),K=skew(axis),K2=matMul(K,K);return addMatrices(addMatrices(identity3(),scaleMatrix(K,Math.sin(angle))),scaleMatrix(K2,1-Math.cos(angle)))}
+export function matrixToRotationVector(R){const c=clamp((R[0][0]+R[1][1]+R[2][2]-1)/2,-1,1),angle=Math.acos(c);if(angle<1e-9)return[(R[2][1]-R[1][2])/2,(R[0][2]-R[2][0])/2,(R[1][0]-R[0][1])/2];if(Math.PI-angle<1e-6){const xx=Math.max(0,(R[0][0]+1)/2),yy=Math.max(0,(R[1][1]+1)/2),zz=Math.max(0,(R[2][2]+1)/2);let axis=[Math.sqrt(xx),Math.sqrt(yy),Math.sqrt(zz)];if(R[0][1]<0)axis[1]*=-1;if(R[0][2]<0)axis[2]*=-1;if(norm(axis)<EPS)axis=[1,0,0];axis=unit(axis);return scale(axis,angle)}const s=2*Math.sin(angle),axis=[(R[2][1]-R[1][2])/s,(R[0][2]-R[2][0])/s,(R[1][0]-R[0][1])/s];return scale(axis,angle)}
 function nodePosition(node,u,offset){return[Number(node.x||0)+Number(u[offset]||0),Number(node.y||0)+Number(u[offset+1]||0),Number(node.z||0)+Number(u[offset+2]||0)]}
 function nodeRotation(u,offset){return rotationVectorToMatrix([Number(u[offset+3]||0),Number(u[offset+4]||0),Number(u[offset+5]||0)])}
 
-/**
- * Element-level co-rotational kinematics for a spatial Euler-Bernoulli frame.
- * The element frame follows the current chord and filters common rigid-body
- * translation/rotation from the local deformation measures.
- */
 export function corotationalFrame3DKinematics(a,b,e={},elementDisplacements=[]){
   if(!Array.isArray(elementDisplacements)||elementDisplacements.length!==12)throw new Error('Co-rotacional 3D: vetor do elemento deve possuir 12 DOFs.');
-  const initial=spatialAxes(a,b,e),C0=transpose(initial.R),x1=nodePosition(a,elementDisplacements,0),x2=nodePosition(b,elementDisplacements,6),chord=sub(x2,x1),L=norm(chord);
-  if(!(L>1e-10))throw new Error(`Co-rotacional 3D: elemento ${e.id||''} colapsou para comprimento nulo.`);
-  const ex=unit(chord),Q1=nodeRotation(elementDisplacements,0),Q2=nodeRotation(elementDisplacements,6),ey0=initial.ey;
-  const ey1=matVec(Q1,ey0),ey2=matVec(Q2,ey0),meanY=add(ey1,ey2);let eyCandidate=sub(meanY,scale(ex,dot(meanY,ex)));
-  if(norm(eyCandidate)<1e-9){const transported=matVec(Q1,ey0);eyCandidate=sub(transported,scale(ex,dot(transported,ex)))}
-  if(norm(eyCandidate)<1e-9){const fallback=Math.abs(ex[2])<.9?[0,0,1]:[0,1,0];eyCandidate=sub(fallback,scale(ex,dot(fallback,ex)))}
-  const ey=unit(eyCandidate),ez=unit(cross(ex,ey)),C=columns(ex,ey,ez),Ct=transpose(C);
-  const relative1=matMul(Ct,matMul(Q1,C0)),relative2=matMul(Ct,matMul(Q2,C0)),theta1=matrixToRotationVector(relative1),theta2=matrixToRotationVector(relative2);
+  const initial=spatialAxes(a,b,e),C0=transpose(initial.R),x1=nodePosition(a,elementDisplacements,0),x2=nodePosition(b,elementDisplacements,6),chord=sub(x2,x1),L=norm(chord);if(!(L>1e-10))throw new Error(`Co-rotacional 3D: elemento ${e.id||''} colapsou para comprimento nulo.`);
+  const ex=unit(chord),Q1=nodeRotation(elementDisplacements,0),Q2=nodeRotation(elementDisplacements,6),ey0=initial.ey,ey1=matVec(Q1,ey0),ey2=matVec(Q2,ey0),meanY=add(ey1,ey2);let eyCandidate=sub(meanY,scale(ex,dot(meanY,ex)));
+  if(norm(eyCandidate)<1e-9){const transported=matVec(Q1,ey0);eyCandidate=sub(transported,scale(ex,dot(transported,ex)))}if(norm(eyCandidate)<1e-9){const fallback=Math.abs(ex[2])<.9?[0,0,1]:[0,1,0];eyCandidate=sub(fallback,scale(ex,dot(fallback,ex)))}
+  const ey=unit(eyCandidate),ez=unit(cross(ex,ey)),C=columns(ex,ey,ez),Ct=transpose(C),relative1=matMul(Ct,matMul(Q1,C0)),relative2=matMul(Ct,matMul(Q2,C0)),theta1=matrixToRotationVector(relative1),theta2=matrixToRotationVector(relative2);
   return{initialLength:initial.L,currentLength:L,axial:L-initial.L,currentAxes:{ex,ey,ez,R:[ex,ey,ez],C},initialAxes:{ex:initial.ex,ey:initial.ey,ez:initial.ez,R:initial.R,C:C0},endRotations:{i:theta1,j:theta2},basic:[L-initial.L,...theta1,...theta2],currentPositions:{i:x1,j:x2},rotationMatrices:{i:Q1,j:Q2},relativeRotationMatrices:{i:relative1,j:relative2}};
 }
-
-export function rigidBodyDisplacement3D(node,rotationVector=[0,0,0],translation=[0,0,0]){
-  const Q=rotationVectorToMatrix(rotationVector),x=[Number(node.x)||0,Number(node.y)||0,Number(node.z)||0],xr=add(matVec(Q,x),translation);
-  return [...sub(xr,x),...rotationVector.map(Number)];
-}
-
+export function rigidBodyDisplacement3D(node,rotationVector=[0,0,0],translation=[0,0,0]){const Q=rotationVectorToMatrix(rotationVector),x=[Number(node.x)||0,Number(node.y)||0,Number(node.z)||0],xr=add(matVec(Q,x),translation);return[...sub(xr,x),...rotationVector.map(Number)]}
 function materialFor(project,e){const m=(project.materials||[]).find(x=>x.id===e.materialId);if(!m)throw new Error(`Co-rotacional 3D: material ausente em ${e.id}.`);return m}
 function sectionFor(project,e){return(project.sections||[]).find(s=>s.id===e.sectionId)||{}}
 function prop(e,s,key,fallback){const v=Number(e?.[key]??s?.[key]??fallback);return Number.isFinite(v)?v:0}
 function properties(project,e,L0){const material=materialFor(project,e),section=sectionFor(project,e),E=Number(material.E),nu=Number(material.nu),G=Number(material.G)||(Number.isFinite(nu)?E/(2*(1+nu)):0),A=prop(e,section,'A'),Iy=prop(e,section,'Iy',e.I??section.I),Iz=prop(e,section,'Iz',e.I??section.I),J=prop(e,section,'J');for(const [k,v] of Object.entries({E,G,A,Iy,Iz,J,L0}))if(!(Number(v)>0))throw new Error(`Co-rotacional 3D ${e.id}: propriedade ${k} deve ser positiva.`);return{E,G,A,Iy,Iz,J,material,section}}
-function thermalInitialState(project,e,p,L0){
-  let dT=0,gradientY=0,gradientZ=0;for(const load of(project.elementLoads||[]).filter(l=>l.elementId===e.id&&l.kind==='thermal')){dT+=Number(load.dT)||0;gradientY+=Number(load.dTGradientY??load.dTGradient)||0;gradientZ+=Number(load.dTGradientZ)||0}
-  const alpha=Number(p.material?.alpha)||0,eps0=alpha*dT,hY=Number(e.h??e.depth??p.section?.h??p.section?.depth)||0,hZ=Number(e.b??e.width??p.section?.b??p.section?.width)||0;
-  if(Math.abs(gradientY)>EPS&&!(hY>0))throw new Error(`Co-rotacional 3D térmico: gradiente local-y em ${e.id} requer altura h/depth positiva.`);
-  if(Math.abs(gradientZ)>EPS&&!(hZ>0))throw new Error(`Co-rotacional 3D térmico: gradiente local-z em ${e.id} requer largura b/width positiva.`);
-  const kappaZ=Math.abs(gradientY)>EPS?-alpha*gradientY/hY:0,kappaY=Math.abs(gradientZ)>EPS?alpha*gradientZ/hZ:0;
-  return{dT,gradientY,gradientZ,alpha,eps0,kappaY,kappaZ,axial:eps0*L0,ry1:kappaY*L0/2,ry2:-kappaY*L0/2,rz1:-kappaZ*L0/2,rz2:kappaZ*L0/2,hY,hZ};
-}
+function thermalInitialState(project,e,p,L0){let dT=0,gradientY=0,gradientZ=0;for(const load of(project.elementLoads||[]).filter(l=>l.elementId===e.id&&l.kind==='thermal')){dT+=Number(load.dT)||0;gradientY+=Number(load.dTGradientY??load.dTGradient)||0;gradientZ+=Number(load.dTGradientZ)||0}const alpha=Number(p.material?.alpha)||0,eps0=alpha*dT,hY=Number(e.h??e.depth??p.section?.h??p.section?.depth)||0,hZ=Number(e.b??e.width??p.section?.b??p.section?.width)||0;if(Math.abs(gradientY)>EPS&&!(hY>0))throw new Error(`Co-rotacional 3D térmico: gradiente local-y em ${e.id} requer altura h/depth positiva.`);if(Math.abs(gradientZ)>EPS&&!(hZ>0))throw new Error(`Co-rotacional 3D térmico: gradiente local-z em ${e.id} requer largura b/width positiva.`);const kappaZ=Math.abs(gradientY)>EPS?-alpha*gradientY/hY:0,kappaY=Math.abs(gradientZ)>EPS?alpha*gradientZ/hZ:0;return{dT,gradientY,gradientZ,alpha,eps0,kappaY,kappaZ,axial:eps0*L0,ry1:kappaY*L0/2,ry2:-kappaY*L0/2,rz1:-kappaZ*L0/2,rz2:kappaZ*L0/2,hY,hZ}}
 
-/** Elastic local resisting forces associated with the co-rotated basic state. */
 export function corotationalFrame3DInternalForce(project,e,a,b,elementDisplacements=[]){
-  const k=corotationalFrame3DKinematics(a,b,e,elementDisplacements),p=properties(project,e,k.initialLength),L0=k.initialLength,L=k.currentLength,t1=k.endRotations.i,t2=k.endRotations.j,thermal=thermalInitialState(project,e,p,L0),e1y=t1[1]-thermal.ry1,e2y=t2[1]-thermal.ry2,e1z=t1[2]-thermal.rz1,e2z=t2[2]-thermal.rz2;
-  const N=p.E*p.A/L0*(k.axial-thermal.axial),Ti=p.G*p.J/L0*(t1[0]-t2[0]),Tj=-Ti;
-  const Myi=p.E*p.Iy/L0*(4*e1y+2*e2y),Myj=p.E*p.Iy/L0*(2*e1y+4*e2y);
-  const Mzi=p.E*p.Iz/L0*(4*e1z+2*e2z),Mzj=p.E*p.Iz/L0*(2*e1z+4*e2z);
-  const Vyi=(Mzi+Mzj)/L,Vyj=-Vyi,Vzi=-(Myi+Myj)/L,Vzj=-Vzi;
-  const local=[-N,Vyi,Vzi,Ti,Myi,Mzi,N,Vyj,Vzj,Tj,Myj,Mzj],T=transform12(k.currentAxes.R),global=matVec(transpose(T),local);
-  return{kinematics:k,properties:p,thermal,local,global,N,Vy1:Vyi,Vz1:Vzi,T1:Ti,My1:Myi,Mz1:Mzi,Vy2:Vyj,Vz2:Vzj,T2:Tj,My2:Myj,Mz2:Mzj};
+  const k=corotationalFrame3DKinematics(a,b,e,elementDisplacements),p=properties(project,e,k.initialLength),L0=k.initialLength,L=k.currentLength,t1=k.endRotations.i,t2=k.endRotations.j,thermal=thermalInitialState(project,e,p,L0),N=p.E*p.A/L0*(k.axial-thermal.axial),Krot=zeros(6),kt=p.G*p.J/L0,ky=p.E*p.Iy/L0,kz=p.E*p.Iz/L0;
+  Krot[0][0]=Krot[3][3]=kt;Krot[0][3]=Krot[3][0]=-kt;for(const [i,j,c] of [[1,4,ky],[2,5,kz]]){Krot[i][i]=4*c;Krot[j][j]=4*c;Krot[i][j]=Krot[j][i]=2*c}
+  const natural=[0,thermal.ry1,thermal.rz1,0,thermal.ry2,thermal.rz2],pRot=matVec(Krot,natural),nodeRot=[t1[0],t1[1],t1[2],t2[0],t2[1],t2[2]],connection=resolveCorotationalEndMoments3D(Krot,pRot,nodeRot,e.releases,e.rotationalSprings),[Ti,Myi,Mzi,Tj,Myj,Mzj]=connection.moments,Vyi=(Mzi+Mzj)/L,Vyj=-Vyi,Vzi=-(Myi+Myj)/L,Vzj=-Vzi,local=[-N,Vyi,Vzi,Ti,Myi,Mzi,N,Vyj,Vzj,Tj,Myj,Mzj],T=transform12(k.currentAxes.R),global=matVec(transpose(T),local);
+  return{kinematics:k,properties:p,thermal,local,global,N,Vy1:Vyi,Vz1:Vzi,T1:Ti,My1:Myi,Mz1:Mzi,Vy2:Vyj,Vz2:Vzj,T2:Tj,My2:Myj,Mz2:Mzj,connectionRotations:connection.connectionRotations,elementEndRotations:connection.elementRotations,connectionStiffness:connection.stiffness};
 }
 
-function validateFollowerLoad(project,load){
-  if(Number(load.end??2)!==2)throw new Error(`Co-rotacional 3D follower ${load.id||load.elementId||''}: somente a extremidade 2 é suportada na v0.30.`);
-  if(['mx','my','mz','moment','m'].some(k=>Math.abs(Number(load[k])||0)>EPS))throw new Error(`Co-rotacional 3D follower ${load.id||load.elementId||''}: momentos seguidores ainda não são suportados.`);
-  const e=(project.elements||[]).find(x=>x.id===load.elementId);if(!e)throw new Error(`Co-rotacional 3D follower: elemento ${load.elementId||'ausente'} não encontrado.`);
-  return e;
-}
-
-function validateGlobalScope(project){
-  if(!(project.nodes||[]).length||!(project.elements||[]).length)throw new Error('Co-rotacional 3D: modelo vazio.');
-  if((project.elements||[]).some(e=>e.type!=='frame3d'))throw new Error('Co-rotacional 3D v0.30 experimental suporta somente elementos frame3d.');
-  const unsupported=(project.elementLoads||[]).find(l=>!['thermal','followerEnd'].includes(l.kind));if(unsupported)throw new Error(`Co-rotacional 3D v0.30 experimental: carga de barra '${unsupported.kind||'desconhecida'}' deve ser preparada como carga morta equivalente antes da solução.`);
-  for(const load of(project.elementLoads||[]).filter(l=>l.kind==='followerEnd'))validateFollowerLoad(project,load);
-  for(const spring of project.nodeSprings||[])springStiffnesses(spring);
-  if((project.settlements||[]).length)throw new Error('Co-rotacional 3D: recalques brutos devem ser resolvidos pelo Scenario Engine antes da solução.');
-  for(const e of project.elements||[])if(e.releases&&Object.values(e.releases).some(Boolean))throw new Error(`Co-rotacional 3D v0.30 experimental: releases ainda não suportados em ${e.id}.`);
-}
-
-function modelAssembly(project,u){
-  const nodes=project.nodes||[],map=new Map(nodes.map((n,i)=>[n.id,i])),Fint=Array(nodes.length*6).fill(0),responses=[];
-  for(const e of project.elements||[]){const i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Co-rotacional 3D: elemento ${e.id} referencia nó inexistente.`);const idx=elementDofs(i,j),ue=idx.map(k=>u[k]),r=corotationalFrame3DInternalForce(project,e,nodes[i],nodes[j],ue);idx.forEach((g,k)=>{Fint[g]+=r.global[k]});responses.push({elementId:e.id,type:'frame3d',N1:-r.local[0],N2:r.local[6],Vy1:r.Vy1,Vz1:r.Vz1,T1:r.T1,My1:r.My1,Mz1:r.Mz1,Vy2:r.Vy2,Vz2:r.Vz2,T2:r.T2,My2:r.My2,Mz2:r.Mz2,thermal:r.thermal,localForces:r.local,localDisplacements:r.kinematics.basic,currentAxes:r.kinematics.currentAxes,currentLength:r.kinematics.currentLength,initialLength:r.kinematics.initialLength})}
-  addNodalSpringInternal(project,u,map,Fint);return{Fint,responses};
-}
+function validateFollowerLoad(project,load){if(Number(load.end??2)!==2)throw new Error(`Co-rotacional 3D follower ${load.id||load.elementId||''}: somente a extremidade 2 é suportada na v0.30.`);if(['mx','my','mz','moment','m'].some(k=>Math.abs(Number(load[k])||0)>EPS))throw new Error(`Co-rotacional 3D follower ${load.id||load.elementId||''}: momentos seguidores ainda não são suportados.`);const e=(project.elements||[]).find(x=>x.id===load.elementId);if(!e)throw new Error(`Co-rotacional 3D follower: elemento ${load.elementId||'ausente'} não encontrado.`);return e}
+function validateGlobalScope(project){if(!(project.nodes||[]).length||!(project.elements||[]).length)throw new Error('Co-rotacional 3D: modelo vazio.');if((project.elements||[]).some(e=>e.type!=='frame3d'))throw new Error('Co-rotacional 3D v0.30 experimental suporta somente elementos frame3d.');const unsupported=(project.elementLoads||[]).find(l=>!['thermal','followerEnd'].includes(l.kind));if(unsupported)throw new Error(`Co-rotacional 3D v0.30 experimental: carga de barra '${unsupported.kind||'desconhecida'}' deve ser preparada como carga morta equivalente antes da solução.`);for(const load of(project.elementLoads||[]).filter(l=>l.kind==='followerEnd'))validateFollowerLoad(project,load);for(const spring of project.nodeSprings||[])springStiffnesses(spring);for(const e of project.elements||[])rotationalConnectionStiffness3D(e.releases,e.rotationalSprings);if((project.settlements||[]).length)throw new Error('Co-rotacional 3D: recalques brutos devem ser resolvidos pelo Scenario Engine antes da solução.')}
+function modelAssembly(project,u){const nodes=project.nodes||[],map=new Map(nodes.map((n,i)=>[n.id,i])),Fint=Array(nodes.length*6).fill(0),responses=[];for(const e of project.elements||[]){const i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Co-rotacional 3D: elemento ${e.id} referencia nó inexistente.`);const idx=elementDofs(i,j),ue=idx.map(k=>u[k]),r=corotationalFrame3DInternalForce(project,e,nodes[i],nodes[j],ue);idx.forEach((g,k)=>{Fint[g]+=r.global[k]});responses.push({elementId:e.id,type:'frame3d',N1:-r.local[0],N2:r.local[6],Vy1:r.Vy1,Vz1:r.Vz1,T1:r.T1,My1:r.My1,Mz1:r.Mz1,Vy2:r.Vy2,Vz2:r.Vz2,T2:r.T2,My2:r.My2,Mz2:r.Mz2,thermal:r.thermal,connectionRotations:r.connectionRotations,connectionStiffness:r.connectionStiffness,elementEndRotations:r.elementEndRotations,localForces:r.local,localDisplacements:r.kinematics.basic,currentAxes:r.kinematics.currentAxes,currentLength:r.kinematics.currentLength,initialLength:r.kinematics.initialLength})}addNodalSpringInternal(project,u,map,Fint);return{Fint,responses}}
 function fixedExternalVector(project,map){const F=Array((project.nodes||[]).length*6).fill(0);for(const l of project.loads||[]){const i=map.get(l.nodeId);if(i==null)continue;const vals=[l.fx,l.fy,l.fz,l.mx,l.my,l.mz];for(let k=0;k<6;k++)F[6*i+k]+=Number(vals[k])||0}return F}
-function followerGroups(project){
-  const groups=new Map();
-  for(const load of(project.elementLoads||[]).filter(l=>l.kind==='followerEnd')){const e=validateFollowerLoad(project,load),key=e.id,current=groups.get(key)||{e,local:[0,0,0]};current.local[0]+=Number(load.px)||0;current.local[1]+=Number(load.py)||0;current.local[2]+=Number(load.pz)||0;groups.set(key,current)}
-  return[...groups.values()];
-}
+function followerGroups(project){const groups=new Map();for(const load of(project.elementLoads||[]).filter(l=>l.kind==='followerEnd')){const e=validateFollowerLoad(project,load),key=e.id,current=groups.get(key)||{e,local:[0,0,0]};current.local[0]+=Number(load.px)||0;current.local[1]+=Number(load.py)||0;current.local[2]+=Number(load.pz)||0;groups.set(key,current)}return[...groups.values()]}
 function followerElementGlobal(a,b,e,ue,local){const kin=corotationalFrame3DKinematics(a,b,e,ue);return matVec(transpose(kin.currentAxes.R),local)}
-
-/** Current-configuration follower force vector. Local components rotate with the co-rotated element frame. */
-export function followerExternalVector3D(project,u,mapOverride=null){
-  const nodes=project.nodes||[],map=mapOverride||new Map(nodes.map((n,i)=>[n.id,i])),F=Array(nodes.length*6).fill(0);
-  for(const group of followerGroups(project)){
-    const e=group.e,i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Co-rotacional 3D follower: nó ausente em ${e.id}.`);
-    const idx=elementDofs(i,j),ue=idx.map(k=>Number(u[k])||0),global=followerElementGlobal(nodes[i],nodes[j],e,ue,group.local);
-    F[6*j]+=global[0];F[6*j+1]+=global[1];F[6*j+2]+=global[2];
-  }
-  return F;
-}
+export function followerExternalVector3D(project,u,mapOverride=null){const nodes=project.nodes||[],map=mapOverride||new Map(nodes.map((n,i)=>[n.id,i])),F=Array(nodes.length*6).fill(0);for(const group of followerGroups(project)){const e=group.e,i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Co-rotacional 3D follower: nó ausente em ${e.id}.`);const idx=elementDofs(i,j),ue=idx.map(k=>Number(u[k])||0),global=followerElementGlobal(nodes[i],nodes[j],e,ue,group.local);F[6*j]+=global[0];F[6*j+1]+=global[1];F[6*j+2]+=global[2]}return F}
 function externalVector(project,u,map,fixed=null){return addVectors(fixed||fixedExternalVector(project,map),followerExternalVector3D(project,u,map))}
-function prescribedDofs(project,map){const p=new Map(),keys=['ux','uy','uz','rx','ry','rz'];for(const s of project.supports||[]){const i=map.get(s.nodeId);if(i==null)continue;keys.forEach((k,d)=>{if(s[k]){const value=Number(s[`${k}Value`])||0;p.set(6*i+d,value)}})}return p}
+function prescribedDofs(project,map){const p=new Map(),keys=['ux','uy','uz','rx','ry','rz'];for(const s of project.supports||[]){const i=map.get(s.nodeId);if(i==null)continue;keys.forEach((k,d)=>{if(s[k])p.set(6*i+d,Number(s[`${k}Value`])||0)})}return p}
 function zeroCorrectionConstraints(prescribed){return new Map([...prescribed.keys()].map(d=>[d,0]))}
 function characteristicLength(project){return Math.max(1,...(project.elements||[]).map(e=>{const a=(project.nodes||[]).find(n=>n.id===e.n1),b=(project.nodes||[]).find(n=>n.id===e.n2);return a&&b?spatialAxes(a,b,e).L:1}))}
 function tangentAsymmetry(K,free){let maxA=0,maxD=0;for(const i of free)for(const j of free){maxA=Math.max(maxA,Math.abs(K[i][j]),Math.abs(K[j][i]));maxD=Math.max(maxD,Math.abs(K[i][j]-K[j][i]))}return maxD/Math.max(EPS,maxA)}
-function scaledThermalProject(project,factor){
-  if(!(project.elementLoads||[]).some(l=>l.kind==='thermal')||Math.abs(factor-1)<1e-14)return project;
-  return{...project,elementLoads:(project.elementLoads||[]).map(load=>{if(load.kind!=='thermal')return load;const next={...load,dT:(Number(load.dT)||0)*factor};if(load.dTGradient!==undefined)next.dTGradient=(Number(load.dTGradient)||0)*factor;if(load.dTGradientY!==undefined)next.dTGradientY=(Number(load.dTGradientY)||0)*factor;if(load.dTGradientZ!==undefined)next.dTGradientZ=(Number(load.dTGradientZ)||0)*factor;return next})};
-}
+function scaledThermalProject(project,factor){if(!(project.elementLoads||[]).some(l=>l.kind==='thermal')||Math.abs(factor-1)<1e-14)return project;return{...project,elementLoads:(project.elementLoads||[]).map(load=>{if(load.kind!=='thermal')return load;const next={...load,dT:(Number(load.dT)||0)*factor};if(load.dTGradient!==undefined)next.dTGradient=(Number(load.dTGradient)||0)*factor;if(load.dTGradientY!==undefined)next.dTGradientY=(Number(load.dTGradientY)||0)*factor;if(load.dTGradientZ!==undefined)next.dTGradientZ=(Number(load.dTGradientZ)||0)*factor;return next})}}
 function fdIncrement(project,u,j,fdStep,charLength=null){const rotational=j%6>=3,char=charLength??characteristicLength(project);return Math.max(1e-9,fdStep*Math.max(1,rotational?Math.abs(u[j]):char,Math.abs(u[j])))}
 
-/**
- * Numerical Jacobian of the spatial resisting-force vector assembled element by
- * element. The finite-difference formula is unchanged, but only the 12 DOFs of
- * each incident frame are perturbed instead of reassembling the complete model
- * for every global column. Linear nodal springs are added exactly on the diagonal.
- */
-export function numericalCorotational3DTangent(project,u,{fdStep=2e-7,scheme='central'}={}){
-  const nodes=project.nodes||[],nd=u.length,K=zeros(nd),mode=scheme==='forward'?'forward':'central',map=new Map(nodes.map((n,i)=>[n.id,i])),char=characteristicLength(project);
-  for(const e of project.elements||[]){
-    const i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Co-rotacional 3D: elemento ${e.id} referencia nó inexistente.`);const idx=elementDofs(i,j),ue=idx.map(g=>Number(u[g])||0),f0=mode==='forward'?corotationalFrame3DInternalForce(project,e,nodes[i],nodes[j],ue).global:null;
-    for(let c=0;c<12;c++){
-      const gcol=idx[c],h=fdIncrement(project,u,gcol,fdStep,char),up=[...ue];up[c]+=h;const fp=corotationalFrame3DInternalForce(project,e,nodes[i],nodes[j],up).global;
-      if(mode==='forward'){for(let r=0;r<12;r++)K[idx[r]][gcol]+=(fp[r]-f0[r])/h;continue}
-      const um=[...ue];um[c]-=h;const fm=corotationalFrame3DInternalForce(project,e,nodes[i],nodes[j],um).global;for(let r=0;r<12;r++)K[idx[r]][gcol]+=(fp[r]-fm[r])/(2*h);
-    }
-  }
-  addNodalSpringTangent(project,map,K);return K;
-}
+export function numericalCorotational3DTangent(project,u,{fdStep=2e-7,scheme='central'}={}){const nodes=project.nodes||[],nd=u.length,K=zeros(nd),mode=scheme==='forward'?'forward':'central',map=new Map(nodes.map((n,i)=>[n.id,i])),char=characteristicLength(project);for(const e of project.elements||[]){const i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Co-rotacional 3D: elemento ${e.id} referencia nó inexistente.`);const idx=elementDofs(i,j),ue=idx.map(g=>Number(u[g])||0),f0=mode==='forward'?corotationalFrame3DInternalForce(project,e,nodes[i],nodes[j],ue).global:null;for(let c=0;c<12;c++){const gcol=idx[c],h=fdIncrement(project,u,gcol,fdStep,char),up=[...ue];up[c]+=h;const fp=corotationalFrame3DInternalForce(project,e,nodes[i],nodes[j],up).global;if(mode==='forward'){for(let r=0;r<12;r++)K[idx[r]][gcol]+=(fp[r]-f0[r])/h;continue}const um=[...ue];um[c]-=h;const fm=corotationalFrame3DInternalForce(project,e,nodes[i],nodes[j],um).global;for(let r=0;r<12;r++)K[idx[r]][gcol]+=(fp[r]-fm[r])/(2*h)}}}addNodalSpringTangent(project,map,K);return K}
+export function numericalFollower3DTangent(project,u,{fdStep=2e-7,map=null}={}){const nodes=project.nodes||[],nd=u.length,K=zeros(nd),nodeMap=map||new Map(nodes.map((n,i)=>[n.id,i])),groups=followerGroups(project);if(!groups.length)return K;const char=characteristicLength(project);for(const group of groups){const e=group.e,i=nodeMap.get(e.n1),j=nodeMap.get(e.n2);if(i==null||j==null)throw new Error(`Co-rotacional 3D follower: nó ausente em ${e.id}.`);const idx=elementDofs(i,j),ue=idx.map(g=>Number(u[g])||0);for(let c=0;c<12;c++){const gcol=idx[c],h=fdIncrement(project,u,gcol,fdStep,char),up=[...ue],um=[...ue];up[c]+=h;um[c]-=h;const fp=followerElementGlobal(nodes[i],nodes[j],e,up,group.local),fm=followerElementGlobal(nodes[i],nodes[j],e,um,group.local);for(let r=0;r<3;r++)K[6*j+r][gcol]+=(fp[r]-fm[r])/(2*h)}}return K}
 
-/** Centered Jacobian dF_follower/du assembled only on follower-loaded elements. */
-export function numericalFollower3DTangent(project,u,{fdStep=2e-7,map=null}={}){
-  const nodes=project.nodes||[],nd=u.length,K=zeros(nd),nodeMap=map||new Map(nodes.map((n,i)=>[n.id,i])),groups=followerGroups(project);if(!groups.length)return K;const char=characteristicLength(project);
-  for(const group of groups){
-    const e=group.e,i=nodeMap.get(e.n1),j=nodeMap.get(e.n2);if(i==null||j==null)throw new Error(`Co-rotacional 3D follower: nó ausente em ${e.id}.`);const idx=elementDofs(i,j),ue=idx.map(g=>Number(u[g])||0);
-    for(let c=0;c<12;c++){
-      const gcol=idx[c],h=fdIncrement(project,u,gcol,fdStep,char),up=[...ue],um=[...ue];up[c]+=h;um[c]-=h;const fp=followerElementGlobal(nodes[i],nodes[j],e,up,group.local),fm=followerElementGlobal(nodes[i],nodes[j],e,um,group.local);for(let r=0;r<3;r++)K[6*j+r][gcol]+=(fp[r]-fm[r])/(2*h);
-    }
-  }
-  return K;
-}
-
-/**
- * Experimental global elastic co-rotational frame3d solver (v0.30 foundation).
- * Mechanical/thermal loads and prescribed support motion advance with the same
- * load factor. Newton corrections are constrained to zero at prescribed DOFs.
- */
 export function solveFrameCorotational3D(project,options={}){
-  validateGlobalScope(project);const nodes=project.nodes||[],nd=nodes.length*6,map=new Map(nodes.map((n,i)=>[n.id,i])),prescribed=prescribedDofs(project,map),correctionConstraints=zeroCorrectionConstraints(prescribed),free=Array.from({length:nd},(_,i)=>i).filter(i=>!prescribed.has(i)),Ffixed=fixedExternalVector(project,map),hasFollower=(project.elementLoads||[]).some(l=>l.kind==='followerEnd');
-  const steps=Math.max(1,Math.min(100,Math.round(Number(options.steps??project.settings?.nonlinearSteps??10)))),maxIterations=Math.max(3,Math.min(80,Math.round(Number(options.maxIterations??project.settings?.nonlinearMaxIterations??30)))),tolerance=Math.max(1e-10,Number(options.tolerance??project.settings?.nonlinearTolerance??1e-7)),fdStep=Math.max(1e-9,Math.min(1e-4,Number(options.fdStep??2e-7))),lineSearch=options.lineSearch??true,tangentScheme=options.tangentScheme==='forward'?'forward':'central';
+  validateGlobalScope(project);const nodes=project.nodes||[],nd=nodes.length*6,map=new Map(nodes.map((n,i)=>[n.id,i])),prescribed=prescribedDofs(project,map),correctionConstraints=zeroCorrectionConstraints(prescribed),free=Array.from({length:nd},(_,i)=>i).filter(i=>!prescribed.has(i)),Ffixed=fixedExternalVector(project,map),hasFollower=(project.elementLoads||[]).some(l=>l.kind==='followerEnd'),steps=Math.max(1,Math.min(100,Math.round(Number(options.steps??project.settings?.nonlinearSteps??10)))),maxIterations=Math.max(3,Math.min(80,Math.round(Number(options.maxIterations??project.settings?.nonlinearMaxIterations??30)))),tolerance=Math.max(1e-10,Number(options.tolerance??project.settings?.nonlinearTolerance??1e-7)),fdStep=Math.max(1e-9,Math.min(1e-4,Number(options.fdStep??2e-7))),lineSearch=options.lineSearch??true,tangentScheme=options.tangentScheme==='forward'?'forward':'central';
   let u=Array(nd).fill(0),last=null;const history=[];
   for(let step=1;step<=steps;step++){
     const lambda=step/steps,stepProject=scaledThermalProject(project,lambda);for(const[d,value]of prescribed)u[d]=lambda*value;let converged=false,residualNorm=Infinity,iterations=0,lastAsymmetry=null;
     for(let iteration=1;iteration<=maxIterations;iteration++){
-      iterations=iteration;const assembled=modelAssembly(stepProject,u),Fcurrent=externalVector(stepProject,u,map,Ffixed),target=Fcurrent.map(v=>lambda*v),residual=target.map((v,i)=>v-assembled.Fint[i]);residualNorm=maxFree(residual,free);const scaleR=Math.max(1,maxFree(target,free),maxFree(assembled.Fint,free));
-      if(residualNorm<=tolerance*scaleR){converged=true;last=assembled;break}
+      iterations=iteration;const assembled=modelAssembly(stepProject,u),Fcurrent=externalVector(stepProject,u,map,Ffixed),target=Fcurrent.map(v=>lambda*v),residual=target.map((v,i)=>v-assembled.Fint[i]);residualNorm=maxFree(residual,free);const scaleR=Math.max(1,maxFree(target,free),maxFree(assembled.Fint,free));if(residualNorm<=tolerance*scaleR){converged=true;last=assembled;break}
       const Kint=numericalCorotational3DTangent(stepProject,u,{fdStep,scheme:tangentScheme}),Kext=hasFollower?numericalFollower3DTangent(stepProject,u,{fdStep,map}):zeros(nd),K=subtractMatrices(Kint,Kext,lambda);lastAsymmetry=tangentAsymmetry(K,free);const du=solveConstrained(K,residual,correctionConstraints).u;if(du.some(v=>!Number.isFinite(v)))throw new Error(`Co-rotacional 3D: incremento não finito no passo ${step}.`);
-      let alpha=1,best=u.map((v,i)=>v+du[i]),bestNorm=Infinity;
-      if(lineSearch){for(let cut=0;cut<8;cut++){const trial=u.map((v,i)=>v+alpha*du[i]),fi=modelAssembly(stepProject,trial).Fint,ft=externalVector(stepProject,trial,map,Ffixed).map(v=>lambda*v),rr=ft.map((v,i)=>v-fi[i]),n=maxFree(rr,free);if(n<bestNorm){bestNorm=n;best=trial}if(n<residualNorm)break;alpha*=.5}}
+      let alpha=1,best=u.map((v,i)=>v+du[i]),bestNorm=Infinity;if(lineSearch){for(let cut=0;cut<8;cut++){const trial=u.map((v,i)=>v+alpha*du[i]),fi=modelAssembly(stepProject,trial).Fint,ft=externalVector(stepProject,trial,map,Ffixed).map(v=>lambda*v),rr=ft.map((v,i)=>v-fi[i]),n=maxFree(rr,free);if(n<bestNorm){bestNorm=n;best=trial}if(n<residualNorm)break;alpha*=.5}}
       u=best;for(const[d,value]of prescribed)u[d]=lambda*value;if(Math.max(...u.map(Math.abs))>1e4)throw new Error('Co-rotacional 3D divergiu: deslocamentos/rotações não físicos.');
     }
     if(!converged){const a=modelAssembly(stepProject,u),target=externalVector(stepProject,u,map,Ffixed).map(v=>lambda*v),r=target.map((v,i)=>v-a.Fint[i]);residualNorm=maxFree(r,free);if(residualNorm<=tolerance*Math.max(1,maxFree(target,free),maxFree(a.Fint,free))){converged=true;last=a}}
-    if(!converged)throw new Error(`Co-rotacional 3D não convergiu no passo ${step}/${steps} após ${maxIterations} iterações (‖r‖∞=${residualNorm.toExponential(3)}).`);
-    history.push({step,lambda,iterations,residualNorm,tangentAsymmetry:lastAsymmetry,thermalLoadFactor:lambda,followerLoadFactor:hasFollower?lambda:0,prescribedDisplacementFactor:prescribed.size?lambda:0});
+    if(!converged)throw new Error(`Co-rotacional 3D não convergiu no passo ${step}/${steps} após ${maxIterations} iterações (‖r‖∞=${residualNorm.toExponential(3)}).`);history.push({step,lambda,iterations,residualNorm,tangentAsymmetry:lastAsymmetry,thermalLoadFactor:lambda,followerLoadFactor:hasFollower?lambda:0,prescribedDisplacementFactor:prescribed.size?lambda:0});
   }
-  last=last||modelAssembly(project,u);const Ffinal=externalVector(project,u,map,Ffixed),reactions=last.Fint.map((v,i)=>v-Ffinal[i]),displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[6*i],uy:u[6*i+1],uz:u[6*i+2],rx:u[6*i+3],ry:u[6*i+4],rz:u[6*i+5]})),springForces=recoverNodalSpringForces(project,u,map);
-  return{type:'frame3d-corotational',dimension:'3d',analysisType:'corotational',solverVersion:'0.30.0-exp',dofs:nd,activeDofs:free.length,displacements,reactions:nodes.map((n,i)=>({nodeId:n.id,fx:reactions[6*i],fy:reactions[6*i+1],fz:reactions[6*i+2],mx:reactions[6*i+3],my:reactions[6*i+4],mz:reactions[6*i+5]})),springForces,elementForces:last.responses,nonlinear:{formulation:'spatial co-rotational Euler-Bernoulli frame; element-wise numerical internal/external Jacobians',tangentAssembly:'element-local-finite-difference',steps,maxIterations,tolerance,fdStep,lineSearch,tangentScheme,thermalProportionalLoading:true,nonconservativeFollower:hasFollower,followerCount:(project.elementLoads||[]).filter(l=>l.kind==='followerEnd').length,springCount:(project.nodeSprings||[]).length,prescribedDofCount:prescribed.size,prescribedLoading:prescribed.size?'proportional':null,history,converged:true}};
+  last=last||modelAssembly(project,u);const Ffinal=externalVector(project,u,map,Ffixed),reactions=last.Fint.map((v,i)=>v-Ffinal[i]),displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[6*i],uy:u[6*i+1],uz:u[6*i+2],rx:u[6*i+3],ry:u[6*i+4],rz:u[6*i+5]})),springForces=recoverNodalSpringForces(project,u,map),releaseCount=(project.elements||[]).reduce((s,e)=>s+Object.values(e.releases||{}).filter(Boolean).length,0),semiRigidConnectionCount=(project.elements||[]).reduce((s,e)=>s+Object.values(e.rotationalSprings||{}).filter(v=>v!==null&&v!==undefined&&Number(v)>0).length,0);
+  return{type:'frame3d-corotational',dimension:'3d',analysisType:'corotational',solverVersion:'0.30.0-exp',dofs:nd,activeDofs:free.length,displacements,reactions:nodes.map((n,i)=>({nodeId:n.id,fx:reactions[6*i],fy:reactions[6*i+1],fz:reactions[6*i+2],mx:reactions[6*i+3],my:reactions[6*i+4],mz:reactions[6*i+5]})),springForces,elementForces:last.responses,nonlinear:{formulation:'spatial co-rotational Euler-Bernoulli frame with released/semi-rigid end rotations; element-wise numerical internal/external Jacobians',tangentAssembly:'element-local-finite-difference',steps,maxIterations,tolerance,fdStep,lineSearch,tangentScheme,thermalProportionalLoading:true,nonconservativeFollower:hasFollower,followerCount:(project.elementLoads||[]).filter(l=>l.kind==='followerEnd').length,springCount:(project.nodeSprings||[]).length,releaseCount,semiRigidConnectionCount,prescribedDofCount:prescribed.size,prescribedLoading:prescribed.size?'proportional':null,history,converged:true}};
 }

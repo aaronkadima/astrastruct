@@ -12,17 +12,18 @@ assert.equal(SECTION_ENGINE_CONTRACT,'section-engine/v1');
 // Exact arbitrary-polygon benchmark against a centered rectangle.
 const b=.3,h=.5,vertices=[{y:-b/2,z:-h/2},{y:b/2,z:-h/2},{y:b/2,z:h/2},{y:-b/2,z:h/2}],poly=polygonSectionProperties(vertices),rect=rectangleSectionProperties({width:b,height:h});
 close(poly.area,b*h,1e-12,'polygon area');close(poly.centroid.y,0,1e-12);close(poly.centroid.z,0,1e-12);close(poly.Iy,b*h**3/12,1e-12,'polygon Iy');close(poly.Iz,h*b**3/12,1e-12,'polygon Iz');close(poly.Iyz,0,1e-12);close(rect.Iy,poly.Iy,1e-12);
+close(rect.elasticSectionModulus.WyPositive,rect.Iy/(h/2),1e-12,'rectangle Wel,y');close(rect.plasticSectionModulus.Wy,b*h*h/4,1e-12,'rectangle Wpl,y');assert.ok(rect.J>0);close(rect.shearCenter.y,0,1e-12);close(rect.shearCenter.z,0,1e-12);
 
-// Exact standard steel geometry benchmarks.
-const iGeom=iSectionProperties({height:.4,width:.2,webThickness:.01,flangeThickness:.016});close(iGeom.area,2*.2*.016+.01*(.4-2*.016),1e-12,'I area');assert.ok(iGeom.Iy>iGeom.Iz);
-const rhs=rhsSectionProperties({height:.3,width:.2,thickness:.01});close(rhs.area,.3*.2-(.3-.02)*(.2-.02),1e-12,'RHS area');close(rhs.centroid.y,0,1e-12);close(rhs.centroid.z,0,1e-12);
+// Exact standard steel geometry benchmarks plus explicit torsion/warping models.
+const iGeom=iSectionProperties({height:.4,width:.2,webThickness:.01,flangeThickness:.016});close(iGeom.area,2*.2*.016+.01*(.4-2*.016),1e-12,'I area');assert.ok(iGeom.Iy>iGeom.Iz);assert.ok(iGeom.J>0);assert.ok(iGeom.Cw>0);assert.ok(iGeom.plasticSectionModulus.Wy>iGeom.elasticSectionModulus.WyPositive);assert.equal(iGeom.torsionModel,'open-thin-wall-sum-bt3-over-3');
+const rhs=rhsSectionProperties({height:.3,width:.2,thickness:.01});close(rhs.area,.3*.2-(.3-.02)*(.2-.02),1e-12,'RHS area');close(rhs.centroid.y,0,1e-12);close(rhs.centroid.z,0,1e-12);assert.ok(rhs.J>0);assert.ok(rhs.plasticSectionModulus.Wy>rhs.elasticSectionModulus.WyPositive);assert.equal(rhs.torsionModel,'bredt-batho-thin-wall-median-line');
 
 const steel={id:'steel355',type:'steel',E:200e6,fy:355},steelSection=createSteelSection({id:'S',family:'rect',material:steel,width:.2,height:.4,ny:10,nz:20});
 close(steelSection.geometry.area,.08,1e-12);close(steelSection.discreteGeometry.area,.08,1e-12);close(steelSection.discreteGeometry.Iy,steelSection.geometry.Iy,1e-12,'fiber Iy with local cell inertia');close(steelSection.discreteGeometry.Iz,steelSection.geometry.Iz,1e-12,'fiber Iz with local cell inertia');
 
 // Elastic axial + biaxial bending resultants and symmetric section tangent.
 const eps=.0005,ky=.001,kz=-.0007,response=fiberSectionResponse3D({fibers:steelSection.fibers,materials:steelSection.materials,generalizedStrain:{epsilon0:eps,kappaY:ky,kappaZ:kz}});
-close(response.resultants.N,steel.E*steelSection.geometry.area*eps,1e-10,'EA epsilon');close(response.resultants.My,steel.E*steelSection.geometry.Iy*ky,1e-10,'EIy ky');close(response.resultants.Mz,steel.E*steelSection.geometry.Iz*kz,1e-10,'EIz kz');assert.equal(symmetric(response.tangent),true);assert.equal(response.yieldedFibers,0);
+close(response.resultants.N,steel.E*steelSection.geometry.area*eps,1e-10,'EA epsilon');close(response.resultants.My,steel.E*steelSection.geometry.Iy*ky,1e-10,'EIy ky');close(response.resultants.Mz,steel.E*steelSection.geometry.Iz*kz,1e-10,'EIz kz');assert.equal(symmetric(response.tangent),true);assert.equal(response.yieldedFibers,0);assert.equal(response.integration,'centroid-with-local-cell-moments');
 
 // Inverse N-My-Mz equilibrium must recover the generalized strain field.
 const referenceStrain={epsilon0:1e-4,kappaY:5e-4,kappaZ:-3e-4},reference=fiberSectionResponse3D({fibers:steelSection.fibers,materials:steelSection.materials,generalizedStrain:referenceStrain}),inverse=solveSectionEquilibrium3D({fibers:steelSection.fibers,materials:steelSection.materials,target:reference.resultants,initial:{epsilon0:0,kappaY:0,kappaZ:0},tolerances:{absoluteResidual:1e-7,relativeResidual:1e-11}});
@@ -44,4 +45,4 @@ const m1={id:'m1',type:'elastic',E:30e6},m2={id:'m2',type:'elastic',E:200e6},com
 ]});
 const ea=30e6*(.6*.12)+200e6*(.25*.02),compResponse=fiberSectionResponse3D({fibers:composite.fibers,materials:composite.materials,generalizedStrain:{epsilon0:1e-5,kappaY:0,kappaZ:0}});close(compResponse.resultants.N,ea*1e-5,1e-10,'composite EA');assert.equal(compResponse.fiberCount,composite.fibers.length);
 
-console.log('AstraStruct v0.34 Section Engine smoke: arbitrary geometry, steel/RC/composite fibers and N-My-Mz equilibrium OK.');
+console.log('AstraStruct v0.34 Section Engine smoke: geometry/J/Cw/Wel/Wpl, steel/RC/composite fibers and N-My-Mz equilibrium OK.');

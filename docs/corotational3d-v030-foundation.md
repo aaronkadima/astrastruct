@@ -4,7 +4,7 @@
 
 A v0.30 implementa a primeira análise geometricamente não linear espacial do AstraStruct para elementos `frame3d`. O kernel permanece **experimental** na branch `develop`; a produção em `main` continua preservando os solvers 3D consolidados linear, modal/flambagem e P-Delta.
 
-O estágio atual já ultrapassou a fundação cinemática inicial: há equilíbrio global incremental, cargas de barra conservativas, peso próprio, ações térmicas, imperfeição modal sem tensões, força seguidora concentrada espacial e montagem numérica da Jacobiana por elemento.
+O estágio atual já ultrapassou a fundação cinemática inicial: há equilíbrio global incremental, cargas de barra conservativas, peso próprio, ações térmicas, imperfeição modal sem tensões, força seguidora concentrada espacial, molas nodais lineares e montagem numérica da Jacobiana por elemento.
 
 ## Cinemática co-rotacional
 
@@ -47,6 +47,22 @@ Para diferença central, o custo dominante passa de uma reassemblagem global rep
 O mesmo passo de perturbação usado anteriormente é preservado, e existe um teste de regressão que compara a nova montagem elemento a elemento com a definição global por diferenças finitas, tanto no esquema central quanto no forward.
 
 O line search é aplicado ao incremento de Newton e os resíduos são avaliados somente nos graus de liberdade livres.
+
+## Molas nodais 3D
+
+A v0.30 aceita molas lineares ao solo associadas aos seis graus de liberdade globais do nó:
+
+- `kx`, `ky`, `kz` para translações;
+- `krx`, `kry`, `krz` para rotações;
+- o campo legado `kr` permanece compatível e é interpretado como `krz` quando `krz` não é fornecido.
+
+A força resistente da mola é incluída diretamente no vetor interno,
+
+`Fs = Ks u`,
+
+e sua contribuição na Jacobiana é exata e diagonal. Rigidezes negativas são rejeitadas. O resultado também retorna `springForces`, com a ação física da mola sobre o nó definida por `-Ks u`.
+
+O editor legado de mecânica já permite `kx`, `ky` e `kr`; os campos espaciais adicionais podem ser preservados no modelo e serão expostos progressivamente na interface 3D dedicada.
 
 ## Cargas conservativas de barra
 
@@ -102,6 +118,7 @@ Como esperado para uma ação não conservativa, `Keff` não precisa ser simétr
 - peso próprio e resultados de teoria de vigas no limite linear;
 - ações térmicas uniformes e gradientes, inclusive em combinações de carga;
 - imperfeição modal como referência sem tensões;
+- molas translacionais/rotacionais lineares e recuperação das forças de mola;
 - força follower sob rotação rígida finita;
 - limite de pequena carga follower;
 - não simetria da Jacobiana externa follower;
@@ -119,6 +136,7 @@ Como esperado para uma ação não conservativa, `Keff` não precisa ser simétr
 - peso próprio global `-Z`;
 - ações térmicas uniformes e gradientes locais;
 - imperfeição modal 3D sem tensões;
+- molas nodais lineares globais `kx/ky/kz/krx/kry/krz` (`kr` como alias de `krz`);
 - follower concentrada na extremidade 2, `Px/Py/Pz` local;
 - apoios homogêneos com valores prescritos nulos;
 - controle incremental de carga;
@@ -127,7 +145,7 @@ Como esperado para uma ação não conservativa, `Keff` não precisa ser simétr
 ## Escopo ainda protegido
 
 - momentos seguidores e follower distribuída;
-- molas nodais e recalques;
+- recalques/deslocamentos prescritos não nulos;
 - releases e ligações semirrígidas espaciais;
 - controle de deslocamento e Arc-Length 3D;
 - plasticidade material, rótulas e plasticidade distribuída 3D;
@@ -136,8 +154,9 @@ Como esperado para uma ação não conservativa, `Keff` não precisa ser simétr
 ## Próxima sequência
 
 1. comparar a Jacobiana numérica elemento a elemento com uma tangente co-rotacional analítica/consistente e introduzir a versão analítica somente após equivalência de benchmarks;
-2. adicionar reutilização/caching seguro de propriedades invariantes por elemento para reduzir custo por iteração;
-3. generalizar releases e ligações semirrígidas espaciais;
-4. implementar controle de deslocamento e Arc-Length 3D;
-5. posteriormente introduzir não linearidade material 3D e estabilidade pós-crítica mais completa;
-6. somente promover a v0.30 para `main` após benchmarks e regressões de produção permanecerem verdes.
+2. ampliar o editor espacial para os seis componentes das molas e os resultados de reação elástica;
+3. adicionar reutilização/caching seguro de propriedades invariantes por elemento para reduzir custo por iteração;
+4. generalizar releases e ligações semirrígidas espaciais;
+5. implementar controle de deslocamento e Arc-Length 3D;
+6. posteriormente introduzir não linearidade material 3D e estabilidade pós-crítica mais completa;
+7. somente promover a v0.30 para `main` após benchmarks e regressões de produção permanecerem verdes.

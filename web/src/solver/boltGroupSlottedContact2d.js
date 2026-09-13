@@ -129,12 +129,14 @@ export function generateSlottedContactBoltGroup({
 
 /** Nonlinear rigid-plate contact against circular or capsule/slotted bolt holes. */
 export function solveBoltGroupSlottedClearanceContact({bolts=[],loads={},steps=12,maxIterations=60,tolerance=1e-9}={}){
-  const bs=(Array.isArray(bolts)?bolts:[]).map((b,i)=>({
-    id:String(b.id||`B${i+1}`),x:finite(b.x),y:finite(b.y),k:Math.max(EPS,finite(b.k??b.bearingStiffness,250000)),
-    gap:Math.max(0,finite(b.gap,.001)),slotHalfLength:Math.max(0,finite(b.slotHalfLength,b.slotLength!=null?.5*finite(b.slotLength):0)),
-    slotAngle:finite(b.slotAngle),shearCapacity:Math.max(0,finite(b.shearCapacity)),yieldForce:Math.max(0,finite(b.yieldForce)),
-    postYieldRatio:Math.max(0,finite(b.postYieldRatio,.02))
-  }));
+  const bs=(Array.isArray(bolts)?bolts:[]).map((b,i)=>{
+    const slotHalfLength=b.slotHalfLength!=null?finite(b.slotHalfLength):.5*finite(b.slotLength,0);
+    return{
+      id:String(b.id||`B${i+1}`),x:finite(b.x),y:finite(b.y),k:Math.max(EPS,finite(b.k??b.bearingStiffness,250000)),
+      gap:Math.max(0,finite(b.gap,.001)),slotHalfLength:Math.max(0,slotHalfLength),slotAngle:finite(b.slotAngle),
+      shearCapacity:Math.max(0,finite(b.shearCapacity)),yieldForce:Math.max(0,finite(b.yieldForce)),postYieldRatio:Math.max(0,finite(b.postYieldRatio,.02))
+    };
+  });
   if(bs.length<2)throw new Error('Contato em furo oblongo: informe ao menos dois parafusos.');
   const L=Math.max(.01,...bs.map(b=>Math.hypot(b.x,b.y)+b.slotHalfLength)),lv=loadVector(loads),nSteps=Math.max(1,Math.min(100,Math.round(finite(steps,12)))),tol=Math.max(1e-12,finite(tolerance,1e-9)),history=[];
   let q=[0,0,0],last=null;

@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 
-test('isolated Lab runs bonded anchor pull-out, exports CSV and scientific SVG',async({page},testInfo)=>{
+test('isolated Lab runs bonded anchor pull-out, maps bond stress, exports CSV and scientific SVG',async({page},testInfo)=>{
   test.skip(testInfo.project.name!=='desktop-chromium','anchor pull-out laboratory workflow');
   await page.goto('./');
   await page.getByTestId('model-lab-launch').click();
@@ -12,7 +12,7 @@ test('isolated Lab runs bonded anchor pull-out, exports CSV and scientific SVG',
   const lab=page.getByTestId('anchor-pullout-lab');await expect(lab).toBeVisible();await expect(lab).toContainText('aderência distribuída');
   await lab.locator('[data-anchor-segments]').fill('12');await lab.locator('[data-anchor-steps]').fill('20');await lab.locator('[data-anchor-dmax]').fill('8');
   await page.getByTestId('run-anchor-pullout').click();
-  const chart=page.getByTestId('anchor-pullout-chart'),profile=page.getByTestId('anchor-bond-profile');await expect(chart).toBeVisible();await expect(profile).toBeVisible();await expect(lab).toContainText('Pico');await expect(lab).toContainText('kN');await expect(lab).toContainText('MPa');
+  const chart=page.getByTestId('anchor-pullout-chart'),profile=page.getByTestId('anchor-bond-profile'),map=page.getByTestId('anchor-bond-contact-map');await expect(chart).toBeVisible();await expect(profile).toBeVisible();await expect(map).toBeVisible();await expect(lab).toContainText('Distribuição espacial da tensão de aderência');await expect(map).toContainText('τmáx');await expect(map).toContainText('profundidade');await expect(lab).toContainText('Pico');await expect(lab).toContainText('kN');await expect(lab).toContainText('MPa');
   const peak=await lab.locator('.anchor-lab-kpi').first().locator('strong').textContent();expect(parseFloat(peak||'0')).toBeGreaterThan(0);
 
   const csvPromise=page.waitForEvent('download');await lab.locator('[data-anchor-csv]').click();const csvDownload=await csvPromise;expect(csvDownload.suggestedFilename()).toMatch(/anchor-pullout-curva\.csv$/);const csvPath=await csvDownload.path();expect(csvPath).toBeTruthy();const csv=await readFile(csvPath!,'utf8');expect(csv).toContain('deslocamento_mm,forca_kN');expect(csv.trim().split(/\r?\n/).length).toBeGreaterThan(10);

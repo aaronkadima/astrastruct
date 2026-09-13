@@ -27,6 +27,7 @@ import './shellMeshBootstrap';
 import './shellRefinementBootstrap';
 import './shellQualityBootstrap';
 import './shellConvergenceBootstrap';
+import './shellQualityResultsBootstrap';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('AstraStruct: elemento #root não encontrado.');

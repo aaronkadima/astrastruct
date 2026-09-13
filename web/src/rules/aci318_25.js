@@ -27,7 +27,7 @@ function anchorTensionChecks(a){
 function anchorShearEdgeChecks(a){
   const Vu=Math.abs(n(a.Vu)),Vb=Math.max(0,n(a.basicShearBreakout)),phi=Math.max(0,n(a.phi,.70));if(!(Vb>0))return[];
   const AVco=Math.max(1e-12,n(a.AVco,1)),AVc=Math.max(0,n(a.AVc,AVco)),psiEcV=Math.max(0,n(a.psiEcV,1)),psiEdV=Math.max(0,n(a.psiEdV,1)),psiCV=Math.max(0,n(a.psiCV,1)),psiHV=Math.max(0,n(a.psiHV,1)),Vcb=Vb*(AVc/AVco)*psiEcV*psiEdV*psiCV*psiHV;
-  return[check('anchor-concrete-edge-shear','Breakout de concreto junto à borda em cisalhamento',Vu,phi*Vcb,{clause:'ACI CODE-318-25 · Ch. 17 concrete edge breakout in shear',equation:'φ·Vb·(AVc/AVco)·Πψ',parameters:{phi,Vb,AVc,AVco,psiEcV,psiEdV,psiCV,psiHV,Vcb},notes:['basicShearBreakout (Vb) deve ser fornecido pelo perfil geométrico aplicável; o AstraStruct não replica tabelas/coeficientes licenciados que não foram verificados publicamente.']}))];
+  return [check('anchor-concrete-edge-shear','Breakout de concreto junto à borda em cisalhamento',Vu,phi*Vcb,{clause:'ACI CODE-318-25 · Ch. 17 concrete edge breakout in shear',equation:'φ·Vb·(AVc/AVco)·Πψ',parameters:{phi,Vb,AVc,AVco,psiEcV,psiEdV,psiCV,psiHV,Vcb},notes:['basicShearBreakout (Vb) deve ser fornecido pelo perfil geométrico aplicável; o AstraStruct não replica tabelas/coeficientes licenciados que não foram verificados publicamente.']})];
 }
 
 export function evaluateAci318_25(input={}){return[...punchingChecks(input.punching||{}),...anchorTensionChecks(input.anchorTension||{}),...anchorShearEdgeChecks(input.anchorShearEdge||{})]}

@@ -163,7 +163,6 @@ export function normalizeProject(input) {
   p.meta = productMetadata({ ...base.meta, ...(p.meta || {}), solverVersion: '0.13.6-exp', updatedAt: new Date().toISOString() });
   p.version = 13; // legacy compatibility marker; schemaVersion is authoritative.
 
-
   const firstCaseId = p.loadCases[0]?.id || 'LC1';
   p.loads = p.loads.map(l => ({ ...l, caseId: l.caseId || firstCaseId }));
   p.elementLoads = p.elementLoads.map(l => {
@@ -172,21 +171,27 @@ export function normalizeProject(input) {
       out.end=Number(out.end??2);
       out.px=Number(out.px)||0;
       out.py=Number(out.py)||0;
+      out.pz=Number(out.pz)||0;
     }
     return out;
   });
   p.settlements = p.settlements.map(s => ({ ...s, caseId: s.caseId || firstCaseId, ux: Number(s.ux)||0, uy: Number(s.uy)||0, uz: Number(s.uz)||0, rx: Number(s.rx)||0, ry: Number(s.ry)||0, rz: Number(s.rz)||0 }));
-  p.nodeSprings = p.nodeSprings.map(s => ({ ...s, id: s.id || uid('SPR'), kx: Math.max(0, Number(s.kx)||0), ky: Math.max(0, Number(s.ky)||0), kr: Math.max(0, Number(s.kr)||0) }));
-  p.nodalMasses = p.nodalMasses.map(m => ({ ...m, id: m.id || uid('MASS'), mx: Math.max(0, Number(m.mx)||0), my: Math.max(0, Number(m.my)||0), mr: Math.max(0, Number(m.mr)||0) })).filter(m=>m.nodeId&&(m.mx>0||m.my>0||m.mr>0));
+  p.nodeSprings = p.nodeSprings.map(s => {
+    const legacyKr=Math.max(0,Number(s.kr)||0),krz=Math.max(0,Number(s.krz??s.kr)||0);
+    return{...s,id:s.id||uid('SPR'),kx:Math.max(0,Number(s.kx)||0),ky:Math.max(0,Number(s.ky)||0),kz:Math.max(0,Number(s.kz)||0),krx:Math.max(0,Number(s.krx)||0),kry:Math.max(0,Number(s.kry)||0),krz,kr:legacyKr};
+  });
+  p.nodalMasses = p.nodalMasses.map(m => {
+    const legacyMr=Math.max(0,Number(m.mr)||0),mrz=Math.max(0,Number(m.mrz??m.mr)||0);
+    return{...m,id:m.id||uid('MASS'),mx:Math.max(0,Number(m.mx)||0),my:Math.max(0,Number(m.my)||0),mz:Math.max(0,Number(m.mz)||0),mrx:Math.max(0,Number(m.mrx)||0),mry:Math.max(0,Number(m.mry)||0),mrz,mr:legacyMr};
+  }).filter(m=>m.nodeId&&(m.mx>0||m.my>0||m.mz>0||m.mrx>0||m.mry>0||m.mrz>0));
   p.materials = p.materials.map(m => ({ ...m, alpha: Number.isFinite(Number(m.alpha)) ? Number(m.alpha) : defaultAlpha(m.type) }));
   p.elements = p.elements.map(e => {
-    const releases = { rz1: false, rz2: false, ...(e.releases || {}) };
+    const releases = { rx1:false,ry1:false,rz1:false,rx2:false,ry2:false,rz2:false,...(e.releases || {}) };
     const rotationalSprings = {
-      rz1: normalizeRotationalSpring(e.rotationalSprings?.rz1),
-      rz2: normalizeRotationalSpring(e.rotationalSprings?.rz2)
+      rx1:normalizeRotationalSpring(e.rotationalSprings?.rx1),ry1:normalizeRotationalSpring(e.rotationalSprings?.ry1),rz1:normalizeRotationalSpring(e.rotationalSprings?.rz1),
+      rx2:normalizeRotationalSpring(e.rotationalSprings?.rx2),ry2:normalizeRotationalSpring(e.rotationalSprings?.ry2),rz2:normalizeRotationalSpring(e.rotationalSprings?.rz2)
     };
-    if (releases.rz1) rotationalSprings.rz1 = 0;
-    if (releases.rz2) rotationalSprings.rz2 = 0;
+    for(const key of ['rx1','ry1','rz1','rx2','ry2','rz2'])if(releases[key])rotationalSprings[key]=0;
     const rawDp=e.distributedPlasticity||{},integrationPoints=[3,5].includes(Math.round(Number(rawDp.integrationPoints)))?Math.round(Number(rawDp.integrationPoints)):5,distributedPlasticity={enabled:!!rawDp.enabled,integrationPoints,nFibers:Math.max(8,Math.min(400,Math.round(Number(rawDp.nFibers)||80))),hardeningRatio:Math.max(1e-6,Math.min(.25,Math.abs(Number(rawDp.hardeningRatio)||.01))),cyclic:!!rawDp.cyclic,kinematicFraction:Math.max(0,Math.min(1,Number.isFinite(Number(rawDp.kinematicFraction))?Number(rawDp.kinematicFraction):1))};
     const normHinge=(raw={})=>({enabled:!!raw.enabled,hingeLength:Math.max(1e-4,Number(raw.hingeLength)||.35),nFibers:Math.max(8,Math.min(400,Math.round(Number(raw.nFibers)||80))),hardeningRatio:Math.max(1e-6,Math.min(.25,Math.abs(Number(raw.hardeningRatio)||.01))),cyclic:!!raw.cyclic,kinematicFraction:Math.max(0,Math.min(1,Number.isFinite(Number(raw.kinematicFraction))?Number(raw.kinematicFraction):1))});
     const fiberHinges={rz1:normHinge(e.fiberHinges?.rz1),rz2:normHinge(e.fiberHinges?.rz2)};
@@ -207,7 +212,7 @@ export function normalizeProject(input) {
   p.loads = p.loads.filter(l => validCaseIds.has(l.caseId));
   p.elementLoads = p.elementLoads.filter(l => validCaseIds.has(l.caseId));
   p.settlements = p.settlements.filter(s => validCaseIds.has(s.caseId));
-  p.nodeSprings = p.nodeSprings.filter(s => validNodeIds.has(s.nodeId) && (s.kx || s.ky || s.kr));
+  p.nodeSprings = p.nodeSprings.filter(s => validNodeIds.has(s.nodeId) && (s.kx||s.ky||s.kz||s.krx||s.kry||s.krz));
   p.loadCombinations = p.loadCombinations.map(c => ({
     ...c, type: c.type || 'custom',
     terms: (c.terms || []).filter(t => validCaseIds.has(t.caseId)).map(t => ({ caseId: t.caseId, factor: Number(t.factor) || 0 }))
@@ -231,7 +236,7 @@ export function makeTrussElement({ id = uid('E'), n1, n2, materialId = 'steel355
 
 export function makeFrame3DElement({ id = uid('E'), n1, n2, materialId = 'steel355', sectionId = 'steel_space_demo', label = 'Frame 3D', A, Iy, Iz, J, orientation } = {}) {
   const section = SECTIONS.find(s => s.id === sectionId) || SECTIONS.find(s => s.id === 'steel_space_demo') || SECTIONS[0];
-  return { id, type: 'frame3d', n1, n2, materialId, sectionId, A: A ?? section.A, Iy: Iy ?? section.Iy ?? section.I, Iz: Iz ?? section.Iz ?? section.I, J: J ?? section.J, orientation: orientation || undefined, label };
+  return { id, type: 'frame3d', n1, n2, materialId, sectionId, A: A ?? section.A, Iy: Iy ?? section.Iy ?? section.I, Iz: Iz ?? section.Iz ?? section.I, J: J ?? section.J, orientation: orientation || undefined, releases:{rx1:false,ry1:false,rz1:false,rx2:false,ry2:false,rz2:false},rotationalSprings:{rx1:null,ry1:null,rz1:null,rx2:null,ry2:null,rz2:null}, label };
 }
 
 export function makeTruss3DElement({ id = uid('E'), n1, n2, materialId = 'steel355', sectionId = 'truss_generic', label = 'Treliça 3D', A } = {}) {
@@ -279,7 +284,6 @@ export function demoLoadCases() {
   p.loadCombinations=[{id:'COMB1',name:'Combinação customizada demonstrativa',type:'custom',terms:[{caseId:'G',factor:1.2},{caseId:'Q',factor:1.5}]}];
   p.settings.activeLoadCaseId='G';p.settings.analysisScenarioId='COMB1';return p;
 }
-
 
 export function demoSpatialFrame() {
   const p=emptyProject();p.name='Pórtico espacial 3D demonstrativo';

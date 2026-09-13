@@ -38,7 +38,8 @@ export function classifyElementSet(project = {}) {
   if ([...types].every(t => t === 'frame2d' || t === 'truss2d')) return 'mixed2d';
   if (types.size === 1 && types.has('truss3d')) return 'truss3d';
   if (types.size === 1 && types.has('frame3d')) return 'frame3d';
-  if ([...types].every(t => t === 'frame3d' || t === 'truss3d')) return 'mixed3d';
+  if (types.size === 1 && types.has('shell4')) return 'shell4';
+  if ([...types].every(t => t === 'frame3d' || t === 'truss3d' || t === 'shell4')) return 'mixed3d';
   return 'unsupported';
 }
 
@@ -60,7 +61,6 @@ registerElementType({
   capabilities: { linear: true, pdelta: true, corotational: true, dynamics: true },
 });
 
-
 registerElementType({
   type: 'truss3d',
   label: 'Treliça 3D',
@@ -76,5 +76,15 @@ registerElementType({
   dimension: '3d',
   dofsPerNode: ['ux','uy','uz','rx','ry','rz'],
   nodeCount: 2,
-  capabilities: { linear: true, pdelta: false, corotational: false, dynamics: false },
+  capabilities: { linear: true, pdelta: true, corotational: true, dynamics: true },
+});
+
+registerElementType({
+  type: 'shell4',
+  label: 'Casca/Laje Q4 Mindlin–Reissner',
+  dimension: '3d',
+  category: 'surface',
+  dofsPerNode: ['ux','uy','uz','rx','ry','rz'],
+  nodeCount: 4,
+  capabilities: { linear: true, pdelta: false, corotational: false, dynamics: false, surfacePressure: true, membrane: true, bending: true, transverseShear: true },
 });

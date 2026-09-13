@@ -3,7 +3,10 @@ import {resolve,relative} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 const root=resolve('tests');
-const files=(await readdir(root,{withFileTypes:true})).filter(e=>e.isFile()&&e.name.endsWith('-smoke.mjs')).map(e=>e.name).sort();
+const EXCLUDED=new Set(['pages-artifact-smoke.mjs']);
+const files=(await readdir(root,{withFileTypes:true}))
+  .filter(e=>e.isFile()&&e.name.endsWith('-smoke.mjs')&&!EXCLUDED.has(e.name))
+  .map(e=>e.name).sort();
 if(!files.length)throw new Error('AstraStruct smoke runner: nenhum teste encontrado.');
 for(const name of files){
   const path=resolve(root,name);

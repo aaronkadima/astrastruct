@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { solveSpatial3D } from '../web/src/solver/spatial3d.js';
-import { solveFrameCorotational3DWithDeadLoads, uniformLoadVector3D, pointLoadVector3D } from '../web/src/solver/corotational3dLoads.js';
+import { solveFrameCorotational3DWithDeadLoads, uniformLoadVector3D, pointLoadVector3D, prepareCorotational3DDeadLoads } from '../web/src/solver/corotational3dLoads.js';
 
 const close=(a,b,tol,msg)=>assert.ok(Math.abs(a-b)<=tol,`${msg}: got ${a}, expected ${b}, err=${Math.abs(a-b)}`);
 const E=200e6,nu=.3,A=.02,Iy=8e-5,Iz=1.1e-4,J=2e-5,L=3,gamma=78.5;
@@ -31,9 +31,12 @@ function model(elementLoads=[]){return{nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:L
  close(tip.uz,expected,Math.max(2e-8,Math.abs(expected)*.01),'self-weight tip deflection');close(r.reactions[0].fz,w*L,2e-5,'self-weight reaction');close(Math.abs(f.My1),w*L*L/2,5e-4,'self-weight fixed moment');assert.equal(f.loadSummary[0].kind,'selfWeight');close(f.loadSummary[0].w,w,1e-12,'self-weight intensity');
 }
 
-// Non-conservative follower action remains explicitly protected until its 3D tangent is implemented.
+// Dead-load preparation converts conservative actions but preserves thermal and follower actions on the element.
 {
- const p=model([{id:'F',elementId:'E1',kind:'followerEnd',end:2,px:0,py:-2,pz:0}]);assert.throws(()=>solveFrameCorotational3DWithDeadLoads(p),/followerEnd.*ainda não é suportada|carga de barra 'followerEnd'/i);
+ const p=model([{id:'U',elementId:'E1',kind:'uniform',qy:-.1},{id:'F',elementId:'E1',kind:'followerEnd',end:2,px:0,py:-.2,pz:0},{id:'T',elementId:'E1',kind:'thermal',dT:12}]),prepared=prepareCorotational3DDeadLoads(p);
+ assert.ok(prepared.project.loads.some(x=>String(x.id).startsWith('__CR3D_E1')),'uniform action should become fixed equivalent nodal loads');
+ assert.deepEqual(prepared.project.elementLoads.map(x=>x.kind).sort(),['followerEnd','thermal']);
+ const r=solveFrameCorotational3DWithDeadLoads(p,{steps:4,tolerance:1e-9});assert.equal(r.nonlinear.nonconservativeFollower,true);assert.ok(Number.isFinite(r.displacements[1].uy));
 }
 
 console.log('v0.30 co-rotational 3D dead element loads smoke: OK');

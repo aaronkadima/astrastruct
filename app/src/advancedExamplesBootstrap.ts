@@ -1,0 +1,8 @@
+// Additional v0.30 examples that depend on the Shell4 kernel.
+// @ts-ignore
+import {demoRectangularWaterTankShell3D} from '../../web/src/core/advancedExamples.js';
+const STORAGE_KEY='astrastruct.project';
+function open(factory:()=>any){try{const p=factory();localStorage.setItem(STORAGE_KEY,JSON.stringify(p));location.reload()}catch(err:any){alert(err?.message||String(err))}}
+function patch(){document.querySelectorAll<HTMLElement>('[data-testid="model-lab-overlay"]').forEach(overlay=>{const body=overlay.querySelector<HTMLElement>('[data-lab-body]');if(!body||!body.querySelector('[data-model="five"]')||body.querySelector('[data-shell-tank-card]'))return;const grid=body.querySelector<HTMLElement>('.astra-lab-grid');if(!grid)return;const card=document.createElement('article');card.className='astra-model-card';card.setAttribute('data-shell-tank-card','');card.innerHTML='<h3>Reservatório retangular · Shell4</h3><p>Paredes e fundo em cascas Q4, com pressão hidrostática integrada por faixa de profundidade.</p><small>6 × 4 × 3 m · água 3 m · malha demonstrativa Shell4</small><button class="astra-lab-btn primary" data-testid="open-shell-water-tank-example">Abrir modelo</button>';grid.appendChild(card);card.querySelector<HTMLButtonElement>('[data-testid="open-shell-water-tank-example"]')!.onclick=()=>open(()=>demoRectangularWaterTankShell3D())})}
+let queued=false;const schedule=()=>{if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;patch()})};const observer=new MutationObserver(schedule);observer.observe(document.documentElement,{childList:true,subtree:true});if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',patch,{once:true});else patch();
+export {};

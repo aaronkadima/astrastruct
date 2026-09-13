@@ -13,7 +13,7 @@ test('isolated Lab runs bonded anchor pull-out, exports CSV and scientific SVG',
   await lab.locator('[data-anchor-segments]').fill('12');await lab.locator('[data-anchor-steps]').fill('20');await lab.locator('[data-anchor-dmax]').fill('8');
   await page.getByTestId('run-anchor-pullout').click();
   const chart=page.getByTestId('anchor-pullout-chart'),profile=page.getByTestId('anchor-bond-profile');await expect(chart).toBeVisible();await expect(profile).toBeVisible();await expect(lab).toContainText('Pico');await expect(lab).toContainText('kN');await expect(lab).toContainText('MPa');
-  const peak=await lab.locator('.anchor-lab-kpi').filter({hasText:'Pico'}).locator('strong').textContent();expect(parseFloat(peak||'0')).toBeGreaterThan(0);
+  const peak=await lab.locator('.anchor-lab-kpi').first().locator('strong').textContent();expect(parseFloat(peak||'0')).toBeGreaterThan(0);
 
   const csvPromise=page.waitForEvent('download');await lab.locator('[data-anchor-csv]').click();const csvDownload=await csvPromise;expect(csvDownload.suggestedFilename()).toMatch(/anchor-pullout-curva\.csv$/);const csvPath=await csvDownload.path();expect(csvPath).toBeTruthy();const csv=await readFile(csvPath!,'utf8');expect(csv).toContain('deslocamento_mm,forca_kN');expect(csv.trim().split(/\r?\n/).length).toBeGreaterThan(10);
 

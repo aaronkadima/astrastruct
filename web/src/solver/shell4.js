@@ -65,6 +65,23 @@ export function shell4Element({nodes,E,nu,thickness,pressure=0,shearCorrection=5
   return{kl:K,kg,T,pLocal,pg,axes,coords,area,thickness:t,E:Number(E),nu:Number(nu),constitutive:mat,drillingStiffness:kDrill};
 }
 
+/**
+ * Surface mass matrix for shell4. massDensity is mass per volume in the active
+ * unit system (e.g. t/m³ when forces are kN and g is expressed in m/s²).
+ * Translational inertia uses rho*t; Mindlin rotations rx/ry use rho*t³/12.
+ * Drilling rotation receives only an optional tiny regularizing inertia.
+ */
+export function shell4MassMatrix({nodes,massDensity,thickness,formulation='consistent',drillingRotaryFactor=1e-6,element={}}){
+  const rho=Number(massDensity),t=Number(thickness);if(!(rho>0&&t>0))throw new Error('Massa shell4: densidade de massa e espessura devem ser positivas.');const axes=shell4LocalAxes(nodes,element),coords=axes.local,area=polygonArea(coords);if(!(area>EPS))throw new Error('Massa shell4: área degenerada.');const ml=zeros(24),kind=formulation==='lumped'?'lumped':'consistent',rotaryPerArea=rho*t**3/12,drill=Math.max(0,Number(drillingRotaryFactor)||0);
+  if(kind==='lumped'){
+    const mt=rho*t*area/4,jr=rotaryPerArea*area/4;for(let i=0;i<4;i++){const o=6*i;for(const d of [0,1,2])ml[o+d][o+d]=mt;for(const d of [3,4])ml[o+d][o+d]=jr;ml[o+5][o+5]=jr*drill}
+  }else{
+    const g=1/Math.sqrt(3),gauss=[[-g,-g],[g,-g],[g,g],[-g,g]];for(const [xi,eta] of gauss){const q=pointKinematics(coords,xi,eta);for(let i=0;i<4;i++)for(let j=0;j<4;j++){const w=q.N[i]*q.N[j]*q.detJ,oi=6*i,oj=6*j,mt=rho*t*w,jr=rotaryPerArea*w;for(const d of [0,1,2])ml[oi+d][oj+d]+=mt;for(const d of [3,4])ml[oi+d][oj+d]+=jr;ml[oi+5][oj+5]+=jr*drill}}
+  }
+  const T=transform24(axes.R),mg=mm(transpose(T),mm(ml,T)),totalMass=rho*t*area,totalRotaryMass=rotaryPerArea*area;
+  return{ml,mg,T,axes,coords,area,thickness:t,massDensity:rho,totalMass,totalRotaryMass,formulation:kind,drillingRotaryFactor:drill};
+}
+
 export function recoverShell4(elementData,globalDisplacements){
   if(!Array.isArray(globalDisplacements)||globalDisplacements.length!==24)throw new Error('shell4: recuperação requer 24 deslocamentos globais.');const ul=mv(elementData.T,globalDisplacements),b=bMatrices(elementData.coords,0,0),eps=mv(b.Bm,ul),kappa=mv(b.Bb,ul),gamma=mv(b.Bs,ul),N=mv(elementData.constitutive.Dm,eps),M=mv(elementData.constitutive.Db,kappa),Q=mv(elementData.constitutive.Ds,gamma),stress=N.map(v=>v/elementData.thickness);
   return{localDisplacements:ul,membraneStrain:{ex:eps[0],ey:eps[1],gxy:eps[2]},membraneStress:{sx:stress[0],sy:stress[1],txy:stress[2]},membraneResultants:{Nx:N[0],Ny:N[1],Nxy:N[2]},curvature:{kx:kappa[0],ky:kappa[1],kxy:kappa[2]},bendingMoments:{Mx:M[0],My:M[1],Mxy:M[2]},transverseShearStrain:{gxz:gamma[0],gyz:gamma[1]},transverseShear:{Qx:Q[0],Qy:Q[1]}};

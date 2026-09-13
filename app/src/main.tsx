@@ -26,6 +26,7 @@ import './levelsBootstrap';
 import './shellLabBootstrap';
 import './shellMeshBootstrap';
 import './shellRefinementBootstrap';
+import './shellAdaptiveBootstrap';
 import './shellQualityBootstrap';
 import './shellConvergenceBootstrap';
 import './shellQualityResultsBootstrap';

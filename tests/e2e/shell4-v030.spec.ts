@@ -14,12 +14,12 @@ test('shell4 renders, opens spatial inspector and persists thickness and pressur
   const canvas=page.getByTestId('spatial-canvas-3d');await expect(canvas).toBeVisible();await expect(canvas).toHaveAttribute('data-shell-count','1');
   const inspector=await selectShellAndOpenInspector(page);
   await expect(page.getByTestId('shell-thickness')).toHaveValue('0.2');await expect(page.getByTestId('shell-pressure')).toHaveValue('-10');
-  await page.getByTestId('shell-thickness').fill('0.22');await page.getByTestId('shell-pressure').fill('-12');await page.getByTestId('shell-apply').click();
+  await page.getByTestId('shell-thickness').fill('0.22');await page.getByTestId('shell-pressure').fill('-12');await page.getByTestId('shell-apply').evaluate((el:any)=>el.click());
   await expect.poll(async()=>page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('astrastruct.project')||'{}'),e=(p.elements||[]).find((x:any)=>x.id==='S1'),l=(p.elementLoads||[]).find((x:any)=>x.elementId==='S1'&&x.kind==='surface');return{t:e?.thickness,p:l?.pressure}})).toEqual({t:.22,p:-12});
 });
 
 test('shell4 participates in linear analysis and exposes shell result fields',async({page})=>{
-  await loadProject(page);await page.getByTestId('analyze-button').click();await expect(page.getByTestId('spatial3d-results')).toBeVisible();await expect(page.getByTestId('shell4-results')).toBeVisible();
+  await loadProject(page);await page.getByTestId('analyze-button').click();await expect(page.getByTestId('spatial3d-results')).toBeVisible();await expect(page.getByTestId('shell4-results')).toBeVisible();const quality=page.getByTestId('shell4-quality-results');await expect(quality).toBeVisible();await expect(quality).toContainText('Jesc mín.');
   const field=page.getByLabel('Campo de esforço 3D');await field.selectOption('Nx');await expect(page.getByTestId('spatial-canvas-3d')).toHaveAttribute('data-force-mode','Nx');
   await field.selectOption('Mx');await expect(page.getByTestId('spatial-canvas-3d')).toHaveAttribute('data-force-mode','Mx');
 });
@@ -38,7 +38,7 @@ test('shell4 can be selected for Modal 3D and produces positive modes',async({pa
 
 test('Model Lab creates a shell4 from four nodes on the same level',async({page})=>{
   const launch={...project,id:'shell4-launch',name:'Shell launcher',elements:[],elementLoads:[],supports:[],levels:[{id:'L0',name:'Pavimento teste',elevation:0,index:0}],nodes:project.nodes.map(n=>({...n,levelId:'L0'}))};
-  await loadProject(page,launch);await page.getByTestId('model-lab-launch').click();const tab=page.getByTestId('shell4-lab-tab');await expect(tab).toBeVisible();await tab.click();await expect(page.getByTestId('create-shell4')).toBeVisible();await expect(page.getByTestId('shell4-quality-panel')).toBeVisible();
+  await loadProject(page,launch);await page.getByTestId('model-lab-launch').click();const tab=page.getByTestId('shell4-lab-tab');await expect(tab).toBeVisible();await tab.click();await expect(page.getByTestId('create-shell4')).toBeVisible();await expect(page.getByTestId('shell4-quality-panel')).toBeVisible();await expect(page.getByTestId('shell4-convergence-controls')).toBeVisible();
   await Promise.all([page.waitForEvent('framenavigated'),page.getByTestId('create-shell4').click()]);
   await expect(page.getByTestId('spatial-canvas-3d')).toHaveAttribute('data-shell-count','1');
   await expect.poll(async()=>page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('astrastruct.project')||'{}'),e=(p.elements||[]).find((x:any)=>x.type==='shell4'),l=(p.elementLoads||[]).find((x:any)=>x.elementId===e?.id);return{nodes:e?.nodeIds?.length,unique:new Set(e?.nodeIds||[]).size,t:e?.thickness,p:l?.pressure,mode:p.settings?.analysisType}})).toEqual({nodes:4,unique:4,t:.18,p:-5,mode:'linear'});

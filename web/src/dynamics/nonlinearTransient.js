@@ -6,70 +6,39 @@ export const NONLINEAR_DYNAMICS_CONTRACT='nonlinear-dynamics/v1';
 export const NONLINEAR_DYNAMICS_VERSION='0.41.0-exp';
 export const GROUND_MOTION_CONTRACT='ground-motion-history/v1';
 
-const EPS=1e-14;
 const zeros=(n,m=n)=>Array.from({length:n},()=>Array(m).fill(0));
 const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
 const matVec=(A,x)=>A.map(r=>r.reduce((s,v,j)=>s+v*x[j],0));
 const addVec=(...vectors)=>vectors[0].map((_,i)=>vectors.reduce((s,v)=>s+v[i],0));
 const scaleVec=(v,s)=>v.map(x=>s*x);
-const addMatrix=(...terms)=>terms[0][0].map((_,j0)=>terms[0].map((__,i0)=>terms.reduce((s,{A,scale=1})=>s+scale*A[i0][j0],0)));
-
+function addMatrix(...terms){const n=terms[0]?.A?.length||0;return Array.from({length:n},(_,i)=>Array.from({length:n},(_,j)=>terms.reduce((s,{A,scale=1})=>s+scale*A[i][j],0)))}
 function finiteVector(value,n,label){const v=Array.from(value||[],Number);if(v.length!==n||v.some(x=>!Number.isFinite(x)))throw new Error(`${label}: vetor deve ter ${n} valores finitos.`);return v}
 function finiteMatrix(value,n,label){if(!Array.isArray(value)||value.length!==n)throw new Error(`${label}: matriz deve ser ${n}x${n}.`);return value.map((r,i)=>finiteVector(r,n,`${label}[${i}]`))}
-function responseOf(model,u,context){
-  if(typeof model?.response!=='function')throw new Error('Dinâmica não linear: restoringModel.response() é obrigatório.');
-  model.rollback?.();
-  const r=model.response(u,context)||{},n=u.length,internalForce=finiteVector(r.internalForce??r.residual,n,'força interna'),tangent=finiteMatrix(r.tangent,n,'tangente interna');
-  return{internalForce,tangent,outputs:r.outputs||{},raw:r};
-}
+function responseOf(model,u,context){if(typeof model?.response!=='function')throw new Error('Dinâmica não linear: restoringModel.response() é obrigatório.');model.rollback?.();const r=model.response(u,context)||{},n=u.length;return{internalForce:finiteVector(r.internalForce??r.residual,n,'força interna'),tangent:finiteMatrix(r.tangent,n,'tangente interna'),outputs:r.outputs||{},raw:r}}
 
-export function rayleighDampingMatrix({M,K,alphaM=0,betaK=0}={}){
-  const n=M?.length||0;if(!n)throw new Error('Rayleigh: M é obrigatória.');finiteMatrix(M,n,'M');finiteMatrix(K,n,'K');
-  const a=Number(alphaM),b=Number(betaK);if(!Number.isFinite(a)||!Number.isFinite(b)||a<0||b<0)throw new Error('Rayleigh: alphaM e betaK devem ser não negativos.');
-  return M.map((row,i)=>row.map((v,j)=>a*v+b*K[i][j]));
-}
+export function rayleighDampingMatrix({M,K,alphaM=0,betaK=0}={}){const n=M?.length||0;if(!n)throw new Error('Rayleigh: M é obrigatória.');finiteMatrix(M,n,'M');finiteMatrix(K,n,'K');const a=Number(alphaM),b=Number(betaK);if(!Number.isFinite(a)||!Number.isFinite(b)||a<0||b<0)throw new Error('Rayleigh: alphaM e betaK devem ser não negativos.');return M.map((row,i)=>row.map((v,j)=>a*v+b*K[i][j]))}
 
-export function piecewiseLinearGroundMotion({times,accelerations,scale=1}={}){
-  const t=Array.from(times||[],Number),a=Array.from(accelerations||[],Number),s=Number(scale);
-  if(t.length<2||t.length!==a.length||t.some(x=>!Number.isFinite(x))||a.some(x=>!Number.isFinite(x))||!Number.isFinite(s))throw new Error('Ground motion: times/accelerations inválidos.');
-  for(let i=1;i<t.length;i++)if(!(t[i]>t[i-1]))throw new Error('Ground motion: times deve ser estritamente crescente.');
-  const accelerationAtTime=time=>{const x=Number(time);if(x<=t[0])return s*a[0];if(x>=t.at(-1))return s*a.at(-1);let lo=0,hi=t.length-1;while(hi-lo>1){const m=(lo+hi)>>1;if(t[m]<=x)lo=m;else hi=m}const q=(x-t[lo])/(t[hi]-t[lo]);return s*(a[lo]+q*(a[hi]-a[lo]))};
-  return{contract:GROUND_MOTION_CONTRACT,times:t,accelerations:a,scale:s,duration:t.at(-1)-t[0],accelerationAtTime};
-}
+export function piecewiseLinearGroundMotion({times,accelerations,scale=1}={}){const t=Array.from(times||[],Number),a=Array.from(accelerations||[],Number),s=Number(scale);if(t.length<2||t.length!==a.length||t.some(x=>!Number.isFinite(x))||a.some(x=>!Number.isFinite(x))||!Number.isFinite(s))throw new Error('Ground motion: times/accelerations inválidos.');for(let i=1;i<t.length;i++)if(!(t[i]>t[i-1]))throw new Error('Ground motion: times deve ser estritamente crescente.');const accelerationAtTime=time=>{const x=Number(time);if(x<=t[0])return s*a[0];if(x>=t.at(-1))return s*a.at(-1);let lo=0,hi=t.length-1;while(hi-lo>1){const m=(lo+hi)>>1;if(t[m]<=x)lo=m;else hi=m}const q=(x-t[lo])/(t[hi]-t[lo]);return s*(a[lo]+q*(a[hi]-a[lo]))};return{contract:GROUND_MOTION_CONTRACT,times:t,accelerations:a,scale:s,duration:t.at(-1)-t[0],accelerationAtTime}}
 
-export function baseExcitationForce({M,influence,accelerationAtTime,scale=1}={}){
-  const n=M?.length||0;if(!n)throw new Error('Excitação de base: M é obrigatória.');finiteMatrix(M,n,'M');const r=finiteVector(influence,n,'influence'),s=Number(scale);if(typeof accelerationAtTime!=='function'||!Number.isFinite(s))throw new Error('Excitação de base: accelerationAtTime() e scale finito são obrigatórios.');
-  const Mr=matVec(M,r);return time=>scaleVec(Mr,-s*Number(accelerationAtTime(time)||0));
-}
-
+export function baseExcitationForce({M,influence,accelerationAtTime,scale=1}={}){const n=M?.length||0;if(!n)throw new Error('Excitação de base: M é obrigatória.');finiteMatrix(M,n,'M');const r=finiteVector(influence,n,'influence'),s=Number(scale);if(typeof accelerationAtTime!=='function'||!Number.isFinite(s))throw new Error('Excitação de base: accelerationAtTime() e scale finito são obrigatórios.');const Mr=matVec(M,r);return time=>scaleVec(Mr,-s*Number(accelerationAtTime(time)||0))}
 export function absoluteAcceleration(relativeAcceleration,influence,groundAcceleration){const a=Array.from(relativeAcceleration,Number),r=finiteVector(influence,a.length,'influence'),ag=Number(groundAcceleration);if(!Number.isFinite(ag))throw new Error('Aceleração absoluta: groundAcceleration inválida.');return a.map((v,i)=>v+r[i]*ag)}
 
-export function createComponentRestoringModel({components=[],dofManager,freeDofs=null,context={}}={}){
-  if(!dofManager)throw new Error('Component dynamic model: dofManager é obrigatório.');const list=Array.from(components||[]);if(!list.length)throw new Error('Component dynamic model: components é obrigatório.');for(const c of list)registerComponentDofs(c,dofManager);
-  const free=freeDofs==null?Array.from({length:dofManager.count},(_,i)=>i):Array.from(freeDofs,Number);if(!free.length||free.some(i=>!Number.isInteger(i)||i<0||i>=dofManager.count)||new Set(free).size!==free.length)throw new Error('Component dynamic model: freeDofs inválidos.');
-  const response=(u,stepContext={})=>{const q=finiteVector(u,free.length,'deslocamentos reduzidos'),full=Array(dofManager.count).fill(0);free.forEach((d,i)=>{full[d]=q[i]});const assembled=assembleElementComponents({components:list,dofManager,displacements:full,context:{...context,...stepContext}}),K=assembled.tangent.toDense();return{internalForce:free.map(d=>assembled.internalForce[d]),tangent:free.map(i=>free.map(j=>K[i][j])),outputs:{assembly:assembled.responses.map(x=>({componentId:x.componentId,outputs:x.response.outputs,state:x.response.state})),fullInternalForce:assembled.internalForce}}};
-  return{contract:'component-restoring-model/v1',components:list,dofManager,freeDofs:free,response,commit:()=>commitElementComponents(list),rollback:()=>rollbackElementComponents(list),committedStates:()=>list.map(c=>({componentId:c.id,state:c.committedState()}))};
-}
+export function createComponentRestoringModel({components=[],dofManager,freeDofs=null,context={}}={}){if(!dofManager)throw new Error('Component dynamic model: dofManager é obrigatório.');const list=Array.from(components||[]);if(!list.length)throw new Error('Component dynamic model: components é obrigatório.');for(const c of list)registerComponentDofs(c,dofManager);const free=freeDofs==null?Array.from({length:dofManager.count},(_,i)=>i):Array.from(freeDofs,Number);if(!free.length||free.some(i=>!Number.isInteger(i)||i<0||i>=dofManager.count)||new Set(free).size!==free.length)throw new Error('Component dynamic model: freeDofs inválidos.');const response=(u,stepContext={})=>{const q=finiteVector(u,free.length,'deslocamentos reduzidos'),full=Array(dofManager.count).fill(0);free.forEach((d,i)=>{full[d]=q[i]});const assembled=assembleElementComponents({components:list,dofManager,displacements:full,context:{...context,...stepContext}}),K=assembled.tangent.toDense();return{internalForce:free.map(d=>assembled.internalForce[d]),tangent:free.map(i=>free.map(j=>K[i][j])),outputs:{assembly:assembled.responses.map(x=>({componentId:x.componentId,outputs:x.response.outputs,state:x.response.state})),fullInternalForce:assembled.internalForce}}};return{contract:'component-restoring-model/v1',components:list,dofManager,freeDofs:free,response,commit:()=>commitElementComponents(list),rollback:()=>rollbackElementComponents(list),committedStates:()=>list.map(c=>({componentId:c.id,state:c.committedState()}))}}
 
 export function newmarkNonlinearSystem({M,C=null,restoringModel,forceAtTime=()=>[],dt,duration,u0=null,v0=null,beta=.25,gamma=.5,newton={},onStep=null,commitInitial=true}={}){
-  const n=M?.length||0;if(!n)throw new Error('Dinâmica não linear: M é obrigatória.');const mass=finiteMatrix(M,n,'M'),damping=C==null?zeros(n):finiteMatrix(C,n,'C'),h0=Number(dt),T=Number(duration),b=Number(beta),g=Number(gamma);
-  if(!(h0>0&&T>0&&b>0&&g>0))throw new Error('Dinâmica não linear: dt, duration, beta e gamma devem ser positivos.');if(typeof forceAtTime!=='function')throw new Error('Dinâmica não linear: forceAtTime deve ser função.');
+  const n=M?.length||0;if(!n)throw new Error('Dinâmica não linear: M é obrigatória.');const mass=finiteMatrix(M,n,'M'),damping=C==null?zeros(n):finiteMatrix(C,n,'C'),h0=Number(dt),T=Number(duration),b=Number(beta),g=Number(gamma);if(!(h0>0&&T>0&&b>0&&g>0))throw new Error('Dinâmica não linear: dt, duration, beta e gamma devem ser positivos.');if(typeof forceAtTime!=='function')throw new Error('Dinâmica não linear: forceAtTime deve ser função.');
   const steps=Math.max(1,Math.ceil(T/h0)),h=T/steps,A0=1/(b*h*h),A1=g/(b*h),A2=1/(b*h),A3=1/(2*b)-1,A4=g/b-1,A5=h*(g/(2*b)-1);
   let u=u0?finiteVector(u0,n,'u0'):Array(n).fill(0),v=v0?finiteVector(v0,n,'v0'):Array(n).fill(0),p=finiteVector(forceAtTime(0),n,'forceAtTime(0)'),initial=responseOf(restoringModel,u,{step:0,time:0,phase:'initial'}),a;
   try{a=solveLinear(mass,addVec(p,scaleVec(matVec(damping,v),-1),scaleVec(initial.internalForce,-1)))}catch{restoringModel.rollback?.();throw new Error('Dinâmica não linear: matriz de massa singular no estado inicial.')}
-  if(commitInitial)restoringModel.commit?.();else restoringModel.rollback?.();
-  let previousInternal=initial.internalForce,kinetic0=.5*dot(v,matVec(mass,v)),internalWork=0,externalWork=0,dampingWork=0;const history=[];
-  const emit=(step,time,response,iterations=0,metrics=null)=>{const kinetic=.5*dot(v,matVec(mass,v)),energy={kinetic,deltaKinetic:kinetic-kinetic0,internalWork,externalWork,dampingWork,balanceResidual:externalWork-((kinetic-kinetic0)+internalWork+dampingWork)};const row={step,time,u:[...u],v:[...v],a:[...a],force:[...p],restoringForce:[...response.internalForce],iterations,convergence:metrics,outputs:response.outputs,energy};history.push(row);onStep?.(row)};
-  emit(0,0,initial,0,null);
+  if(commitInitial)restoringModel.commit?.();else restoringModel.rollback?.();let previousInternal=initial.internalForce,kinetic0=.5*dot(v,matVec(mass,v)),internalWork=0,externalWork=0,dampingWork=0;const history=[];
+  const emit=(step,time,response,iterations=0,metrics=null)=>{const kinetic=.5*dot(v,matVec(mass,v)),energy={kinetic,deltaKinetic:kinetic-kinetic0,internalWork,externalWork,dampingWork,balanceResidual:externalWork-((kinetic-kinetic0)+internalWork+dampingWork)};const row={step,time,u:[...u],v:[...v],a:[...a],force:[...p],restoringForce:[...response.internalForce],iterations,convergence:metrics,outputs:response.outputs,energy};history.push(row);onStep?.(row)};emit(0,0,initial);
   for(let step=1;step<=steps;step++){
-    const time=step*h,pn=finiteVector(forceAtTime(time),n,`forceAtTime(${time})`),uPrev=[...u],vPrev=[...v],aPrev=[...a],pPrev=[...p],fPrev=[...previousInternal],guess=u.map((x,i)=>x+h*v[i]+h*h*(.5-b)*a[i]);let last=null;
-    const kinematic=x=>{const an=x.map((q,i)=>A0*(q-uPrev[i])-A2*vPrev[i]-A3*aPrev[i]),vn=x.map((q,i)=>A1*(q-uPrev[i])-A4*vPrev[i]-A5*aPrev[i]);return{an,vn}};
-    const evalAt=x=>{const kin=kinematic(x),r=responseOf(restoringModel,x,{step,time,phase:'iteration',velocity:kin.vn,acceleration:kin.an});last={...r,...kin};return last};
+    const time=step*h,pn=finiteVector(forceAtTime(time),n,`forceAtTime(${time})`),uPrev=[...u],vPrev=[...v],aPrev=[...a],pPrev=[...p],fPrev=[...previousInternal],guess=u.map((x,i)=>x+h*v[i]+h*h*(.5-b)*a[i]);
+    const kinematic=x=>({an:x.map((q,i)=>A0*(q-uPrev[i])-A2*vPrev[i]-A3*aPrev[i]),vn:x.map((q,i)=>A1*(q-uPrev[i])-A4*vPrev[i]-A5*aPrev[i])});
+    const evalAt=x=>{const kin=kinematic(x),r=responseOf(restoringModel,x,{step,time,phase:'iteration',velocity:kin.vn,acceleration:kin.an});return{...r,...kin}};
     try{
       const solved=newtonSolve({initial:guess,residual:x=>{const q=evalAt(x);return addVec(q.internalForce,matVec(damping,q.vn),matVec(mass,q.an),scaleVec(pn,-1))},tangent:x=>{const q=evalAt(x);return addMatrix({A:q.tangent},{A:damping,scale:A1},{A:mass,scale:A0})},strategy:newton.strategy||'full',tolerances:newton.tolerances||{},linearSolver:newton.linearSolver||{},modifiedRefresh:newton.modifiedRefresh||0,lineSearch:newton.lineSearch||{}});
-      u=[...solved.x];const final=evalAt(u);v=final.vn;a=final.an;restoringModel.commit?.();p=pn;previousInternal=final.internalForce;
-      const du=u.map((x,i)=>x-uPrev[i]),vd0=dot(vPrev,matVec(damping,vPrev)),vd1=dot(v,matVec(damping,v));internalWork+=.5*dot(fPrev.map((x,i)=>x+final.internalForce[i]),du);externalWork+=.5*dot(pPrev.map((x,i)=>x+p[i]),du);dampingWork+=.5*(vd0+vd1)*h;
-      emit(step,time,final,solved.iterations,solved.history.at(-1)||null);
+      u=[...solved.x];const final=evalAt(u);v=final.vn;a=final.an;restoringModel.commit?.();p=pn;previousInternal=final.internalForce;const du=u.map((x,i)=>x-uPrev[i]),vd0=dot(vPrev,matVec(damping,vPrev)),vd1=dot(v,matVec(damping,v));internalWork+=.5*dot(fPrev.map((x,i)=>x+final.internalForce[i]),du);externalWork+=.5*dot(pPrev.map((x,i)=>x+p[i]),du);dampingWork+=.5*(vd0+vd1)*h;emit(step,time,final,solved.iterations,solved.history.at(-1)||null);
     }catch(error){restoringModel.rollback?.();throw new Error(`Dinâmica não linear: falha no passo ${step}/${steps} em t=${time.toPrecision(8)} s: ${error.message}`,{cause:error})}
   }
   return{contract:NONLINEAR_DYNAMICS_CONTRACT,version:NONLINEAR_DYNAMICS_VERSION,dt:h,duration:T,steps,beta:b,gamma:g,history,final:{u:[...u],v:[...v],a:[...a],energy:history.at(-1).energy},committedState:restoringModel.committedStates?.()??null};

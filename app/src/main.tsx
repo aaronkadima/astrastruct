@@ -15,6 +15,7 @@ import './scientific-export.css';
 import './workspaceChrome.css';
 import './context-toolbar.css';
 import './spatial-inspector.css';
+import './spatial-contours.css';
 import './modernShell';
 import './scientificExportPanel';
 import './workspaceChrome';

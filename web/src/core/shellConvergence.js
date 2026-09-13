@@ -1,5 +1,6 @@
 import { refineShell4Mesh } from './shellRefinement.js';
 import { evaluateShellMeshQuality } from './shellQuality.js';
+import { shellMaxAbsValue } from './shellPostprocess.js';
 
 const EPS=1e-12;
 const clone=v=>JSON.parse(JSON.stringify(v));
@@ -20,14 +21,14 @@ function scopedShells(project,{elementIds=null,levelId=null}={}){
 
 export function shellResponseMetrics(project,result,scope={}){
   const shells=scopedShells(project,scope),shellSet=new Set(shells.map(e=>String(e.id))),nodeSet=new Set(shells.flatMap(shellIds).map(String)),disp=(result?.totalDisplacements||result?.displacements||[]).filter(d=>nodeSet.has(String(d.nodeId))),forces=(result?.elementForces||[]).filter(f=>f.type==='shell4'&&shellSet.has(String(f.elementId)));
-  const max=(arr,fn)=>arr.length?Math.max(...arr.map(x=>Math.abs(finite(fn(x))))):0;
+  const max=(arr,fn)=>arr.length?Math.max(...arr.map(x=>Math.abs(finite(fn(x))))):0,maxField=field=>forces.length?Math.max(...forces.map(f=>shellMaxAbsValue(f,field))):0;
   return{
     shellCount:shells.length,nodeCount:nodeSet.size,
     maxAbsUz:max(disp,d=>d.uz),
     maxAbsU:max(disp,d=>Math.hypot(finite(d.ux),finite(d.uy),finite(d.uz))),
-    maxAbsNx:max(forces,f=>f.membraneResultants?.Nx),maxAbsNy:max(forces,f=>f.membraneResultants?.Ny),maxAbsNxy:max(forces,f=>f.membraneResultants?.Nxy),
-    maxAbsMx:max(forces,f=>f.bendingMoments?.Mx),maxAbsMy:max(forces,f=>f.bendingMoments?.My),maxAbsMxy:max(forces,f=>f.bendingMoments?.Mxy),
-    maxAbsQx:max(forces,f=>f.transverseShear?.Qx),maxAbsQy:max(forces,f=>f.transverseShear?.Qy)
+    maxAbsNx:maxField('Nx'),maxAbsNy:maxField('Ny'),maxAbsNxy:maxField('Nxy'),
+    maxAbsMx:maxField('Mx'),maxAbsMy:maxField('My'),maxAbsMxy:maxField('Mxy'),
+    maxAbsQx:maxField('Qx'),maxAbsQy:maxField('Qy')
   };
 }
 
@@ -42,6 +43,6 @@ export function runShellMeshConvergence(project,{solveModel,scenarioId=null,elem
     const relativeChange=previous==null?null:Math.abs(value-previous)/Math.max(EPS,Math.abs(value),Math.abs(previous)),step={divisions:n,metric,value,relativeChange,metrics,quality:{counts:quality.counts,worst:quality.worst},nodes:(trial.nodes||[]).length,shells:metrics.shellCount};steps.push(step);finalProject=trial;
     if(relativeChange!=null&&relativeChange<=tol){converged=true;break}previous=value;
   }
-  const last=steps.at(-1),report={metric,tolerance:tol,scenarioId:scenarioId??base.settings?.analysisScenarioId??base.settings?.activeLoadCaseId??null,levelId:levelId??null,steps,converged,recommendedDivisions:last?.divisions??1,finalRelativeChange:last?.relativeChange??null};
+  const last=steps.at(-1),report={metric,tolerance:tol,scenarioId:scenarioId??base.settings?.analysisScenarioId??base.settings?.activeLoadCaseId??null,levelId:levelId??null,steps,converged,recommendedDivisions:last?.divisions??1,finalRelativeChange:last?.relativeChange??null,responseSampling:'gauss-2x2'};
   finalProject.meta={...(finalProject.meta||{}),shellConvergenceUpdatedAt:new Date().toISOString(),lastShellConvergenceReport:report};return{project:finalProject,report};
 }

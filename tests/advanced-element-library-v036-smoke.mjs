@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import {csrFromDense} from '../web/src/numerics/sparseMatrix.js';
 import {solveLinearSystem} from '../web/src/numerics/linearSolver.js';
+import {DofManager} from '../web/src/numerics/dofManager.js';
+import {assembleElementComponents} from '../web/src/core/elementAssembly.js';
 import {createRegisteredElementComponent,hasElementComponentFactory} from '../web/src/core/elementRegistry.js';
 import {
   ADVANCED_ELEMENT_LIBRARY_CONTRACT,ADVANCED_ELEMENT_LIBRARY_VERSION,registerAdvancedElementComponents,
@@ -34,4 +36,7 @@ const offsetProject2={...project2d,nodes:[{id:'R1',x:0,y:0},{id:'R2',x:4,y:0}],s
 // 3D rigid offsets/zones: same virtual-work transformation in space.
 const offsetProject3={nodes:[{id:'R1',x:0,y:0,z:0},{id:'R2',x:4,y:0,z:0}],materials:[{id:'steel',type:'steel',E:200e6,nu:.3}],sections:[{id:'SO3',A:.02,Iy:8e-5,Iz:7e-5,J:2e-5}],elementLoads:[]},off3=createRigidOffsetFrame3DComponent({element:{id:'O3',type:'frame3d-offset',n1:'R1',n2:'R2',materialId:'steel',sectionId:'SO3',offset1:{y:.1},offset2:{y:.1},rigidZone1:.2,rigidZone2:.3},project:offsetProject3}),rb3=off3.response([0,0,0,0,0,.001,0,.004,0,0,0,.001]);close(rb3.outputs.deformableLength,3.5,1e-12);assert.ok(norm(rb3.internalForce)<1e-6,'offset frame3d deve anular movimento rígido');assert.equal(symmetric(rb3.tangent),true);
 
-console.log('AstraStruct v0.36 Advanced Element Library smoke: Timoshenko 2D/3D, corotational cables, stateful nonlinear links and rigid offsets/zones OK.');
+// Generic Component/Element API assembly: Timoshenko + link share the same sparse global DOFs.
+const assemblyLink=createNonlinearLink2DComponent({element:{id:'LA',type:'link2d',n1:'N1',n2:'N2',components:[{label:'ux',law:'elastic',k:500}]}}),dofManager=new DofManager(),assembled=assembleElementComponents({components:[tim2,assemblyLink],dofManager});assert.equal(dofManager.count,6);assert.equal(assembled.tangent.nRows,6);assert.equal(assembled.tangent.nCols,6);assert.equal(symmetric(assembled.tangent.toDense()),true);assert.ok(norm(assembled.residual)<1e-12);
+
+console.log('AstraStruct v0.36 Advanced Element Library smoke: Timoshenko 2D/3D, corotational cables, stateful nonlinear links, rigid offsets/zones and generic assembly OK.');

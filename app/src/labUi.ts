@@ -1,0 +1,28 @@
+export const $=<T extends Element=HTMLElement>(sel:string,root:ParentNode=document)=>root.querySelector(sel) as T|null;
+export const num=(v:any,f=0)=>Number.isFinite(Number(v))?Number(v):f;
+export const fmt=(v:any,d=3)=>Number.isFinite(Number(v))?Number(v).toFixed(d):'—';
+export const esc=(v:any)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'} as any)[ch]||ch);
+
+export function downloadText(name:string,text:string,type='text/plain;charset=utf-8'){
+  const url=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');
+  a.href=url;a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},500);
+}
+
+function installStyle(){
+  if(document.getElementById('astra-core-lab-ui-style'))return;
+  const s=document.createElement('style');s.id='astra-core-lab-ui-style';s.textContent=`
+.core-lab-backdrop{position:fixed;inset:0;z-index:1735;background:#05080ded;display:grid;place-items:center;padding:10px;box-sizing:border-box}.core-lab-dialog{width:min(1320px,98vw);max-height:96vh;overflow:auto;background:#101822;color:#eef4ff;border:1px solid #31465f;border-radius:15px;box-shadow:0 26px 90px #000b;font:13px/1.42 Inter,system-ui,sans-serif}.core-lab-head{position:sticky;top:0;z-index:5;background:#101822f8;border-bottom:1px solid #293a50;padding:14px 16px;display:flex;justify-content:space-between;gap:12px;align-items:center}.core-lab-head h2{font-size:16px;margin:0}.core-lab-head p{margin:3px 0 0;color:#98aac0}.core-lab-close,.core-lab-actions button{border:1px solid #3b5675;background:#17283d;color:#eef4ff;border-radius:8px;padding:8px 11px;cursor:pointer}.core-lab-close:hover,.core-lab-actions button:hover{filter:brightness(1.14)}.core-lab-body{padding:16px}.core-lab-warning{border-left:3px solid #d8a054;background:#2b2115;padding:9px 10px;border-radius:6px;color:#e4c18d;margin-bottom:10px}.core-lab-layout{display:grid;grid-template-columns:minmax(315px,.72fr) minmax(0,1.45fr);gap:14px}.core-lab-panel{border:1px solid #2c4058;background:#121d2b;border-radius:11px;padding:13px}.core-lab-panel h3{font-size:13px;margin:0 0 9px}.core-lab-form{display:grid;grid-template-columns:repeat(2,minmax(130px,1fr));gap:9px}.core-lab-form label{display:grid;gap:4px;color:#a9b9cd;font-size:12px}.core-lab-form input,.core-lab-form select{box-sizing:border-box;width:100%;padding:8px;border-radius:7px;border:1px solid #334a63;background:#0b131d;color:#eef4ff}.core-lab-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.core-lab-actions .primary{background:#1e568f;border-color:#3f82c2;font-weight:800}.core-lab-summary{display:grid;grid-template-columns:repeat(3,minmax(112px,1fr));gap:8px;margin-bottom:11px}.core-lab-kpi{background:#0c151f;border:1px solid #293d54;border-radius:8px;padding:9px}.core-lab-kpi span{display:block;color:#8fa2ba;font-size:11px}.core-lab-kpi strong{display:block;margin-top:3px;font-size:14px;font-variant-numeric:tabular-nums}.core-lab-chart{width:100%;height:auto;background:#fff;border-radius:8px;margin-top:10px}.core-lab-table{width:100%;border-collapse:collapse;margin-top:10px}.core-lab-table th,.core-lab-table td{padding:6px 7px;border-bottom:1px solid #2d4054;text-align:right;font-size:11px;font-variant-numeric:tabular-nums}.core-lab-table th:first-child,.core-lab-table td:first-child{text-align:left}.core-lab-note{font-size:11px;color:#91a5bd;margin-top:9px}.core-lab-badge{display:inline-block;border:1px solid #3d5874;border-radius:999px;padding:2px 7px;color:#a9c2dd;font-size:10px;margin-right:5px}.core-lab-field-legend{display:flex;gap:8px;align-items:center;color:#8ea2b8;font-size:10px;margin-top:6px}.core-lab-field-legend i{display:inline-block;width:76px;height:8px;border-radius:99px;background:linear-gradient(90deg,#5b9bd5,#eef1f4,#cf4d5a)}@media(max-width:850px){.core-lab-layout{grid-template-columns:1fr}.core-lab-form{grid-template-columns:1fr}.core-lab-summary{grid-template-columns:repeat(2,1fr)}.core-lab-backdrop{padding:4px}.core-lab-dialog{max-height:98vh}}
+`;document.head.appendChild(s);
+}
+
+export function openCoreLab({testId,title,subtitle,warning,controlsHtml}:{testId:string,title:string,subtitle:string,warning?:string,controlsHtml:string}){
+  installStyle();document.querySelector('.core-lab-backdrop')?.remove();
+  const back=document.createElement('div');back.className='core-lab-backdrop';
+  back.innerHTML=`<section class="core-lab-dialog react-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}" data-testid="${esc(testId)}"><header class="core-lab-head"><div><h2>${esc(title)}</h2><p>${esc(subtitle)}</p></div><button class="core-lab-close" aria-label="Fechar">×</button></header><div class="core-lab-body">${warning?`<div class="core-lab-warning">${warning}</div>`:''}<div class="core-lab-layout"><section class="core-lab-panel">${controlsHtml}</section><section class="core-lab-panel" data-core-results><h3>Resultado</h3><p>Defina os parâmetros e execute a análise.</p></section></div></div></section>`;
+  document.body.appendChild(back);const close=()=>back.remove();$<HTMLButtonElement>('.core-lab-close',back)!.onclick=close;back.addEventListener('pointerdown',e=>{if(e.target===back)close()});
+  return{back,results:$<HTMLElement>('[data-core-results]',back)!,close};
+}
+
+export function kpi(label:string,value:string,klass='core-lab-kpi'){return`<div class="${klass}"><span>${esc(label)}</span><strong>${value}</strong></div>`}
+export function svgDownload(name:string,svg:string){downloadText(name,svg.replace(/ class="[^"]*react-chart[^"]*"/,' class="core-lab-chart"'),'image/svg+xml;charset=utf-8')}

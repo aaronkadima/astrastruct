@@ -27,7 +27,8 @@ test('shell4 participates in linear analysis and exposes shell result fields',as
 
 test('shell4 contour supports nodal, Gauss and center recovery and exports vector SVG',async({page},testInfo)=>{
   test.skip(testInfo.project.name!=='desktop-chromium','scientific shell4 contour export');
-  await loadProject(page);await page.getByTestId('analyze-button').click();const field=page.getByLabel('Campo de esforço 3D');await field.selectOption('Mx');const canvas=page.getByTestId('spatial-canvas-3d'),status=page.getByTestId('spatial3d-contour-status'),vector=page.getByTestId('spatial3d-vector-scene');
+  const contourProject={...project,id:'shell4-contour',name:'Shell4 contour',supports:['N1','N4'].map(nodeId=>({nodeId,ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}))};
+  await loadProject(page,contourProject);await page.getByTestId('analyze-button').click();const field=page.getByLabel('Campo de esforço 3D');await field.selectOption('Mx');const canvas=page.getByTestId('spatial-canvas-3d'),status=page.getByTestId('spatial3d-contour-status'),vector=page.getByTestId('spatial3d-vector-scene');
   await expect(canvas).toHaveAttribute('data-contour-mode','nodal');await expect(status).toContainText('Nodal suavizado');await expect(status).toContainText('kN·m/m');await expect(vector).toBeAttached();expect(await vector.locator('polygon').count()).toBeGreaterThan(10);
   const recovery=page.getByLabel('Recuperação de contorno shell4');await recovery.selectOption('gauss');await expect(canvas).toHaveAttribute('data-contour-mode','gauss');await expect(status).toContainText('Gauss 2×2');
   await page.getByLabel('Escala de contorno shell4').selectOption('range');await expect(canvas).toHaveAttribute('data-contour-scale','range');await recovery.selectOption('center');await expect(canvas).toHaveAttribute('data-contour-mode','center');await recovery.selectOption('nodal');

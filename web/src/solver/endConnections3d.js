@@ -69,6 +69,22 @@ export function recoverEndConnections3D(kl,pOriginal,uN,connectionData){
 }
 
 /**
+ * Kinematic transformation from nodal DOFs to the elastic member-end DOFs after
+ * massless released/semi-rigid rotational connections are statically condensed.
+ * u_element = B * u_node for zero fixed-end loads. This is useful for projecting
+ * mass and geometric-stiffness matrices consistently with the same connection law.
+ */
+export function endConnectionKinematicMap3D(kl,releases={},rotationalSprings={}){
+  const zero=Array(12).fill(0),connection=condenseEndConnections3D(kl,zero,releases,rotationalSprings),B=zeros(12);
+  for(let j=0;j<12;j++){
+    const u=Array(12).fill(0);u[j]=1;
+    const recovered=recoverEndConnections3D(kl,zero,u,connection.connectionData);
+    for(let i=0;i<12;i++)B[i][j]=recovered.uElement[i];
+  }
+  return{B,kEff:connection.kEff,connectionData:connection.connectionData};
+}
+
+/**
  * Co-rotational constitutive end-rotation solve. Krot uses [rx1,ry1,rz1,rx2,ry2,rz2].
  * pRot is the equivalent natural/thermal moment vector, so q = Krot*theta - pRot.
  */

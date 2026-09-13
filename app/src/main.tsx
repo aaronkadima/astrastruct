@@ -23,6 +23,7 @@ import './contextToolbar';
 import './modelLabBootstrap';
 import './advancedExamplesBootstrap';
 import './anchorLabBootstrap';
+import './boltGroupLabBootstrap';
 import './labStatusBootstrap';
 import './dxfPlanBootstrap';
 import './levelsBootstrap';

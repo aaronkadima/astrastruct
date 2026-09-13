@@ -15,12 +15,13 @@ function principal(strain){const [ex,ey,gxy]=strain,avg=.5*(ex+ey),r=Math.hypot(
 function strainLocal(strain,theta){const[ex,ey,g]=strain,c=Math.cos(theta),s=Math.sin(theta),c2=c*c,s2=s*s,cs=c*s;return[c2*ex+s2*ey+cs*g,s2*ex+c2*ey-cs*g,2*cs*(ey-ex)+(c2-s2)*g]}
 function stressGlobal(local,theta){const[sn,st,tau]=local,c=Math.cos(theta),s=Math.sin(theta),c2=c*c,s2=s*s,cs=c*s;return[c2*sn+s2*st-2*cs*tau,s2*sn+c2*st+2*cs*tau,cs*(sn-st)+(c2-s2)*tau]}
 function triggerOrientation(strain,p){const q=principal(strain);if(q.e1>p.epsCr+EPS||q.e2<-p.epsc0-EPS)return q.angle;return null}
+function committedOrientation(state){if(state?.orientationAngle===null||state?.orientationAngle===undefined)return null;const n=Number(state.orientationAngle);return Number.isFinite(n)?n:null}
 
 function core({strain,material,committed,characteristicLength,fractureEnergy,compressionFractureEnergy,epsc0=.002,epscu=.0035,shearRetentionMin=.05,shearRetentionExponent=1.5,aggregateInterlockMu=.6,aggregateInterlockCohesion=0}={}){
   const e=Array.from(strain||[],Number);if(e.length!==3||e.some(v=>!Number.isFinite(v)))throw new Error('ShellConcrete: strain deve ser [ex,ey,gxy].');
   if(!material)throw new Error('ShellConcrete: material ausente.');const E=finite('E',material.E),nu=finite('nu',material.nu??.2);if(!(E>0&&nu>-.99&&nu<.4999))throw new Error('ShellConcrete: E/nu inválidos.');
   const p=concreteCrackBandParameters({material,characteristicLength,fractureEnergy:fractureEnergy??material.Gf??material.fractureEnergy,compressionFractureEnergy:compressionFractureEnergy??material.Gc??material.compressionFractureEnergy,epsc0,epscu}),c={...initialShellConcreteState(),...(committed||{})};
-  let theta=Number.isFinite(Number(c.orientationAngle))?Number(c.orientationAngle):null;
+  let theta=committedOrientation(c);
   if(theta==null)theta=triggerOrientation(e,p);
   if(theta==null){const D=elasticD(E,nu),stress=matVec(D,e),history={...clone(c),orientationAngle:null,lastStrain:[...e],lastStress:[...stress],shearRetention:1,aggregateInterlockActive:false};return{contract:SHELL_CONCRETE_PLANE_STRESS_CONTRACT,strain:e,stress,tangent:D,branch:'uncracked-elastic',cracked:false,crushed:false,crackAngle:null,shearRetention:1,aggregateInterlockActive:false,history,local:null}}
   const el=strainLocal(e,theta),o={characteristicLength,fractureEnergy:fractureEnergy??material.Gf??material.fractureEnergy,compressionFractureEnergy:compressionFractureEnergy??material.Gc??material.compressionFractureEnergy,epsc0,epscu},s1=concreteDamageState({strain:el[0],material,committed:c.dir1,...o}),s2=concreteDamageState({strain:el[1],material,committed:c.dir2,...o}),d=Math.max(Number(s1.tensionDamage)||0,Number(s2.tensionDamage)||0),betaMin=clamp(Number(shearRetentionMin)||0,0,1),beta=betaMin+(1-betaMin)*(1-d)**Math.max(.1,Number(shearRetentionExponent)||1.5),G=E/(2*(1+nu));let tau=beta*G*el[2],interlock=false;

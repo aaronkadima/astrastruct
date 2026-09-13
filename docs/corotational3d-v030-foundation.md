@@ -1,8 +1,10 @@
-# AstraStruct v0.30 — fundação co-rotacional 3D
+# AstraStruct v0.30 — co-rotacional 3D experimental
 
 ## Estado
 
-A v0.30 inicia a análise geometricamente não linear espacial para elementos `frame3d`. Nesta etapa, o kernel é **experimental** e permanece na branch de desenvolvimento. A produção continua usando os solvers 3D consolidados linear, modal/flambagem e P-Delta v0.29.
+A v0.30 implementa a primeira análise geometricamente não linear espacial do AstraStruct para elementos `frame3d`. O kernel permanece **experimental** na branch `develop`; a produção em `main` continua preservando os solvers 3D consolidados linear, modal/flambagem e P-Delta.
+
+O estágio atual já ultrapassou a fundação cinemática inicial: há equilíbrio global incremental, cargas de barra conservativas, peso próprio, ações térmicas, imperfeição modal sem tensões e força seguidora concentrada espacial.
 
 ## Cinemática co-rotacional
 
@@ -11,84 +13,123 @@ Para cada elemento, a formulação separa movimento rígido e deformação local
 1. a configuração inicial fornece o triedro local `C0 = [ex0 ey0 ez0]`;
 2. translações nodais atualizam a corda `x2 - x1`;
 3. rotações nodais globais são convertidas por Rodrigues para matrizes em SO(3);
-4. o novo eixo `ex` acompanha a corda corrente;
-5. `ey` é obtido pela projeção da média dos eixos `ey0` rotacionados nas duas extremidades sobre o plano normal à corda;
+4. o eixo `ex` acompanha a corda corrente;
+5. `ey` é obtido pela projeção da média dos eixos `ey0` rotacionados nas duas extremidades no plano normal à corda;
 6. `ez = ex × ey` completa o triedro ortonormal corrente `C`;
-7. as rotações deformacionais de extremidade são extraídas de
+7. as rotações deformacionais são extraídas de `Rrel,i = C^T Qi C0` e `Rrel,j = C^T Qj C0` pelo logaritmo de SO(3).
 
-`Rrel,i = C^T Qi C0`
-
-`Rrel,j = C^T Qj C0`
-
-pela aplicação logarítmica de SO(3).
-
-Com isso, uma translação ou rotação rígida comum aos dois nós não produz deformações básicas espúrias.
-
-O vetor básico experimental é
+Assim, translação e rotação rígidas comuns aos dois nós não geram deformações básicas espúrias. O vetor básico é
 
 `vb = [ΔL, θix, θiy, θiz, θjx, θjy, θjz]`.
 
-## Lei elástica inicial
+## Lei elástica e ações térmicas
 
-O estágio atual usa Euler-Bernoulli elástico:
+O estágio atual usa viga espacial Euler-Bernoulli elástica:
 
-`N = EA/L0 · ΔL`
+`N = EA/L0 · (ΔL - εT L0)`
 
 `Ti = GJ/L0 (θix - θjx)`
 
-com momentos de extremidade nos dois planos obtidos pela matriz clássica `4EI/L0 – 2EI/L0`. As forças cortantes são recuperadas pelo equilíbrio no comprimento corrente.
+com flexão nos dois planos principais pela relação clássica `4EI/L0 – 2EI/L0`. As forças cortantes são recuperadas por equilíbrio no comprimento corrente.
 
-As forças locais são transformadas para o sistema global usando o triedro co-rotacionado corrente.
+A ação térmica é tratada como deformação inicial. O incremento uniforme produz `εT = α ΔT`; gradientes nos eixos locais produzem curvaturas iniciais nos planos correspondentes. Durante o carregamento incremental, o estado térmico avança com o mesmo fator de carga `λ`.
 
 ## Equilíbrio global
 
-Foi acrescentado um Newton-Raphson incremental de carga para modelos puros `frame3d`. Nesta fundação, a tangente global é obtida por diferenciação numérica das forças internas:
+A solução usa Newton-Raphson incremental de carga. A Jacobiana interna é atualmente avaliada por diferença central:
 
-`Kt ≈ ∂Fint/∂q`.
+`Kint ≈ ∂Fint/∂q`.
 
-Essa opção é deliberadamente mais lenta, porém reduz o risco de introduzir uma tangente analítica incorreta antes de validar a cinemática espacial. A substituição por uma tangente consistente fechada é a próxima etapa de desempenho e robustez.
+A escolha continua deliberadamente conservadora para validação: é mais lenta que uma tangente analítica fechada, porém permite verificar a cinemática e o equilíbrio espacial antes da otimização.
 
-## Validações já implementadas
+O line search é aplicado ao incremento de Newton e os resíduos são avaliados somente nos graus de liberdade livres.
+
+## Cargas conservativas de barra
+
+O pré-processador `corotational3dLoads.js` transforma ações conservativas na configuração de referência em vetores nodais equivalentes globais fixos:
+
+- carga uniforme local `qx/qy/qz`;
+- carga pontual local interior `px/py/pz` em `xi`;
+- peso próprio global `-Z`, calculado por `γ A`.
+
+A recuperação de esforços de extremidade desconta os vetores de forças fixas correspondentes, preservando cortantes e momentos de engastamento para pós-processamento.
+
+## Imperfeição modal sem tensões
+
+A imperfeição geométrica proveniente da flambagem linear 3D pode ser usada como geometria inicial de referência. A forma modal selecionada é escalada para a amplitude `e0` definida pelo usuário e não introduz tensões iniciais artificiais.
+
+O resultado distingue a geometria imperfeita inicial, o incremento `Δu` e a configuração total usada para visualização.
+
+## Força seguidora espacial
+
+A v0.30 passa a aceitar `followerEnd` concentrada na **extremidade 2** do `frame3d`, com componentes locais `Px/Py/Pz`.
+
+A força permanece ligada ao triedro co-rotacionado corrente. Portanto,
+
+`Ff(q) = C(q) · Pf,local`
+
+é dependente da configuração. Sua Jacobiana externa é obtida por diferença central:
+
+`Kext ≈ ∂Ff/∂q`.
+
+O Newton usa a tangente efetiva não conservativa
+
+`Keff = Kint - λ Kext`
+
+para o resíduo
+
+`R(q,λ) = λ [Fdead + Ff(q)] - Fint(q)`.
+
+Como esperado para uma ação não conservativa, `Keff` não precisa ser simétrica. Momentos seguidores e follower distribuída permanecem explicitamente fora do escopo.
+
+## Validações implementadas
 
 - objetividade a translação rígida;
 - objetividade a rotação rígida finita arbitrária;
 - ida e volta Rodrigues/log de SO(3);
-- extensão axial pura;
-- rotação de corda com flexão local;
-- torção relativa entre extremidades;
-- limite axial `u = PL/EA`;
-- convergência para a solução linear 3D sob carga transversal pequena em ambos os planos;
-- equilíbrio de reações para carregamento espacial moderado;
-- integração experimental ao dispatcher e ao SolverRegistry.
+- extensão axial pura e limite `u = PL/EA`;
+- flexão nos dois planos e torção relativa;
+- convergência para a solução linear 3D sob cargas pequenas;
+- resposta de segunda ordem comparada com o P-Delta em regime compatível;
+- equilíbrio de reações em carregamento espacial;
+- carga uniforme e pontual de barra com recuperação de esforços;
+- peso próprio e resultados de teoria de vigas no limite linear;
+- ações térmicas uniformes e gradientes;
+- imperfeição modal como referência sem tensões;
+- força follower sob rotação rígida finita;
+- limite de pequena carga follower;
+- não simetria da Jacobiana externa follower;
+- integração ao dispatcher, SolverRegistry, painel 3D e regressão E2E desktop/Android/tablet.
 
-## Escopo protegido atual
+## Escopo aceito atualmente
 
-Aceito:
-
-- elementos puros `frame3d`;
-- elasticidade linear de material;
+- modelos puros `frame3d`;
+- material linear-elástico;
+- grandes translações e rotações;
 - cargas nodais globais;
+- cargas uniformes e pontuais locais de barra;
+- peso próprio global `-Z`;
+- ações térmicas uniformes e gradientes locais;
+- imperfeição modal 3D sem tensões;
+- follower concentrada na extremidade 2, `Px/Py/Pz` local;
 - apoios homogêneos com valores prescritos nulos;
 - controle incremental de carga;
-- Newton-Raphson com line search;
-- grandes deslocamentos/rotações no nível cinemático.
+- Newton-Raphson com line search.
 
-Ainda rejeitado explicitamente:
+## Escopo ainda protegido
 
-- cargas distribuídas/de barra;
-- peso próprio no co-rotacional 3D;
-- follower loads 3D;
+- momentos seguidores e follower distribuída;
 - molas nodais e recalques;
 - releases e ligações semirrígidas espaciais;
-- imperfeição modal no co-rotacional 3D;
 - controle de deslocamento e Arc-Length 3D;
-- plasticidade material, rótulas e plasticidade distribuída 3D.
+- plasticidade material, rótulas e plasticidade distribuída 3D;
+- contato, flambagem local e dano/fadiga.
 
 ## Próxima sequência
 
-1. substituir/validar a tangente numérica pela tangente co-rotacional consistente;
-2. adicionar vetor de cargas de barra de referência e peso próprio;
-3. incorporar imperfeição modal v0.29 como geometria inicial sem tensões;
-4. follower loads espaciais e matriz externa não conservativa;
-5. liberar o modo 3D no painel de análise somente após os benchmarks anteriores permanecerem verdes;
-6. posteriormente introduzir controle de deslocamento/Arc-Length e não linearidade material 3D.
+1. concluir a regressão da força follower e manter a interface sincronizada com o escopo validado;
+2. substituir ou comparar a Jacobiana numérica com uma tangente co-rotacional analítica/consistente para desempenho e robustez;
+3. generalizar releases e ligações semirrígidas espaciais;
+4. implementar controle de deslocamento e Arc-Length 3D;
+5. posteriormente introduzir não linearidade material 3D e estabilidade pós-crítica mais completa;
+6. somente promover a v0.30 para `main` após benchmarks e regressões de produção permanecerem verdes.

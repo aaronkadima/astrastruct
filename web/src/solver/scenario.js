@@ -16,6 +16,11 @@ export function resolveScenario(project,scenarioId){
     const out={...clone(load),sourceCaseId:load.caseId||firstCaseId,scenarioFactor:factor};
     if(load.kind==='uniform'){out.qx=(load.qx||0)*factor;out.qy=(load.qy||0)*factor;out.qz=(load.qz||0)*factor}
     else if(load.kind==='point'||load.kind==='followerEnd'){out.px=(load.px||0)*factor;out.py=(load.py||0)*factor;out.pz=(load.pz||0)*factor}
+    else if(load.kind==='surface'||load.kind==='pressure'){
+      if(load.pressure!==undefined)out.pressure=(Number(load.pressure)||0)*factor;
+      if(load.pz!==undefined)out.pz=(Number(load.pz)||0)*factor;
+      if(load.qz!==undefined)out.qz=(Number(load.qz)||0)*factor;
+    }
     else if(load.kind==='selfWeight'){out.weightFactor=factor*(Number(load.factor)||1)}
     else if(load.kind==='thermal'){
       out.dT=(load.dT||0)*factor;

@@ -95,14 +95,15 @@ function physicalPoint(coords,N){return N.reduce((p,w,i)=>[p[0]+w*coords[i][0],p
 function constitutiveAt(strain,D,c){
   const trial=mv(D,strain),vm=vmStress(trial);
   if(!(c.fy>0)||vm<=c.fy*(1+1e-10))return{stress:trial,tangent:D,vm,yielded:false,plasticStrain:0};
-  const target=c.fy+c.hardeningRatio*(vm-c.fy),scale=target/Math.max(EPS,vm);
-  return{
-    stress:trial.map(v=>v*scale),
-    tangent:D.map(r=>r.map(v=>v*scale)),
-    vm:target,
-    yielded:true,
-    plasticStrain:Math.max(0,(vm-target)/c.E)
-  };
+  const h=c.hardeningRatio;
+  const scale=h+(1-h)*c.fy/Math.max(EPS,vm);
+  const target=scale*vm;
+  const stress=trial.map(v=>v*scale);
+  const gradVmStress=[trial[0]-.5*trial[1],trial[1]-.5*trial[0],3*trial[2]].map(v=>v/Math.max(EPS,vm));
+  const gradVmStrain=[0,1,2].map(j=>gradVmStress.reduce((s,g,i)=>s+g*D[i][j],0));
+  const dScaleDvm=-(1-h)*c.fy/Math.max(EPS,vm*vm);
+  const tangent=D.map((row,i)=>row.map((v,j)=>scale*v+trial[i]*dScaleDvm*gradVmStrain[j]));
+  return{stress,tangent,vm:target,yielded:true,plasticStrain:Math.max(0,(vm-target)/c.E)};
 }
 
 function meshY(c,dy,j){return(j-c.meshY/2)*dy}
@@ -384,7 +385,7 @@ export function solveConnectionPlateHoleContact(input={}){
       'bordo x=L acionado como linha rígida no plano: ux uniforme imposto; todos os uy do bordo são vinculados a uma translação comum livre, impondo reação transversal resultante nula',
       'regularização transversal do bordo livre é ínfima e atua apenas para remover o modo rígido antes do contato',
       'pressão p_n=k_n·δ integrada na área cilíndrica t·ds',
-      'plasticização monotônica bilinear secante governada por von Mises',
+      'plasticização monotônica bilinear secante governada por von Mises com tangente algorítmica consistente da lei secante',
       'ovalização calculada removendo a translação média do contorno',
       'não inclui atrito, pré-tensão, prying fora do plano, block shear, rasgamento de borda ou resistência normativa automática'
     ]

@@ -24,17 +24,47 @@ function optionsFor(materialOptions,materialId,material){
   return materialOptions?.[materialId]||materialOptions?.[material?.type]||materialOptions?.default||{};
 }
 
+function cellMoments(fiber,index){
+  const IyLocal=finite(`fiber[${index}].IyLocal`,fiber.IyLocal??0),IzLocal=finite(`fiber[${index}].IzLocal`,fiber.IzLocal??0),IyzLocal=finite(`fiber[${index}].IyzLocal`,fiber.IyzLocal??0);
+  if(IyLocal<0||IzLocal<0)throw new Error(`SectionResponse: inércias locais da fibra ${index} não podem ser negativas.`);
+  return{IyLocal,IzLocal,IyzLocal};
+}
+
+/**
+ * Biaxial fiber/cell integration in the y-z plane.
+ *
+ * The generalized strain field is affine:
+ *   eps(y,z) = eps0 - kappaY*z + kappaZ*y.
+ *
+ * Each integration cell stores its centroidal area moments. Stress and tangent
+ * are evaluated at the cell centroid; the affine first-order continuation with
+ * that tangent is integrated analytically inside the cell. Therefore elastic
+ * rectangular cells reproduce A, Iy, Iz and Iyz exactly instead of degrading to
+ * a midpoint-rule inertia. Discrete bars/points simply have zero local moments.
+ */
 export function fiberSectionResponse3D({fibers,materials,generalizedStrain={},materialOptions={}}={}){
   const rows=Array.from(fibers||[]);if(!rows.length)throw new Error('SectionResponse: fibras ausentes.');const e=generalizedVector(generalizedStrain),K=zeros();let N=0,My=0,Mz=0,yieldedFibers=0,crackedFibers=0,crushedFibers=0,minStrain=Infinity,maxStrain=-Infinity,minStress=Infinity,maxStress=-Infinity;
   const states=rows.map((fiber,index)=>{
     const y=finite(`fiber[${index}].y`,fiber.y),z=finite(`fiber[${index}].z`,fiber.z),area=finite(`fiber[${index}].area`,fiber.area);if(!(area>0))throw new Error(`SectionResponse: área da fibra ${index} deve ser positiva.`);
-    const material=materialById(materials,fiber.materialId);if(!material)throw new Error(`SectionResponse: material ${fiber.materialId} ausente na fibra ${fiber.id||index}.`);
+    const {IyLocal,IzLocal,IyzLocal}=cellMoments(fiber,index),material=materialById(materials,fiber.materialId);if(!material)throw new Error(`SectionResponse: material ${fiber.materialId} ausente na fibra ${fiber.id||index}.`);
     const B=[1,-z,y],strain=B[0]*e[0]+B[1]*e[1]+B[2]*e[2],law=createSectionMaterialLaw(material,optionsFor(materialOptions,fiber.materialId,material)),state=law(strain),stress=finite(`fiber[${index}].stress`,state.stress),Et=finite(`fiber[${index}].tangent`,state.tangent),force=stress*area;
-    N+=force;My+=B[1]*force;Mz+=B[2]*force;for(let i=0;i<3;i++)for(let j=0;j<3;j++)K[i][j]+=Et*area*B[i]*B[j];
+
+    // Exact for affine strain + linear material; first-order consistent cell
+    // correction for nonlinear laws around the centroid state.
+    const localMy=Et*(e[1]*IyLocal-e[2]*IyzLocal),localMz=Et*(-e[1]*IyzLocal+e[2]*IzLocal);
+    N+=force;My+=B[1]*force+localMy;Mz+=B[2]*force+localMz;
+
+    K[0][0]+=Et*area;
+    K[0][1]+=Et*(-area*z);K[1][0]+=Et*(-area*z);
+    K[0][2]+=Et*(area*y);K[2][0]+=Et*(area*y);
+    K[1][1]+=Et*(area*z*z+IyLocal);
+    K[2][2]+=Et*(area*y*y+IzLocal);
+    const yz=-Et*(area*y*z+IyzLocal);K[1][2]+=yz;K[2][1]+=yz;
+
     if(state.yielded)yieldedFibers++;if(state.cracked)crackedFibers++;if(state.crushed)crushedFibers++;minStrain=Math.min(minStrain,strain);maxStrain=Math.max(maxStrain,strain);minStress=Math.min(minStress,stress);maxStress=Math.max(maxStress,stress);
-    return{...fiber,strain,stress,tangent:Et,force,materialType:material.type||'elastic',yielded:!!state.yielded,cracked:!!state.cracked,crushed:!!state.crushed,branch:state.branch||null};
+    return{...fiber,strain,stress,tangent:Et,force,localMomentCorrection:{My:localMy,Mz:localMz},materialType:material.type||'elastic',yielded:!!state.yielded,cracked:!!state.cracked,crushed:!!state.crushed,branch:state.branch||null};
   });
-  return{contract:'section-response/v1',generalizedStrain:{epsilon0:e[0],kappaY:e[1],kappaZ:e[2]},resultants:{N,My,Mz},resultantVector:[N,My,Mz],tangent:K,fibers:states,fiberCount:states.length,yieldedFibers,crackedFibers,crushedFibers,minStrain,maxStrain,minStress,maxStress};
+  return{contract:'section-response/v1',integration:'centroid-with-local-cell-moments',generalizedStrain:{epsilon0:e[0],kappaY:e[1],kappaZ:e[2]},resultants:{N,My,Mz},resultantVector:[N,My,Mz],tangent:K,fibers:states,fiberCount:states.length,yieldedFibers,crackedFibers,crushedFibers,minStrain,maxStrain,minStress,maxStress};
 }
 
 export function solveSectionEquilibrium3D({fibers,materials,target={},initial={},materialOptions={},tolerances={}}={}){

@@ -23,7 +23,8 @@ assert.ok(Math.abs(semi.Mz2)<Math.abs(rigid.Mz2),'semi-rigid moment should be be
 const sr=semi.connectionRotations.find(x=>x.key==='rz2');assert.ok(sr&&Math.abs(sr.relativeRotation)>0,'semi-rigid connection must recover relative rotation');
 
 // Corotational constitutive response honors release and semi-rigid spring.
-const a={id:'N1',x:0,y:0,z:0},b={id:'N2',x:6,y:0,z:0},u=[0,0,0,0,0,.01,0,0,0,0,0,-.005];
+// For a member on global X, automatic local z is -global Y; excite global Ry to test local Mz.
+const a={id:'N1',x:0,y:0,z:0},b={id:'N2',x:6,y:0,z:0},u=[0,0,0,0,-.01,0,0,0,0,0,.005,0];
 const cp={nodes:[a,b],materials:[material],sections:[section],elementLoads:[]};
 const cr=corotationalFrame3DInternalForce(cp,baseElement(),a,b,u);
 const ch=corotationalFrame3DInternalForce(cp,baseElement({releases:{rx1:false,ry1:false,rz1:true,rx2:false,ry2:false,rz2:false}}),a,b,u);

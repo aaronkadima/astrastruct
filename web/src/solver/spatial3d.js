@@ -1,4 +1,5 @@
 import { zeros, solveConstrained, addSub } from './matrix.js';
+import { condenseEndConnections3D, recoverEndConnections3D } from './endConnections3d.js';
 
 const EPS=1e-12;
 const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
@@ -21,34 +22,23 @@ export function spatialAxes(a,b,e={}){
   const ex=unit(dx);
   const raw=e.orientation?.up||e.localY||null;
   let ref=Array.isArray(raw)&&raw.length>=3?[Number(raw[0]),Number(raw[1]),Number(raw[2])]:null;
-  if(!ref||!ref.every(Number.isFinite)||norm(ref)<EPS){
-    ref=Math.abs(ex[2])<.90?[0,0,1]:(Math.abs(ex[1])<.90?[0,1,0]:[1,0,0]);
-  }
+  if(!ref||!ref.every(Number.isFinite)||norm(ref)<EPS)ref=Math.abs(ex[2])<.90?[0,0,1]:(Math.abs(ex[1])<.90?[0,1,0]:[1,0,0]);
   let eyCandidate=sub(ref,scale(ex,dot(ref,ex)));
-  if(norm(eyCandidate)<1e-9){
-    ref=Math.abs(ex[0])<.90?[1,0,0]:(Math.abs(ex[1])<.90?[0,1,0]:[0,0,1]);
-    eyCandidate=sub(ref,scale(ex,dot(ref,ex)));
-  }
+  if(norm(eyCandidate)<1e-9){ref=Math.abs(ex[0])<.90?[1,0,0]:(Math.abs(ex[1])<.90?[0,1,0]:[0,0,1]);eyCandidate=sub(ref,scale(ex,dot(ref,ex)))}
   const ey=unit(eyCandidate),ez=unit(cross(ex,ey));
   return {L,ex,ey,ez,R:[ex,ey,ez]};
 }
 
-function transform12(R){
-  const T=zeros(12);
-  for(const offset of [0,3,6,9])for(let i=0;i<3;i++)for(let j=0;j<3;j++)T[offset+i][offset+j]=R[i][j];
-  return T;
-}
+function transform12(R){const T=zeros(12);for(const offset of [0,3,6,9])for(let i=0;i<3;i++)for(let j=0;j<3;j++)T[offset+i][offset+j]=R[i][j];return T;}
 
 export function frame3DLocalStiffness({E,G,A,Iy,Iz,J,L}){
   for(const [name,v] of Object.entries({E,G,A,Iy,Iz,J,L}))if(!(Number(v)>0))throw new Error(`frame3d: propriedade ${name} deve ser positiva.`);
   const k=zeros(12),EA=E*A/L,GJ=G*J/L;
   k[0][0]=k[6][6]=EA;k[0][6]=k[6][0]=-EA;
   k[3][3]=k[9][9]=GJ;k[3][9]=k[9][3]=-GJ;
-  const az=12*E*Iz/L**3,bz=6*E*Iz/L**2,cz=4*E*Iz/L,dz=2*E*Iz/L;
-  const iv=[1,5,7,11],kv=[[az,bz,-az,bz],[bz,cz,-bz,dz],[-az,-bz,az,-bz],[bz,dz,-bz,cz]];
+  const az=12*E*Iz/L**3,bz=6*E*Iz/L**2,cz=4*E*Iz/L,dz=2*E*Iz/L,iv=[1,5,7,11],kv=[[az,bz,-az,bz],[bz,cz,-bz,dz],[-az,-bz,az,-bz],[bz,dz,-bz,cz]];
   for(let i=0;i<4;i++)for(let j=0;j<4;j++)k[iv[i]][iv[j]]+=kv[i][j];
-  const ay=12*E*Iy/L**3,by=6*E*Iy/L**2,cy=4*E*Iy/L,dy=2*E*Iy/L;
-  const iw=[2,4,8,10],kw=[[ay,-by,-ay,-by],[-by,cy,by,dy],[-ay,by,ay,by],[-by,dy,by,cy]];
+  const ay=12*E*Iy/L**3,by=6*E*Iy/L**2,cy=4*E*Iy/L,dy=2*E*Iy/L,iw=[2,4,8,10],kw=[[ay,-by,-ay,-by],[-by,cy,by,dy],[-ay,by,ay,by],[-by,dy,by,cy]];
   for(let i=0;i<4;i++)for(let j=0;j<4;j++)k[iw[i]][iw[j]]+=kw[i][j];
   return k;
 }
@@ -58,76 +48,49 @@ function frameUniformLocalLoads(loads,L){
   for(const load of loads||[]){
     if(load.kind!=='uniform')continue;
     const qx=Number(load.qx)||0,qy=Number(load.qy)||0,qz=Number(load.qz)||0;
-    p[0]+=qx*L/2;p[6]+=qx*L/2;
-    p[1]+=qy*L/2;p[7]+=qy*L/2;p[5]+=qy*L*L/12;p[11]-=qy*L*L/12;
-    p[2]+=qz*L/2;p[8]+=qz*L/2;p[4]-=qz*L*L/12;p[10]+=qz*L*L/12;
+    p[0]+=qx*L/2;p[6]+=qx*L/2;p[1]+=qy*L/2;p[7]+=qy*L/2;p[5]+=qy*L*L/12;p[11]-=qy*L*L/12;p[2]+=qz*L/2;p[8]+=qz*L/2;p[4]-=qz*L*L/12;p[10]+=qz*L*L/12;
     summary.push({kind:'uniform',qx,qy,qz});
   }
   return {p,summary};
 }
 
 function prepareFrame3D(project,e,a,b){
-  const axes=spatialAxes(a,b,e),mat=materialFor(project,e),sec=sectionFor(project,e),E=Number(mat.E),nu=Number(mat.nu),G=Number(mat.G)||(Number.isFinite(nu)?E/(2*(1+nu)):0);
-  const A=prop(e,sec,'A'),Iy=prop(e,sec,'Iy',e.I??sec.I),Iz=prop(e,sec,'Iz',e.I??sec.I),J=prop(e,sec,'J');
-  const kl=frame3DLocalStiffness({E,G,A,Iy,Iz,J,L:axes.L}),T=transform12(axes.R),kg=matMul(transpose(T),matMul(kl,T));
-  const loads=(project.elementLoads||[]).filter(l=>l.elementId===e.id),{p:pl,summary}=frameUniformLocalLoads(loads,axes.L),pg=matVec(transpose(T),pl);
-  return {axes,kl,T,kg,pl,pg,properties:{E,G,A,Iy,Iz,J},loadSummary:summary};
+  const axes=spatialAxes(a,b,e),mat=materialFor(project,e),sec=sectionFor(project,e),E=Number(mat.E),nu=Number(mat.nu),G=Number(mat.G)||(Number.isFinite(nu)?E/(2*(1+nu)):0),A=prop(e,sec,'A'),Iy=prop(e,sec,'Iy',e.I??sec.I),Iz=prop(e,sec,'Iz',e.I??sec.I),J=prop(e,sec,'J');
+  const kl=frame3DLocalStiffness({E,G,A,Iy,Iz,J,L:axes.L}),loads=(project.elementLoads||[]).filter(l=>l.elementId===e.id),{p:pl,summary}=frameUniformLocalLoads(loads,axes.L),connection=condenseEndConnections3D(kl,pl,e.releases,e.rotationalSprings),T=transform12(axes.R),kg=matMul(transpose(T),matMul(connection.kEff,T)),pg=matVec(transpose(T),connection.pEff);
+  return {axes,kl,T,kg,pl,pg,connectionData:connection.connectionData,properties:{E,G,A,Iy,Iz,J},loadSummary:summary};
 }
 
 function prepareTruss3D(project,e,a,b){
   const axes=spatialAxes(a,b,e),mat=materialFor(project,e),sec=sectionFor(project,e),E=Number(mat.E),A=prop(e,sec,'A');
   if(!(E>0&&A>0))throw new Error(`truss3d ${e.id}: E e A devem ser positivos.`);
   const k=zeros(12),d=axes.ex,coef=E*A/axes.L;
-  for(let r=0;r<3;r++)for(let c=0;c<3;c++){
-    const v=coef*d[r]*d[c];k[r][c]+=v;k[r][6+c]-=v;k[6+r][c]-=v;k[6+r][6+c]+=v;
-  }
-  const unsupported=(project.elementLoads||[]).filter(l=>l.elementId===e.id&&Math.abs(Number(l.qx)||0)+Math.abs(Number(l.qy)||0)+Math.abs(Number(l.qz)||0)>EPS);
-  if(unsupported.length)throw new Error(`truss3d ${e.id}: cargas distribuídas de barra não são suportadas na v0.26.`);
+  for(let r=0;r<3;r++)for(let c=0;c<3;c++){const v=coef*d[r]*d[c];k[r][c]+=v;k[r][6+c]-=v;k[6+r][c]-=v;k[6+r][6+c]+=v}
+  const unsupported=(project.elementLoads||[]).filter(l=>l.elementId===e.id&&Math.abs(Number(l.qx)||0)+Math.abs(Number(l.qy)||0)+Math.abs(Number(l.qz)||0)>EPS);if(unsupported.length)throw new Error(`truss3d ${e.id}: cargas distribuídas de barra não são suportadas na v0.26.`);
   return {axes,kg:k,properties:{E,A}};
 }
 
 function dofIndex(nodeIndex,local){return 6*nodeIndex+local;}
 function prescribedSupportDofs(project,map,frameNodes){
   const out=new Map(),fields=['ux','uy','uz','rx','ry','rz'];
-  for(const s of project.supports||[]){
-    const i=map.get(s.nodeId);if(i==null)continue;
-    fields.forEach((f,k)=>{if(s[f])out.set(dofIndex(i,k),Number(s[`${f}Value`])||0)});
-  }
-  // Rotations attached only to truss members do not participate in stiffness and are constrained automatically.
-  for(const [nodeId,i] of map){if(frameNodes.has(nodeId))continue;for(let k=3;k<6;k++)if(!out.has(dofIndex(i,k)))out.set(dofIndex(i,k),0)}
-  return out;
+  for(const s of project.supports||[]){const i=map.get(s.nodeId);if(i==null)continue;fields.forEach((f,k)=>{if(s[f])out.set(dofIndex(i,k),Number(s[`${f}Value`])||0)})}
+  for(const [nodeId,i] of map){if(frameNodes.has(nodeId))continue;for(let k=3;k<6;k++)if(!out.has(dofIndex(i,k)))out.set(dofIndex(i,k),0)}return out;
 }
 
-function recoverFrame(prepared,ug){
-  const ul=matVec(prepared.T,ug),q=matVec(prepared.kl,ul).map((v,i)=>v-prepared.pl[i]);
-  return {ul,q};
-}
+function recoverFrame(prepared,ug){const ul=matVec(prepared.T,ug),recovered=recoverEndConnections3D(prepared.kl,prepared.pl,ul,prepared.connectionData);return {ul,q:recovered.q,connectionRotations:recovered.connectionRotations,elementLocalDisplacements:recovered.uElement};}
 
 export function solveSpatial3D(project){
-  const nodes=project.nodes||[],elements=(project.elements||[]).filter(e=>e.type==='frame3d'||e.type==='truss3d');
-  if(!nodes.length)throw new Error('Modelo 3D sem nós.');
-  if(!elements.length)throw new Error('Modelo sem elementos frame3d/truss3d.');
+  const nodes=project.nodes||[],elements=(project.elements||[]).filter(e=>e.type==='frame3d'||e.type==='truss3d');if(!nodes.length)throw new Error('Modelo 3D sem nós.');if(!elements.length)throw new Error('Modelo sem elementos frame3d/truss3d.');
   const nd=nodes.length*6,K=zeros(nd),F=Array(nd).fill(0),map=new Map(nodes.map((n,i)=>[n.id,i])),cache=[],frameNodes=new Set();
   for(const e of elements){
-    const i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Elemento ${e.id} referencia nó inexistente.`);
-    const a=nodes[i],b=nodes[j],idx=[0,1,2,3,4,5,6,7,8,9,10,11].map(k=>k<6?6*i+k:6*j+(k-6));
-    if(e.type==='frame3d'){
-      frameNodes.add(e.n1);frameNodes.add(e.n2);const prepared=prepareFrame3D(project,e,a,b);addSub(K,prepared.kg,idx);prepared.pg.forEach((v,k)=>{F[idx[k]]+=v});cache.push({e,idx,prepared});
-    }else{const prepared=prepareTruss3D(project,e,a,b);addSub(K,prepared.kg,idx);cache.push({e,idx,prepared});}
+    const i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Elemento ${e.id} referencia nó inexistente.`);const a=nodes[i],b=nodes[j],idx=[0,1,2,3,4,5,6,7,8,9,10,11].map(k=>k<6?6*i+k:6*j+(k-6));
+    if(e.type==='frame3d'){frameNodes.add(e.n1);frameNodes.add(e.n2);const prepared=prepareFrame3D(project,e,a,b);addSub(K,prepared.kg,idx);prepared.pg.forEach((v,k)=>{F[idx[k]]+=v});cache.push({e,idx,prepared})}
+    else{const prepared=prepareTruss3D(project,e,a,b);addSub(K,prepared.kg,idx);cache.push({e,idx,prepared})}
   }
-  for(const l of project.loads||[]){const i=map.get(l.nodeId);if(i==null)continue;const values=[l.fx,l.fy,l.fz,l.mx,l.my,l.mz];for(let k=0;k<6;k++)F[6*i+k]+=Number(values[k])||0;}
-  const prescribed=prescribedSupportDofs(project,map,frameNodes),{u,R,free}=solveConstrained(K,F,prescribed);
-  const displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[6*i],uy:u[6*i+1],uz:u[6*i+2],rx:u[6*i+3],ry:u[6*i+4],rz:u[6*i+5]}));
-  const reactions=nodes.map((n,i)=>({nodeId:n.id,fx:R[6*i],fy:R[6*i+1],fz:R[6*i+2],mx:R[6*i+3],my:R[6*i+4],mz:R[6*i+5]}));
+  for(const l of project.loads||[]){const i=map.get(l.nodeId);if(i==null)continue;const values=[l.fx,l.fy,l.fz,l.mx,l.my,l.mz];for(let k=0;k<6;k++)F[6*i+k]+=Number(values[k])||0}
+  const prescribed=prescribedSupportDofs(project,map,frameNodes),{u,R,free}=solveConstrained(K,F,prescribed),displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[6*i],uy:u[6*i+1],uz:u[6*i+2],rx:u[6*i+3],ry:u[6*i+4],rz:u[6*i+5]})),reactions=nodes.map((n,i)=>({nodeId:n.id,fx:R[6*i],fy:R[6*i+1],fz:R[6*i+2],mx:R[6*i+3],my:R[6*i+4],mz:R[6*i+5]}));
   const elementForces=cache.map(({e,idx,prepared})=>{
-    const ug=idx.map(d=>u[d]);
-    if(e.type==='truss3d'){
-      const du=[ug[6]-ug[0],ug[7]-ug[1],ug[8]-ug[2]],N=prepared.properties.E*prepared.properties.A/prepared.axes.L*dot(prepared.axes.ex,du);
-      return {elementId:e.id,type:'truss3d',axialForce:N,N1:-N,N2:N,localAxes:prepared.axes};
-    }
-    const {ul,q}=recoverFrame(prepared,ug);
-    return {elementId:e.id,type:'frame3d',N1:q[0],Vy1:q[1],Vz1:q[2],T1:q[3],My1:q[4],Mz1:q[5],N2:q[6],Vy2:q[7],Vz2:q[8],T2:q[9],My2:q[10],Mz2:q[11],localDisplacements:ul,localAxes:prepared.axes,properties:prepared.properties,loadSummary:prepared.loadSummary};
+    const ug=idx.map(d=>u[d]);if(e.type==='truss3d'){const du=[ug[6]-ug[0],ug[7]-ug[1],ug[8]-ug[2]],N=prepared.properties.E*prepared.properties.A/prepared.axes.L*dot(prepared.axes.ex,du);return {elementId:e.id,type:'truss3d',axialForce:N,N1:-N,N2:N,localAxes:prepared.axes}}
+    const {ul,q,connectionRotations,elementLocalDisplacements}=recoverFrame(prepared,ug);return {elementId:e.id,type:'frame3d',N1:q[0],Vy1:q[1],Vz1:q[2],T1:q[3],My1:q[4],Mz1:q[5],N2:q[6],Vy2:q[7],Vz2:q[8],T2:q[9],My2:q[10],Mz2:q[11],localDisplacements:ul,elementLocalDisplacements,connectionRotations,localAxes:prepared.axes,properties:prepared.properties,loadSummary:prepared.loadSummary};
   });
-  const types=new Set(elements.map(e=>e.type)),type=types.size===1?[...types][0]:'mixed3d';
-  return {type,dimension:'3d',solverVersion:'0.26.0',dofs:nd,activeDofs:free.length,displacements,reactions,elementForces};
+  const types=new Set(elements.map(e=>e.type)),type=types.size===1?[...types][0]:'mixed3d';return {type,dimension:'3d',solverVersion:'0.30.0',dofs:nd,activeDofs:free.length,displacements,reactions,elementForces};
 }

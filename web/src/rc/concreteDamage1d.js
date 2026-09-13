@@ -24,7 +24,7 @@ function compressionEnvelope(kappa,p){
   if(kappa<=0)return{stress:0,tangent:p.E,branch:'origin'};
   if(kappa<=p.epsc0){const eta=kappa/p.epsc0,stress=-p.fc*(2*eta-eta*eta),tangent=2*p.fc*(1-eta)/p.epsc0;return{stress,tangent,branch:'compression-parabola'}}
   if(kappa>=p.epscu)return{stress:0,tangent:0,branch:'crushed'};
-  const slope=p.fc/(p.epscu-p.epsc0),stress=-p.fc+slope*(kappa-p.epsc0);return{stress:slope===0?-p.fc:stress,tangent:slope,branch:'compression-softening'};
+  const slopeKappa=p.fc/(p.epscu-p.epsc0),stress=-p.fc+slopeKappa*(kappa-p.epsc0);return{stress,tangent:-slopeKappa,branch:'compression-softening'};
 }
 function tensileEnergy(kappa,p){if(kappa<=p.epsCr)return 0;const D=p.epsTu-p.epsCr,x=clamp(kappa-p.epsCr,0,D);return p.ft*(x-x*x/(2*D))*p.lch}
 function compressiveEnergy(kappa,p){if(!p.Gc||kappa<=p.epsc0)return 0;const D=p.epscu-p.epsc0,x=clamp(kappa-p.epsc0,0,D);return p.fc*(x-x*x/(2*D))*p.lch}

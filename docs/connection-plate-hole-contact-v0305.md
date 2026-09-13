@@ -19,6 +19,12 @@ A área interior a `rh` não participa da resposta resistente da chapa. Nos elem
 
 Portanto, o método é um **embedded/cut-cell domain**, não uma malha conformada ao círculo. O círculo usado para o contato, entretanto, permanece geometricamente circular e independente da discretização retangular.
 
+A malha transversal é construída em torno de `y=0` por
+
+`yj = (j - Ny/2) Δy`,
+
+em vez de acumular coordenadas a partir de `-B/2`. O localizador dos pontos de contato usa a mesma referência centralizada. Essa escolha preserva pares `+y/-y` com a mesma representação aritmética de ponto flutuante e evita amplificação artificial de assimetrias em contato sem atrito.
+
 ## Material da chapa
 
 O estado elástico usa a matriz de estado plano de tensões
@@ -34,6 +40,16 @@ A plastificação disponível nesta versão é monotônica, bilinear e secante. 
 `σtarget = fy + h (σvm,trial - fy)`,
 
 onde `h` é a razão de rigidez pós-escoamento informada pelo usuário.
+
+Na região pós-escoamento, o Newton utiliza a derivada algorítmica consistente da própria relação secante
+
+`σ = a(σvm) D ε`,
+
+com
+
+`a = h + (1-h) fy/σvm`.
+
+A tangente inclui o termo `da/dσvm`; isso melhora a convergência sem alterar a lei tensão–deformação definida acima.
 
 Esse recurso permite observar perda de rigidez e redistribuição na chapa, mas ainda não constitui integração constitutiva J2 incremental completa com memória plástica, retorno radial consistente e carregamento cíclico.
 
@@ -96,9 +112,12 @@ Essa métrica é geométrica e adequada para inspeção comparativa. Ela não re
 O bordo `x=L` é tratado como uma linha rígida no plano:
 
 - `ux = Δ` uniforme ao longo do bordo;
-- `uy = 0` ao longo do mesmo bordo.
+- todos os graus de liberdade `uy` do bordo são ligados por uma restrição multiponto e compartilham uma única translação transversal desconhecida;
+- essa translação comum é livre, de modo que a resultante generalizada transversal do atuador é nula.
 
-Isso representa um bordo de acionamento ligado a um corpo rígido e evita deriva transversal espúria no benchmark simétrico de cisalhamento direto.
+Antes do primeiro contato existe um modo rígido transversal. Para tornar o sistema numericamente resolúvel nesse trecho, é adicionada apenas uma regularização ínfima ao grau de liberdade transversal comum (`edgeYStabilizationRatio`, padrão `1e-10`). Após o contato, sua reação é desprezível e é reportada nos diagnósticos do solver.
+
+Essa formulação representa um bordo acionado em `x` sem impor artificialmente uma força externa em `y`. Nos benchmarks simétricos, `ΣFy` deve permanecer numericamente nulo.
 
 O parafuso é rígido e permanece fixo no centro inicial do furo. Não há rotação, pré-tensão ou deslizamento por atrito do parafuso nesta versão.
 
@@ -125,11 +144,13 @@ O smoke test da v0.30.5 verifica:
 - ausência de pressão antes do fechamento da folga;
 - ativação distribuída do contato após o fechamento;
 - equilíbrio entre força aplicada e resultantes dos furos;
+- resultante transversal global praticamente nula no benchmark simétrico;
 - centro de pressão no lado de bearing esperado para carregamento em `+x`;
-- simetria superior/inferior do grupo;
+- simetria superior/inferior do grupo, incluindo forças, pressões e ovalização;
 - redistribuição entre colunas de parafusos quando a chapa é flexível;
 - ovalização não nula após contato;
 - plastificação da chapa para `fy` reduzido;
+- convergência do ramo pós-escoamento com tangente consistente;
 - finitude dos campos de pressão exportados.
 
 A regressão Playwright verifica o fluxo completo do Lab, mapa, curva `p(θ)`, tabela e exportações CSV/SVG.

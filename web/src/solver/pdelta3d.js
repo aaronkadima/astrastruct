@@ -1,12 +1,14 @@
 import { zeros, solveConstrained, addSub } from './matrix.js';
 import { spatialAxes, frame3DLocalStiffness } from './spatial3d.js';
 import { frame3DLocalGeometricStiffness } from './modalStability3d.js';
+import { condenseEndConnections3D, recoverEndConnections3D, endConnectionKinematicMap3D } from './endConnections3d.js';
 
 const EPS = 1e-12;
 const transpose = A => A[0].map((_,j) => A.map(r => r[j]));
 const matMul = (A,B) => A.map(r => B[0].map((_,j) => r.reduce((s,v,k) => s + v*B[k][j], 0)));
 const matVec = (A,x) => A.map(r => r.reduce((s,v,j) => s + v*x[j], 0));
 const addMatrices = (A,B) => A.map((r,i) => r.map((v,j) => v + B[i][j]));
+const projectByMap = (Q,B) => matMul(transpose(B),matMul(Q,B));
 
 function sectionFor(project,e){ return (project.sections || []).find(s => s.id === e.sectionId) || {}; }
 function materialFor(project,e){
@@ -46,8 +48,8 @@ function prepareFrame3D(project,e,a,b){
   const loads = (project.elementLoads || []).filter(l => l.elementId === e.id);
   const unsupported = loads.filter(l => l.kind !== 'uniform');
   if(unsupported.length) throw new Error(`P-Delta 3D v0.29: ${e.id} possui carga de barra ainda não suportada (${unsupported[0].kind || 'tipo desconhecido'}).`);
-  const {p:pl,summary} = frameUniformLocalLoads(loads,axes.L), pg = matVec(transpose(T),pl);
-  return {axes,kl,T,pl,pg,properties:{E,G,A,Iy,Iz,J},loadSummary:summary};
+  const {p:pl,summary} = frameUniformLocalLoads(loads,axes.L), connection = condenseEndConnections3D(kl,pl,e.releases,e.rotationalSprings), map = endConnectionKinematicMap3D(kl,e.releases,e.rotationalSprings), pg = matVec(transpose(T),connection.pEff);
+  return {axes,kl,T,pl,pg,kElasticEff:connection.kEff,connectionData:connection.connectionData,B:map.B,properties:{E,G,A,Iy,Iz,J},loadSummary:summary};
 }
 
 function prescribedSupportDofs(project,map){
@@ -75,8 +77,8 @@ function normalizeImperfection(options,nd,prescribed){
 }
 
 function recoverFrame(prepared,ug){
-  const ul = matVec(prepared.T,ug), q = matVec(prepared.kl,ul).map((v,i) => v - prepared.pl[i]);
-  return {ul,q};
+  const ul = matVec(prepared.T,ug), recovered = recoverEndConnections3D(prepared.kl,prepared.pl,ul,prepared.connectionData);
+  return {ul,q:recovered.q,elementLocalDisplacements:recovered.uElement,connectionRotations:recovered.connectionRotations};
 }
 function physicalAxial(force){ return 0.5*((Number(force.N2)||0) - (Number(force.N1)||0)); }
 
@@ -104,9 +106,7 @@ export function solveFramePDelta3D(project,options={}){
     const K = zeros(nd), F = Array(nd).fill(0);
     for(const item of cache){
       const N = axial.get(item.e.id) || 0;
-      const kgLocal = frame3DLocalGeometricStiffness(N,item.prepared.axes.L);
-      const ktLocal = addMatrices(item.prepared.kl,kgLocal);
-      const ktGlobal = matMul(transpose(item.prepared.T),matMul(ktLocal,item.prepared.T));
+      const kgMember = frame3DLocalGeometricStiffness(N,item.prepared.axes.L), kgLocal = projectByMap(kgMember,item.prepared.B), ktLocal = addMatrices(item.prepared.kElasticEff,kgLocal), ktGlobal = matMul(transpose(item.prepared.T),matMul(ktLocal,item.prepared.T));
       addSub(K,ktGlobal,item.idx);
       item.prepared.pg.forEach((v,k) => { F[item.idx[k]] += v; });
       if(imperfection && Math.abs(N) > 1e-15){
@@ -125,8 +125,8 @@ export function solveFramePDelta3D(project,options={}){
     maxDelta = Math.max(...u.map((v,i) => Math.abs(v-uPrev[i])));
     const scale = Math.max(1,Math.max(...u.map(Math.abs)));
     const forces = cache.map(item => {
-      const ug = item.idx.map(i => u[i]), {ul,q} = recoverFrame(item.prepared,ug), u0g = item.idx.map(i => u0[i]), u0l = imperfection ? matVec(item.prepared.T,u0g) : Array(12).fill(0);
-      return {elementId:item.e.id,type:'frame3d',N1:q[0],Vy1:q[1],Vz1:q[2],T1:q[3],My1:q[4],Mz1:q[5],N2:q[6],Vy2:q[7],Vz2:q[8],T2:q[9],My2:q[10],Mz2:q[11],localDisplacements:ul,localDisplacementsTotal:ul.map((v,i)=>v+u0l[i]),localAxes:item.prepared.axes,properties:item.prepared.properties,loadSummary:item.prepared.loadSummary};
+      const ug = item.idx.map(i => u[i]), {ul,q,elementLocalDisplacements,connectionRotations} = recoverFrame(item.prepared,ug), u0g = item.idx.map(i => u0[i]), u0l = imperfection ? matVec(item.prepared.T,u0g) : Array(12).fill(0), u0Element = imperfection ? matVec(item.prepared.B,u0l) : Array(12).fill(0);
+      return {elementId:item.e.id,type:'frame3d',N1:q[0],Vy1:q[1],Vz1:q[2],T1:q[3],My1:q[4],Mz1:q[5],N2:q[6],Vy2:q[7],Vz2:q[8],T2:q[9],My2:q[10],Mz2:q[11],localDisplacements:ul,elementLocalDisplacements,connectionRotations,localDisplacementsTotal:elementLocalDisplacements.map((v,i)=>v+u0Element[i]),localAxes:item.prepared.axes,properties:item.prepared.properties,loadSummary:item.prepared.loadSummary};
     });
     const newAxial = new Map(forces.map(f => [f.elementId,physicalAxial(f)]));
     last = {iteration,K,F,u,R:solved.R,free:solved.free,forces,axial:newAxial};
@@ -141,5 +141,6 @@ export function solveFramePDelta3D(project,options={}){
   const initialDisplacements = nodes.map((n,i) => ({nodeId:n.id,ux:u0[6*i],uy:u0[6*i+1],uz:u0[6*i+2],rx:u0[6*i+3],ry:u0[6*i+4],rz:u0[6*i+5]}));
   const totalDisplacements = nodes.map((n,i) => ({nodeId:n.id,ux:last.u[6*i]+u0[6*i],uy:last.u[6*i+1]+u0[6*i+1],uz:last.u[6*i+2]+u0[6*i+2],rx:last.u[6*i+3]+u0[6*i+3],ry:last.u[6*i+4]+u0[6*i+4],rz:last.u[6*i+5]+u0[6*i+5]}));
   const reactions = nodes.map((n,i) => ({nodeId:n.id,fx:last.R[6*i],fy:last.R[6*i+1],fz:last.R[6*i+2],mx:last.R[6*i+3],my:last.R[6*i+4],mz:last.R[6*i+5]}));
-  return {type:'frame3d-pdelta',dimension:'3d',analysisType:'pdelta',solverVersion:'0.29.0',dofs:nd,activeDofs:last.free.length,displacements,initialDisplacements:imperfection?initialDisplacements:null,totalDisplacements:imperfection?totalDisplacements:null,reactions,elementForces:last.forces,pDelta:{converged:true,iterations:last.iteration,tolerance,maxDelta,axialForces:[...last.axial].map(([elementId,N]) => ({elementId,N})),imperfection:imperfection?{enabled:true,source:imperfection.source||'bucklingMode',mode:imperfection.mode||null,referenceScenarioId:imperfection.referenceScenarioId||null,amplitude:imperfection.maxTranslation,amplitudeMm:imperfection.maxTranslation*1000,criticalFactor:imperfection.criticalFactor||null}:null,formulation:'elastic-frame3d + consistent geometric stiffness in both bending planes + equivalent modal imperfection load',convention:'N>0 tension; compression negative'}};
+  const releaseCount=elements.reduce((s,e)=>s+Object.values(e.releases||{}).filter(Boolean).length,0),semiRigidConnectionCount=elements.reduce((s,e)=>s+Object.values(e.rotationalSprings||{}).filter(v=>v!==null&&v!==undefined&&Number(v)>0).length,0);
+  return {type:'frame3d-pdelta',dimension:'3d',analysisType:'pdelta',solverVersion:'0.29.0',dofs:nd,activeDofs:last.free.length,displacements,initialDisplacements:imperfection?initialDisplacements:null,totalDisplacements:imperfection?totalDisplacements:null,reactions,elementForces:last.forces,pDelta:{converged:true,iterations:last.iteration,tolerance,maxDelta,axialForces:[...last.axial].map(([elementId,N]) => ({elementId,N})),releaseCount,semiRigidConnectionCount,imperfection:imperfection?{enabled:true,source:imperfection.source||'bucklingMode',mode:imperfection.mode||null,referenceScenarioId:imperfection.referenceScenarioId||null,amplitude:imperfection.maxTranslation,amplitudeMm:imperfection.maxTranslation*1000,criticalFactor:imperfection.criticalFactor||null}:null,formulation:'elastic-frame3d with released/semi-rigid end rotations + projected consistent geometric stiffness in both bending planes + equivalent modal imperfection load',convention:'N>0 tension; compression negative'}};
 }

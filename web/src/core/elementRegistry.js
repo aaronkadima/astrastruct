@@ -88,5 +88,5 @@ registerElementType({
   category: 'surface',
   dofsPerNode: ['ux','uy','uz','rx','ry','rz'],
   nodeCount: 4,
-  capabilities: { linear: true, pdelta: false, corotational: false, dynamics: false, surfacePressure: true, membrane: true, bending: true, transverseShear: true },
+  capabilities: { linear: true, pdelta: false, corotational: false, dynamics: true, modal: true, surfacePressure: true, membrane: true, bending: true, transverseShear: true },
 });

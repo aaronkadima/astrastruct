@@ -4,13 +4,13 @@ import {evaluateShellMeshQuality} from '../../web/src/core/shellQuality.js';
 
 const STORAGE_KEY='astrastruct.project';
 const $=<T extends Element=HTMLElement>(sel:string,root:ParentNode=document)=>root.querySelector(sel) as T|null;
-const esc=(v:any)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]||ch));
+const esc=(v:any)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[ch]||ch));
 const num=(v:any,f=0)=>Number.isFinite(Number(v))?Number(v):f;
 function current(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||'null')}catch{return null}}
 function shellIds(e:any){return(Array.isArray(e?.nodeIds)&&e.nodeIds.length===4?e.nodeIds:[e?.n1,e?.n2,e?.n3,e?.n4]).filter(Boolean)}
 function statusLabel(s:string){return s==='good'?'Boa':s==='warning'?'Atenção':'Inválida'}
 function statusClass(s:string){return s==='good'?'quality-good':s==='warning'?'quality-warning':'quality-invalid'}
-function levelProject(project:any,levelId:string|null){if(!levelId)return project;const nodes=project.nodes||[],nodeMap=new Map(nodes.map((n:any)=>[String(n.id),n])),elements=(project.elements||[]).filter((e:any)=>{if(e.type!=='shell4')return false;const first=nodeMap.get(String(shellIds(e)[0]));return String(e.levelId??first?.levelId??'')===String(levelId)});return{...project,elements}}
+function levelProject(project:any,levelId:string|null){if(!levelId)return project;const nodes:any[]=project.nodes||[],nodeMap=new Map<string,any>(nodes.map((n:any)=>[String(n.id),n])),elements=(project.elements||[]).filter((e:any)=>{if(e.type!=='shell4')return false;const first:any=nodeMap.get(String(shellIds(e)[0]));return String(e.levelId??first?.levelId??'')===String(levelId)});return{...project,elements}}
 function fmt(v:any,d=3){return Number.isFinite(Number(v))?Number(v).toFixed(d):'—'}
 
 function installStyle(){if(document.getElementById('astra-shell-quality-style'))return;const s=document.createElement('style');s.id='astra-shell-quality-style';s.textContent=`

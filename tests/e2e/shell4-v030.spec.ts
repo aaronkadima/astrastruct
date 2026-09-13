@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {readFile} from 'node:fs/promises';
 
 const project={id:'shell4-e2e',name:'Shell4 E2E',version:13,schemaVersion:2,units:'kN-m-MPa',nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:4,y:0,z:0},{id:'N3',x:4,y:3,z:0},{id:'N4',x:0,y:3,z:0}],elements:[{id:'S1',type:'shell4',nodeIds:['N1','N2','N3','N4'],n1:'N1',n2:'N2',n3:'N3',n4:'N4',materialId:'C',thickness:.2,shearCorrection:5/6,drillingFactor:1e-6,label:'Laje teste'}],materials:[{id:'C',name:'Concreto E2E',type:'concrete',E:30e6,nu:.2,density:25}],sections:[],supports:['N1','N2','N3','N4'].map(nodeId=>({nodeId,ux:true,uy:true,uz:true,rx:true,ry:true,rz:true})),loads:[],elementLoads:[{id:'P1',caseId:'LC1',elementId:'S1',kind:'surface',pressure:-10}],settlements:[],nodeSprings:[],nodalMasses:[],loadCases:[{id:'LC1',name:'Pressão',type:'user'}],loadCombinations:[],connections:[],diaphragms:[],settings:{analysisType:'linear',analysisScenarioId:'LC1',activeLoadCaseId:'LC1',grid:.25,snap:true},meta:{productVersion:'0.30.0',schemaVersion:2}};
 
@@ -22,6 +23,15 @@ test('shell4 participates in linear analysis and exposes shell result fields',as
   await loadProject(page);await page.getByTestId('analyze-button').click();await expect(page.getByTestId('spatial3d-results')).toBeVisible();await expect(page.getByTestId('shell4-results')).toBeVisible();const quality=page.getByTestId('shell4-quality-results');await expect(quality).toBeVisible();await expect(quality).toContainText('Jesc mín.');
   const field=page.getByLabel('Campo de esforço 3D');await field.selectOption('Nx');await expect(page.getByTestId('spatial-canvas-3d')).toHaveAttribute('data-force-mode','Nx');
   await field.selectOption('Mx');await expect(page.getByTestId('spatial-canvas-3d')).toHaveAttribute('data-force-mode','Mx');
+});
+
+test('shell4 contour supports nodal, Gauss and center recovery and exports vector SVG',async({page},testInfo)=>{
+  test.skip(testInfo.project.name!=='desktop-chromium','scientific shell4 contour export');
+  await loadProject(page);await page.getByTestId('analyze-button').click();const field=page.getByLabel('Campo de esforço 3D');await field.selectOption('Mx');const canvas=page.getByTestId('spatial-canvas-3d'),status=page.getByTestId('spatial3d-contour-status'),vector=page.getByTestId('spatial3d-vector-scene');
+  await expect(canvas).toHaveAttribute('data-contour-mode','nodal');await expect(status).toContainText('Nodal suavizado');await expect(status).toContainText('kN·m/m');await expect(vector).toBeAttached();expect(await vector.locator('polygon').count()).toBeGreaterThan(10);
+  const recovery=page.getByLabel('Recuperação de contorno shell4');await recovery.selectOption('gauss');await expect(canvas).toHaveAttribute('data-contour-mode','gauss');await expect(status).toContainText('Gauss 2×2');
+  await page.getByLabel('Escala de contorno shell4').selectOption('range');await expect(canvas).toHaveAttribute('data-contour-scale','range');await recovery.selectOption('center');await expect(canvas).toHaveAttribute('data-contour-mode','center');await recovery.selectOption('nodal');
+  await page.getByRole('button',{name:'Exibir',exact:true}).click();const downloadPromise=page.waitForEvent('download');await page.getByRole('menuitem',{name:'Exportar figura científica · SVG vetorial'}).click();const download=await downloadPromise;expect(download.suggestedFilename()).toMatch(/figura-cientifica\.svg$/i);const path=await download.path();expect(path).toBeTruthy();const svg=await readFile(path!,'utf8');expect(svg).toContain('data-scientific-shells');expect(svg).toContain('<polygon');expect(svg).toContain('Mx [kN·m/m]');
 });
 
 test('shell4 can be selected for Modal 3D and produces positive modes',async({page},testInfo)=>{

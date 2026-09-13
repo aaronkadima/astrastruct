@@ -34,7 +34,7 @@ export function generateDesignCombinations({actions=[],rule}={}){
   variants.forEach((selected,variantIndex)=>{
     const eligible=selected.filter(a=>a.leadingEligible&&r.leadingCategories.includes(a.designCategory)),leaders=eligible.length?eligible:[null];
     for(const leader of leaders){
-      const terms=selected.map(action=>{const role=leader&&action.id===leader.id?'leading':eligible.includes(action)?'accompanying':'default',factor=factorFor(action,r,role);return{actionId:action.id,designCategory:action.designCategory,factorClass:action.factorClass,exclusiveGroup:action.exclusiveGroup,role,factor,baseScale:action.baseScale,effectiveScale:action.baseScale*factor}});
+      const terms=selected.map(action=>{const leadingCategory=r.leadingCategories.includes(action.designCategory),role=leader&&action.id===leader.id?'leading':leadingCategory?'accompanying':'default',factor=factorFor(action,r,role);return{actionId:action.id,designCategory:action.designCategory,factorClass:action.factorClass,exclusiveGroup:action.exclusiveGroup,role,factor,baseScale:action.baseScale,effectiveScale:action.baseScale*factor}});
       combinations.push({id:stableId(r,variantIndex,leader?.id||null,terms),ruleId:r.id,limitState:r.limitState,variant:variantIndex+1,leadingActionId:leader?.id||null,terms,provenance:clone(r.provenance)});
     }
   });

@@ -8,6 +8,7 @@ const num=(v:any,f=0)=>Number.isFinite(Number(v))?Number(v):f;
 const positive=(v:any,f=0)=>Math.max(0,num(v,f));
 const DOFS=['ux','uy','uz','rx','ry','rz'] as const;
 const END_ROT=['rx1','ry1','rz1','rx2','ry2','rz2'] as const;
+const elementNodeIds=(e:any)=>e?.type==='shell4'?(Array.isArray(e.nodeIds)&&e.nodeIds.length===4?e.nodeIds:[e.n1,e.n2,e.n3,e.n4]).filter(Boolean):[e?.n1,e?.n2].filter(Boolean);
 
 export function SpatialInspectorPanel({project,selection,onCommit}:{project:any;selection:Selection;onCommit:(p:any)=>void}){
   const activeCase=project.settings?.activeLoadCaseId||project.loadCases?.[0]?.id;
@@ -23,6 +24,11 @@ export function SpatialInspectorPanel({project,selection,onCommit}:{project:any;
       const spring=(project.nodeSprings||[]).find((s:any)=>s.nodeId===entity.id)||{id:null,nodeId:entity.id,kx:0,ky:0,kz:0,krx:0,kry:0,krz:0};
       const settlement=(project.settlements||[]).find((s:any)=>s.caseId===activeCase&&s.nodeId===entity.id)||{id:null,caseId:activeCase,nodeId:entity.id,ux:0,uy:0,uz:0,rx:0,ry:0,rz:0};
       setDraft({x:entity.x,y:entity.y,z:entity.z||0,support:clone(support),load:clone(load),nodalMass:clone(nodalMass),spring:clone({...spring,krz:spring.krz??spring.kr??0}),settlement:clone(settlement)});
+      return;
+    }
+    if(entity.type==='shell4'){
+      const pressure=(project.elementLoads||[]).find((l:any)=>l.caseId===activeCase&&l.elementId===entity.id&&(l.kind==='surface'||l.kind==='pressure'))||{id:null,caseId:activeCase,elementId:entity.id,kind:'surface',pressure:0};
+      setDraft({label:entity.label||entity.id,materialId:entity.materialId||project.materials?.[0]?.id,nodeIds:elementNodeIds(entity),thickness:entity.thickness??entity.t??.18,shearCorrection:entity.shearCorrection??5/6,drillingFactor:entity.drillingFactor??1e-6,pressure:clone({...pressure,pressure:num(pressure.pressure??pressure.pz??pressure.qz)})});
       return;
     }
     const uniform=(project.elementLoads||[]).find((l:any)=>l.caseId===activeCase&&l.elementId===entity.id&&l.kind==='uniform')||{id:null,caseId:activeCase,elementId:entity.id,kind:'uniform',qx:0,qy:0,qz:0};
@@ -48,7 +54,14 @@ export function SpatialInspectorPanel({project,selection,onCommit}:{project:any;
   };
 
   const applyElement=()=>{
-    const p=clone(project),e=p.elements.find((x:any)=>x.id===entity.id);e.label=draft.label;e.materialId=draft.materialId;e.sectionId=draft.sectionId;e.A=Math.max(1e-12,num(draft.A));const section=p.sections.find((s:any)=>s.id===draft.sectionId)||{};if(Number(section.A)>0)e.A=Number(section.A);
+    const p=clone(project),e=p.elements.find((x:any)=>x.id===entity.id);
+    if(e.type==='shell4'){
+      const ids=(draft.nodeIds||[]).map((x:any)=>String(x));
+      if(ids.length!==4||new Set(ids).size!==4||ids.some((id:string)=>!p.nodes.some((n:any)=>String(n.id)===id))){alert('Shell4 requer quatro nós existentes e distintos, em ordem anti-horária vista pelo normal local +z.');return}
+      e.label=draft.label;e.materialId=draft.materialId;e.nodeIds=ids;[e.n1,e.n2,e.n3,e.n4]=ids;e.thickness=Math.max(1e-5,num(draft.thickness,.18));e.shearCorrection=Math.max(.05,Math.min(1,num(draft.shearCorrection,5/6)));e.drillingFactor=Math.max(0,num(draft.drillingFactor,1e-6));
+      p.elementLoads=(p.elementLoads||[]).filter((l:any)=>!(l.caseId===activeCase&&l.elementId===entity.id&&(l.kind==='surface'||l.kind==='pressure')));const pressure=num(draft.pressure?.pressure);if(Math.abs(pressure)>1e-12)p.elementLoads.push({...draft.pressure,id:draft.pressure?.id||uid('SURF'),caseId:activeCase,elementId:entity.id,kind:'surface',pressure});onCommit(normalizeProject(p));return;
+    }
+    e.label=draft.label;e.materialId=draft.materialId;e.sectionId=draft.sectionId;e.A=Math.max(1e-12,num(draft.A));const section=p.sections.find((s:any)=>s.id===draft.sectionId)||{};if(Number(section.A)>0)e.A=Number(section.A);
     if(e.type==='frame3d'){
       e.Iy=Math.max(1e-16,num(draft.Iy,section.Iy??section.I));e.Iz=Math.max(1e-16,num(draft.Iz,section.Iz??section.I));e.J=Math.max(1e-16,num(draft.J,section.J));if(Number(section.Iy??section.I)>0)e.Iy=Number(section.Iy??section.I);if(Number(section.Iz??section.I)>0)e.Iz=Number(section.Iz??section.I);if(Number(section.J)>0)e.J=Number(section.J);
       const up=[num(draft.orientation?.x),num(draft.orientation?.y),num(draft.orientation?.z)];if(Math.hypot(...up)>1e-10)e.orientation={...(e.orientation||{}),up};else delete e.orientation;
@@ -58,7 +71,7 @@ export function SpatialInspectorPanel({project,selection,onCommit}:{project:any;
     onCommit(normalizeProject(p));
   };
 
-  const remove=()=>{const p=clone(project);if(selection?.kind==='node'){const connected=p.elements.filter((e:any)=>e.n1===entity.id||e.n2===entity.id).map((e:any)=>e.id);p.nodes=p.nodes.filter((n:any)=>n.id!==entity.id);p.elements=p.elements.filter((e:any)=>!connected.includes(e.id));p.supports=p.supports.filter((s:any)=>s.nodeId!==entity.id);p.loads=p.loads.filter((l:any)=>l.nodeId!==entity.id);p.nodalMasses=(p.nodalMasses||[]).filter((m:any)=>m.nodeId!==entity.id);p.settlements=(p.settlements||[]).filter((s:any)=>s.nodeId!==entity.id);p.nodeSprings=(p.nodeSprings||[]).filter((s:any)=>s.nodeId!==entity.id);p.elementLoads=p.elementLoads.filter((l:any)=>!connected.includes(l.elementId))}else{p.elements=p.elements.filter((e:any)=>e.id!==entity.id);p.elementLoads=p.elementLoads.filter((l:any)=>l.elementId!==entity.id)}onCommit(normalizeProject(p))};
+  const remove=()=>{const p=clone(project);if(selection?.kind==='node'){const connected=p.elements.filter((e:any)=>elementNodeIds(e).map(String).includes(String(entity.id))).map((e:any)=>e.id);p.nodes=p.nodes.filter((n:any)=>n.id!==entity.id);p.elements=p.elements.filter((e:any)=>!connected.includes(e.id));p.supports=p.supports.filter((s:any)=>s.nodeId!==entity.id);p.loads=p.loads.filter((l:any)=>l.nodeId!==entity.id);p.nodalMasses=(p.nodalMasses||[]).filter((m:any)=>m.nodeId!==entity.id);p.settlements=(p.settlements||[]).filter((s:any)=>s.nodeId!==entity.id);p.nodeSprings=(p.nodeSprings||[]).filter((s:any)=>s.nodeId!==entity.id);p.elementLoads=p.elementLoads.filter((l:any)=>!connected.includes(l.elementId));p.diaphragms=(p.diaphragms||[]).map((d:any)=>Array.isArray(d.nodeIds)?{...d,nodeIds:d.nodeIds.filter((id:any)=>String(id)!==String(entity.id))}:d)}else{p.elements=p.elements.filter((e:any)=>e.id!==entity.id);p.elementLoads=p.elementLoads.filter((l:any)=>l.elementId!==entity.id)}onCommit(normalizeProject(p))};
 
   if(selection?.kind==='node')return <div className="react-inspector spatial-inspector" data-testid="spatial-inspector-node">
     <div className="inspector-title"><div><b>{entity.id}</b><small>Nó 3D · 6 DOFs</small></div><button className="danger small" onClick={remove}>Excluir</button></div>
@@ -69,6 +82,16 @@ export function SpatialInspectorPanel({project,selection,onCommit}:{project:any;
     <h4>Carga nodal · {activeCase}</h4><div className="inspector-grid spatial-three"><label>Fx [kN]<input type="number" value={draft.load.fx??0} onChange={e=>setDraft({...draft,load:{...draft.load,fx:e.target.value}})}/></label><label>Fy [kN]<input type="number" value={draft.load.fy??0} onChange={e=>setDraft({...draft,load:{...draft.load,fy:e.target.value}})}/></label><label>Fz [kN]<input data-testid="spatial-load-fz" type="number" value={draft.load.fz??0} onChange={e=>setDraft({...draft,load:{...draft.load,fz:e.target.value}})}/></label><label>Mx [kN·m]<input type="number" value={draft.load.mx??0} onChange={e=>setDraft({...draft,load:{...draft.load,mx:e.target.value}})}/></label><label>My [kN·m]<input type="number" value={draft.load.my??0} onChange={e=>setDraft({...draft,load:{...draft.load,my:e.target.value}})}/></label><label>Mz [kN·m]<input type="number" value={draft.load.mz??0} onChange={e=>setDraft({...draft,load:{...draft.load,mz:e.target.value}})}/></label></div>
     <h4>Massa nodal adicional</h4><div className="inspector-grid spatial-three"><label>mx [t]<input type="number" min="0" value={draft.nodalMass?.mx??0} onChange={e=>setDraft({...draft,nodalMass:{...draft.nodalMass,mx:e.target.value}})}/></label><label>my [t]<input type="number" min="0" value={draft.nodalMass?.my??0} onChange={e=>setDraft({...draft,nodalMass:{...draft.nodalMass,my:e.target.value}})}/></label><label>mz [t]<input type="number" min="0" value={draft.nodalMass?.mz??0} onChange={e=>setDraft({...draft,nodalMass:{...draft.nodalMass,mz:e.target.value}})}/></label><label>Jx [t·m²]<input type="number" min="0" value={draft.nodalMass?.mrx??0} onChange={e=>setDraft({...draft,nodalMass:{...draft.nodalMass,mrx:e.target.value}})}/></label><label>Jy [t·m²]<input type="number" min="0" value={draft.nodalMass?.mry??0} onChange={e=>setDraft({...draft,nodalMass:{...draft.nodalMass,mry:e.target.value}})}/></label><label>Jz [t·m²]<input type="number" min="0" value={draft.nodalMass?.mrz??draft.nodalMass?.mr??0} onChange={e=>setDraft({...draft,nodalMass:{...draft.nodalMass,mrz:e.target.value}})}/></label></div>
     <button className="inspector-apply" data-testid="spatial-node-apply" onClick={applyNode}>Aplicar alterações</button><p className="hint">O kernel espacial usa Ux, Uy, Uz, Rx, Ry e Rz por nó. Molas, movimentos impostos e massas adicionais usam os mesmos eixos globais.</p>
+  </div>;
+
+  if(entity.type==='shell4')return <div className="react-inspector spatial-inspector" data-testid="spatial-inspector-shell">
+    <div className="inspector-title"><div><b>{entity.id}</b><small>shell4 · Mindlin–Reissner Q4</small></div><button className="danger small" onClick={remove}>Excluir</button></div>
+    <label className="wide-label">Nome<input data-testid="shell-label" value={draft.label} onChange={e=>setDraft({...draft,label:e.target.value})}/></label>
+    <label className="wide-label">Material<select data-testid="shell-material" value={draft.materialId} onChange={e=>setDraft({...draft,materialId:e.target.value})}>{project.materials.map((m:any)=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
+    <h4>Geometria da casca</h4><div className="inspector-grid spatial-three"><label>Espessura t [m]<input data-testid="shell-thickness" type="number" min="0.00001" step="0.01" value={draft.thickness} onChange={e=>setDraft({...draft,thickness:e.target.value})}/></label><label>κ cisalhamento<input data-testid="shell-shear-correction" type="number" min="0.05" max="1" step="0.01" value={draft.shearCorrection} onChange={e=>setDraft({...draft,shearCorrection:e.target.value})}/></label><label>Drilling factor<input data-testid="shell-drilling-factor" type="number" min="0" step="0.000001" value={draft.drillingFactor} onChange={e=>setDraft({...draft,drillingFactor:e.target.value})}/></label></div>
+    <h4>Vértices Q4</h4><div className="inspector-grid spatial-two">{[0,1,2,3].map(i=><label key={i}>Nó {i+1}<select data-testid={`shell-node-${i+1}`} value={draft.nodeIds?.[i]||''} onChange={e=>{const ids=[...(draft.nodeIds||[])];ids[i]=e.target.value;setDraft({...draft,nodeIds:ids})}}>{project.nodes.map((n:any)=><option key={n.id} value={n.id}>{n.id}</option>)}</select></label>)}</div><div className="panel-note">Use quatro nós coplanares e distintos. A ordem deve percorrer o contorno da face; a normal local +z segue a regra da mão direita a partir de 1→2 e 1→4.</div>
+    <h4>Pressão superficial · {activeCase}</h4><label className="wide-label">p local +z [kN/m²]<input data-testid="shell-pressure" type="number" step="1" value={draft.pressure?.pressure??0} onChange={e=>setDraft({...draft,pressure:{...draft.pressure,pressure:e.target.value}})}/></label><div className="panel-note">Valor negativo atua no sentido −z local da casca. A pressão é integrada consistentemente nos quatro nós e participa dos fatores de caso/combinação.</div>
+    <button className="inspector-apply" data-testid="shell-apply" onClick={applyElement}>Aplicar shell</button><p className="hint">Kernel linear Q4: membrana + flexão Mindlin–Reissner + cisalhamento transversal com integração reduzida e estabilização de rotação drilling.</p>
   </div>;
 
   const isFrame=entity.type==='frame3d';

@@ -1,6 +1,7 @@
 import { zeros, addSub } from './matrix.js';
 import { condenseEndConnections3D, recoverEndConnections3D } from './endConnections3d.js';
 import { solveRigidDiaphragmSystem3D } from './diaphragm3d.js';
+import { shell4Element, recoverShell4 } from './shell4.js';
 
 const EPS=1e-12;
 const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
@@ -66,31 +67,40 @@ function prepareTruss3D(project,e,a,b){
   if(!(E>0&&A>0))throw new Error(`truss3d ${e.id}: E e A devem ser positivos.`);
   const k=zeros(12),d=axes.ex,coef=E*A/axes.L;
   for(let r=0;r<3;r++)for(let c=0;c<3;c++){const v=coef*d[r]*d[c];k[r][c]+=v;k[r][6+c]-=v;k[6+r][c]-=v;k[6+r][6+c]+=v}
-  const unsupported=(project.elementLoads||[]).filter(l=>l.elementId===e.id&&Math.abs(Number(l.qx)||0)+Math.abs(Number(l.qy)||0)+Math.abs(Number(l.qz)||0)>EPS);if(unsupported.length)throw new Error(`truss3d ${e.id}: cargas distribuídas de barra não são suportadas na v0.26.`);
+  const unsupported=(project.elementLoads||[]).filter(l=>l.elementId===e.id&&Math.abs(Number(l.qx)||0)+Math.abs(Number(l.qy)||0)+Math.abs(Number(l.qz)||0)>EPS);if(unsupported.length)throw new Error(`truss3d ${e.id}: cargas distribuídas de barra não são suportadas na v0.30.`);
   return {axes,kg:k,properties:{E,A}};
 }
 
+function shellNodeIds(e){const ids=Array.isArray(e.nodeIds)?e.nodeIds:[e.n1,e.n2,e.n3,e.n4];if(ids.length!==4||ids.some(x=>!x)||new Set(ids).size!==4)throw new Error(`shell4 ${e.id}: informe quatro nós distintos em nodeIds ou n1..n4.`);return ids;}
+function prepareShell4(project,e,shellNodes){
+  const mat=materialFor(project,e),sec=sectionFor(project,e),E=Number(mat.E),nu=Number(mat.nu),thickness=Number(e.thickness??e.t??sec.thickness??sec.t),loads=(project.elementLoads||[]).filter(l=>l.elementId===e.id),supported=loads.filter(l=>l.kind==='surface'||l.kind==='pressure'),unsupported=loads.filter(l=>!['surface','pressure'].includes(l.kind));if(unsupported.length)throw new Error(`shell4 ${e.id}: carga '${unsupported[0].kind||'desconhecida'}' não suportada; use surface/pressure.`);const pressure=supported.reduce((sum,l)=>sum+(Number(l.pressure??l.pz??l.qz)||0),0),prepared=shell4Element({nodes:shellNodes,E,nu,thickness,pressure,shearCorrection:Number(e.shearCorrection??5/6),drillingFactor:Number(e.drillingFactor??1e-6),element:e});return{...prepared,loadSummary:supported.map(l=>({kind:'surface',pressure:Number(l.pressure??l.pz??l.qz)||0})),properties:{E,nu,thickness}};
+}
+
 function dofIndex(nodeIndex,local){return 6*nodeIndex+local;}
-function prescribedSupportDofs(project,map,frameNodes){
+function prescribedSupportDofs(project,map,rotationalNodes){
   const out=new Map(),fields=['ux','uy','uz','rx','ry','rz'];
   for(const s of project.supports||[]){const i=map.get(s.nodeId);if(i==null)continue;fields.forEach((f,k)=>{if(s[f])out.set(dofIndex(i,k),Number(s[`${f}Value`])||0)})}
-  for(const [nodeId,i] of map){if(frameNodes.has(nodeId))continue;for(let k=3;k<6;k++)if(!out.has(dofIndex(i,k)))out.set(dofIndex(i,k),0)}return out;
+  for(const [nodeId,i] of map){if(rotationalNodes.has(nodeId))continue;for(let k=3;k<6;k++)if(!out.has(dofIndex(i,k)))out.set(dofIndex(i,k),0)}return out;
 }
 
 function recoverFrame(prepared,ug){const ul=matVec(prepared.T,ug),recovered=recoverEndConnections3D(prepared.kl,prepared.pl,ul,prepared.connectionData);return {ul,q:recovered.q,connectionRotations:recovered.connectionRotations,elementLocalDisplacements:recovered.uElement};}
 
 export function solveSpatial3D(project){
-  const nodes=project.nodes||[],elements=(project.elements||[]).filter(e=>e.type==='frame3d'||e.type==='truss3d');if(!nodes.length)throw new Error('Modelo 3D sem nós.');if(!elements.length)throw new Error('Modelo sem elementos frame3d/truss3d.');
-  const nd=nodes.length*6,K=zeros(nd),F=Array(nd).fill(0),map=new Map(nodes.map((n,i)=>[n.id,i])),cache=[],frameNodes=new Set();
+  const nodes=project.nodes||[],elements=(project.elements||[]).filter(e=>['frame3d','truss3d','shell4'].includes(e.type));if(!nodes.length)throw new Error('Modelo 3D sem nós.');if(!elements.length)throw new Error('Modelo sem elementos frame3d/truss3d/shell4.');
+  const nd=nodes.length*6,K=zeros(nd),F=Array(nd).fill(0),map=new Map(nodes.map((n,i)=>[n.id,i])),cache=[],rotationalNodes=new Set();
   for(const e of elements){
+    if(e.type==='shell4'){
+      const ids=shellNodeIds(e),indices=ids.map(id=>map.get(id));if(indices.some(i=>i==null))throw new Error(`shell4 ${e.id} referencia nó inexistente.`);const shellNodes=indices.map(i=>nodes[i]),idx=indices.flatMap(i=>[0,1,2,3,4,5].map(d=>6*i+d));ids.forEach(id=>rotationalNodes.add(id));const prepared=prepareShell4(project,e,shellNodes);addSub(K,prepared.kg,idx);prepared.pg.forEach((v,k)=>{F[idx[k]]+=v});cache.push({e,idx,prepared});continue;
+    }
     const i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Elemento ${e.id} referencia nó inexistente.`);const a=nodes[i],b=nodes[j],idx=[0,1,2,3,4,5,6,7,8,9,10,11].map(k=>k<6?6*i+k:6*j+(k-6));
-    if(e.type==='frame3d'){frameNodes.add(e.n1);frameNodes.add(e.n2);const prepared=prepareFrame3D(project,e,a,b);addSub(K,prepared.kg,idx);prepared.pg.forEach((v,k)=>{F[idx[k]]+=v});cache.push({e,idx,prepared})}
+    if(e.type==='frame3d'){rotationalNodes.add(e.n1);rotationalNodes.add(e.n2);const prepared=prepareFrame3D(project,e,a,b);addSub(K,prepared.kg,idx);prepared.pg.forEach((v,k)=>{F[idx[k]]+=v});cache.push({e,idx,prepared})}
     else{const prepared=prepareTruss3D(project,e,a,b);addSub(K,prepared.kg,idx);cache.push({e,idx,prepared})}
   }
   for(const l of project.loads||[]){const i=map.get(l.nodeId);if(i==null)continue;const values=[l.fx,l.fy,l.fz,l.mx,l.my,l.mz];for(let k=0;k<6;k++)F[6*i+k]+=Number(values[k])||0}
-  const prescribed=prescribedSupportDofs(project,map,frameNodes),solved=solveRigidDiaphragmSystem3D(K,F,prescribed,project,nodes),{u,R,free,diaphragms}=solved,displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[6*i],uy:u[6*i+1],uz:u[6*i+2],rx:u[6*i+3],ry:u[6*i+4],rz:u[6*i+5]})),reactions=nodes.map((n,i)=>({nodeId:n.id,fx:R[6*i],fy:R[6*i+1],fz:R[6*i+2],mx:R[6*i+3],my:R[6*i+4],mz:R[6*i+5]}));
+  const prescribed=prescribedSupportDofs(project,map,rotationalNodes),solved=solveRigidDiaphragmSystem3D(K,F,prescribed,project,nodes),{u,R,free,diaphragms}=solved,displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[6*i],uy:u[6*i+1],uz:u[6*i+2],rx:u[6*i+3],ry:u[6*i+4],rz:u[6*i+5]})),reactions=nodes.map((n,i)=>({nodeId:n.id,fx:R[6*i],fy:R[6*i+1],fz:R[6*i+2],mx:R[6*i+3],my:R[6*i+4],mz:R[6*i+5]}));
   const elementForces=cache.map(({e,idx,prepared})=>{
     const ug=idx.map(d=>u[d]);if(e.type==='truss3d'){const du=[ug[6]-ug[0],ug[7]-ug[1],ug[8]-ug[2]],N=prepared.properties.E*prepared.properties.A/prepared.axes.L*dot(prepared.axes.ex,du);return {elementId:e.id,type:'truss3d',axialForce:N,N1:-N,N2:N,localAxes:prepared.axes}}
+    if(e.type==='shell4'){const r=recoverShell4(prepared,ug);return{elementId:e.id,type:'shell4',...r,area:prepared.area,thickness:prepared.thickness,localAxes:prepared.axes,properties:prepared.properties,loadSummary:prepared.loadSummary}}
     const {ul,q,connectionRotations,elementLocalDisplacements}=recoverFrame(prepared,ug);return {elementId:e.id,type:'frame3d',N1:q[0],Vy1:q[1],Vz1:q[2],T1:q[3],My1:q[4],Mz1:q[5],N2:q[6],Vy2:q[7],Vz2:q[8],T2:q[9],My2:q[10],Mz2:q[11],localDisplacements:ul,elementLocalDisplacements,connectionRotations,localAxes:prepared.axes,properties:prepared.properties,loadSummary:prepared.loadSummary};
   });
   const types=new Set(elements.map(e=>e.type)),type=types.size===1?[...types][0]:'mixed3d';return {type,dimension:'3d',solverVersion:'0.30.0',dofs:nd,reducedDofs:solved.reducedDofs??nd,activeDofs:free.length,displacements,reactions,elementForces,diaphragms};

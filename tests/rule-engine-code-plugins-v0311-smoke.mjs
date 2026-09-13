@@ -15,7 +15,10 @@ const punch=aci.checks.find(c=>c.id==='punching-two-way');assert.ok(punch);asser
 const anchor=aci.checks.find(c=>c.id==='anchor-concrete-breakout-tension');assert.ok(anchor);const expectedNb=10*Math.sqrt(27.6)*170**1.5/1000;assert.ok(Math.abs(anchor.parameters.Nb-expectedNb)<1e-9);assert.equal(aci.edition,'2025');
 
 const nbrPending=evaluateRuleSet('nbr-8800-2024vc2025-connections',{boltShear:{demand:90}});assert.equal(nbrPending.checks[0].ok,null);assert.equal(nbrPending.checks[0].resistance,null);assert.equal(nbrPending.provenance.requiresLicensedParameters,true);
+const nbrNull=evaluateRuleSet('nbr-8800-2024vc2025-connections',{boltShear:{demand:90,designResistance:null}});assert.equal(nbrNull.checks[0].ok,null);assert.equal(nbrNull.checks[0].resistance,null);
 const nbrResolved=evaluateRuleSet('nbr-8800-2024vc2025-connections',{boltShear:{demand:90,designResistance:120}});assert.equal(nbrResolved.checks[0].ok,true);assert.equal(nbrResolved.checks[0].utilization,.75);
 const nbrPunch=evaluateRuleSet('nbr-6118-2026-punching',{punching:{Vu:500,designPunchingResistanceMPa:1.2,b0:3000,d:200}});assert.equal(nbrPunch.checks[0].resistance,720);assert.equal(nbrPunch.checks[0].ok,true);assert.equal(nbrPunch.provenance.requiresLicensedParameters,true);
+const nbrPunchPending=evaluateRuleSet('nbr-6118-2026-punching',{punching:{Vu:500,designPunchingResistanceMPa:null,b0:3000,d:200}});assert.equal(nbrPunchPending.checks[0].resistance,null);assert.equal(nbrPunchPending.checks[0].ok,null);
+const nbrPunchDirect=evaluateRuleSet('nbr-6118-2026-punching',{punching:{Vu:500,designResistance:625}});assert.equal(nbrPunchDirect.checks[0].resistance,625);assert.equal(nbrPunchDirect.checks[0].ok,true);assert.equal(nbrPunchDirect.checks[0].utilization,.8);
 
 console.log('rule-engine-code-plugins-v0311-smoke: ok');

@@ -4,6 +4,7 @@ import {
   DofManager,ConstraintManager,solveConstrainedSystem,convertUnit,assertUnitDimension,
   newtonSolve,newtonStrategies,relativeResidual
 } from '../web/src/numerics/index.js';
+import {solveLinear as legacySolveLinear,solveConstrained as legacySolveConstrained} from '../web/src/solver/matrix.js';
 
 const close=(a,b,tol=1e-9,msg='')=>assert.ok(Math.abs(a-b)<=tol*Math.max(1,Math.abs(b)),`${msg} esperado ${b}, obtido ${a}`);
 
@@ -35,6 +36,11 @@ assert.equal(transformed.reduced.roots.length,1);close(transformed.u[0],0);close
 const lagrange=solveConstrainedSystem(K,F,constraints,{enforcement:'lagrange'});lagrange.u.forEach((v,i)=>close(v,[0,1,1,0][i],1e-10,'Lagrange'));
 assert.equal(lagrange.multipliers.length,3);
 
+// Legacy matrix API must now route through the same numerical core without changing its result shape.
+legacySolveLinear(A.toDense(),[2,4,7]).forEach((v,i)=>close(v,[1,2,3][i],1e-11,'legacy direct'));
+const legacy=legacySolveConstrained([[10,0],[0,20]],[0,40],new Map([[0,0]]));
+close(legacy.u[0],0);close(legacy.u[1],2);assert.deepEqual(legacy.free,[1]);assert.equal(legacy.numericalDiagnostics.enforcement,'transformation');
+
 // Dimensional unit layer.
 close(convertUnit(30,'MPa','Pa'),30e6);close(convertUnit(12.5,'kN*m','N*m'),12500);close(convertUnit(1,'g','m/s2'),9.80665,1e-12);
 assert.equal(assertUnitDimension('mm','length'),true);assert.throws(()=>convertUnit(1,'m','kN'),/dimensional inválida/);
@@ -48,4 +54,4 @@ const sqrt2=newtonSolve({
 close(sqrt2.x[0],Math.SQRT2,1e-11,'Newton sqrt(2)');assert.equal(sqrt2.converged,true);assert.ok(sqrt2.iterations<=8);
 assert.deepEqual(newtonStrategies(),['full','modified','line-search']);
 
-console.log('AstraStruct v0.32 Numerical Core 2 smoke: CSR, direct/CG, singularity, DOF, MPC, units and Newton OK.');
+console.log('AstraStruct v0.32 Numerical Core 2 smoke: CSR, direct/CG, singularity, DOF, MPC, units, Newton and legacy bridge OK.');

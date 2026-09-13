@@ -2,15 +2,71 @@ import {generateRectangularBoltGroup} from './boltGroup2d.js';
 
 const EPS=1e-12;
 const finite=(v,f=0)=>Number.isFinite(Number(v))?Number(v):f;
-function solve3(A,b){const M=A.map((r,i)=>[...r,b[i]]),s=Math.max(EPS,...A.flat().map(Math.abs));for(let k=0;k<3;k++){let p=k;for(let i=k+1;i<3;i++)if(Math.abs(M[i][k])>Math.abs(M[p][k]))p=i;if(Math.abs(M[p][k])<=s*1e-14)throw new Error('Slip/bearing: tangente singular.');if(p!==k)[M[p],M[k]]=[M[k],M[p]];const d=M[k][k];for(let j=k;j<4;j++)M[k][j]/=d;for(let i=0;i<3;i++){if(i===k)continue;const f=M[i][k];for(let j=k;j<4;j++)M[i][j]-=f*M[k][j]}}return M.map(r=>r[3])}
+function solve3(A,b){
+  const M=A.map((r,i)=>[...r,b[i]]),s=Math.max(EPS,...A.flat().map(Math.abs));
+  for(let k=0;k<3;k++){
+    let p=k;for(let i=k+1;i<3;i++)if(Math.abs(M[i][k])>Math.abs(M[p][k]))p=i;
+    if(Math.abs(M[p][k])<=s*1e-14)throw new Error('Slip/bearing: tangente singular.');
+    if(p!==k)[M[p],M[k]]=[M[k],M[p]];
+    const d=M[k][k];for(let j=k;j<4;j++)M[k][j]/=d;
+    for(let i=0;i<3;i++){if(i===k)continue;const f=M[i][k];for(let j=k;j<4;j++)M[i][j]-=f*M[k][j]}
+  }
+  return M.map(r=>r[3]);
+}
 function loadVector(loads={}){const fx=finite(loads.fx),fy=finite(loads.fy),mz=finite(loads.mz),ex=finite(loads.loadPointX),ey=finite(loads.loadPointY),totalMz=mz+ex*fy-ey*fx;return{fx,fy,mz,ex,ey,totalMz,P:[fx,fy,totalMz]}}
 function bearingLaw(p,b){if(!(p>0))return{force:0,tangent:0,state:'gap'};const k=Math.max(EPS,b.bearingStiffness),fy=Math.max(0,b.bearingYieldForce),h=Math.max(0,b.postYieldRatio);if(!(fy>0)||k*p<=fy)return{force:k*p,tangent:k,state:'bearing-elastic'};const py=fy/k;return{force:fy+h*k*(p-py),tangent:h*k,state:h>EPS?'bearing-postyield':'bearing-capped'}}
 function frictionLaw(r,b){const cap=Math.max(0,b.mu*b.preload*b.slipPlanes*b.holeFactor),k=Math.max(EPS,b.slipStiffness);if(!(cap>0)||!(r>0))return{force:0,tangent:0,cap,state:cap>0?'stick':'no-preload'};const trial=k*r;if(trial<cap)return{force:trial,tangent:k,cap,state:'stick'};return{force:cap,tangent:0,cap,state:'slip'}}
-function responseAt(q,bolts){const[ux,uy,theta]=q,items=[],transferred=[0,0,0];for(const b of bolts){const dx=ux-theta*b.y,dy=uy+theta*b.x,r=Math.hypot(dx,dy),nx=r>EPS?dx/r:0,ny=r>EPS?dy/r:0,fr=frictionLaw(r,b),br=bearingLaw(Math.max(0,r-b.gap),b),F=fr.force+br.force,fx=F*nx,fy=F*ny,mz=-b.y*fx+b.x*fy,state=br.force>0?`${fr.state}+${br.state}`:fr.state;transferred[0]+=fx;transferred[1]+=fy;transferred[2]+=mz;items.push({...b,relativeDisplacement:{x:dx,y:dy,magnitude:r},direction:{x:nx,y:ny},frictionForce:fr.force,slipResistance:fr.cap,bearingForce:br.force,penetration:Math.max(0,r-b.gap),force:{fx,fy,magnitude:F,moment:mz},state,slipped:fr.state==='slip',bearingActive:br.force>0})}return{transferred,items}}
+function responseAt(q,bolts){
+  const[ux,uy,theta]=q,items=[],transferred=[0,0,0];
+  for(const b of bolts){
+    const dx=ux-theta*b.y,dy=uy+theta*b.x,r=Math.hypot(dx,dy),nx=r>EPS?dx/r:0,ny=r>EPS?dy/r:0,fr=frictionLaw(r,b),br=bearingLaw(Math.max(0,r-b.gap),b),F=fr.force+br.force,fx=F*nx,fy=F*ny,mz=-b.y*fx+b.x*fy,state=br.force>0?`${fr.state}+${br.state}`:fr.state;
+    transferred[0]+=fx;transferred[1]+=fy;transferred[2]+=mz;
+    items.push({...b,relativeDisplacement:{x:dx,y:dy,magnitude:r},direction:{x:nx,y:ny},frictionForce:fr.force,slipResistance:fr.cap,bearingForce:br.force,penetration:Math.max(0,r-b.gap),force:{fx,fy,magnitude:F,moment:mz},state,slipped:fr.state==='slip',bearingActive:br.force>0});
+  }
+  return{transferred,items};
+}
 function jacobian(q,bolts){const J=[[0,0,0],[0,0,0],[0,0,0]];for(let j=0;j<3;j++){const h=Math.max(1e-10,1e-7*Math.max(1,Math.abs(q[j]))),a=[...q],b=[...q];a[j]+=h;b[j]-=h;const fa=responseAt(a,bolts).transferred,fb=responseAt(b,bolts).transferred;for(let i=0;i<3;i++)J[i][j]=(fa[i]-fb[i])/(2*h)}return J}
 function residualNorm(R,P,L){const fs=Math.max(1,Math.hypot(P[0],P[1])),ms=Math.max(1,Math.abs(P[2]),fs*L);return Math.sqrt((R[0]/fs)**2+(R[1]/fs)**2+(R[2]/ms)**2)}
-function predictor(P,bolts){const k=Math.max(EPS,bolts.reduce((s,b)=>s+b.slipStiffness+b.bearingStiffness,0)/bolts.length),K=[[0,0,0],[0,0,0],[0,0,0]];for(const b of bolts){const add=(v,c)=>{for(let i=0;i<3;i++)for(let j=0;j<3;j++)K[i][j]+=c*v[i]*v[j]};add([1,0,-b.y],k);add([0,1,b.x],k)}let q=solve3(K,P),scale=1;for(const b of bolts){const dx=q[0]-q[2]*b.y,dy=q[1]+q[2]*b.x,r=Math.hypot(dx,dy),free=Math.max(0,b.gap);if(r>EPS&&b.preload<=EPS)scale=Math.max(scale,1+free/r)}return q.map(v=>v*scale)}
+function rigidSpringMatrix(bolts,key){const K=[[0,0,0],[0,0,0],[0,0,0]],add=(v,k)=>{for(let i=0;i<3;i++)for(let j=0;j<3;j++)K[i][j]+=k*v[i]*v[j]};for(const b of bolts){const k=Math.max(EPS,finite(b[key]));add([1,0,-b.y],k);add([0,1,b.x],k)}return K}
+function eventPredictor(P,bolts,L,tol){
+  // First try the pure stick solution. If it equilibrates, the contact event has
+  // not been reached and no artificial gap traversal is introduced.
+  const qStick=solve3(rigidSpringMatrix(bolts,'slipStiffness'),P),stick=responseAt(qStick,bolts),Rs=P.map((v,i)=>v-stick.transferred[i]);
+  if(residualNorm(Rs,P,L)<=Math.max(tol,1e-10))return qStick;
+
+  // Under load control, once friction is capped there is a physically admissible
+  // displacement jump through the free hole clearance. Move along the elastic
+  // rigid-plate direction to the furthest relevant clearance boundary so that a
+  // bearing tangent exists, then estimate the penetration from the remaining load.
+  let scale=1;
+  for(const b of bolts){const dx=qStick[0]-qStick[2]*b.y,dy=qStick[1]+qStick[2]*b.x,r=Math.hypot(dx,dy);if(r>EPS&&b.gap>0)scale=Math.max(scale,b.gap/r*(1+1e-7))}
+  const qBoundary=qStick.map(v=>v*scale),boundary=responseAt(qBoundary,bolts),R=P.map((v,i)=>v-boundary.transferred[i]);
+  try{const dq=solve3(rigidSpringMatrix(bolts,'bearingStiffness'),R);return qBoundary.map((v,i)=>v+dq[i])}catch{return qBoundary}
+}
+function needsContactJump(q,P,bolts,L,tol){const st=responseAt(q,bolts),R=P.map((v,i)=>v-st.transferred[i]);return st.items.some(b=>b.slipped)&&!st.items.some(b=>b.bearingActive)&&residualNorm(R,P,L)>Math.max(tol,1e-10)}
 
 export function generateSlipBearingBoltGroup({nx=2,ny=2,spacingX=.20,spacingY=.15,mu=.30,preload=120,slipPlanes=1,holeFactor=1,slipStiffness=8e5,gap=.001,bearingStiffness=2.5e5,bearingYieldForce=0,postYieldRatio=.02}={}){return generateRectangularBoltGroup({nx,ny,spacingX,spacingY,kx:1,ky:1,shearCapacity:0}).map(b=>({id:b.id,x:b.x,y:b.y,mu:Math.max(0,finite(mu,.3)),preload:Math.max(0,finite(preload,120)),slipPlanes:Math.max(1,finite(slipPlanes,1)),holeFactor:Math.max(0,finite(holeFactor,1)),slipStiffness:Math.max(EPS,finite(slipStiffness,8e5)),gap:Math.max(0,finite(gap,.001)),bearingStiffness:Math.max(EPS,finite(bearingStiffness,2.5e5)),bearingYieldForce:Math.max(0,finite(bearingYieldForce)),postYieldRatio:Math.max(0,finite(postYieldRatio,.02))}))}
 
-export function solveSlipCriticalToBearing({bolts=[],loads={},steps=20,maxIterations=70,tolerance=1e-9}={}){const bs=(bolts||[]).map((b,i)=>({id:String(b.id||`B${i+1}`),x:finite(b.x),y:finite(b.y),mu:Math.max(0,finite(b.mu,.3)),preload:Math.max(0,finite(b.preload)),slipPlanes:Math.max(1,finite(b.slipPlanes,1)),holeFactor:Math.max(0,finite(b.holeFactor,1)),slipStiffness:Math.max(EPS,finite(b.slipStiffness,8e5)),gap:Math.max(0,finite(b.gap,.001)),bearingStiffness:Math.max(EPS,finite(b.bearingStiffness,2.5e5)),bearingYieldForce:Math.max(0,finite(b.bearingYieldForce)),postYieldRatio:Math.max(0,finite(b.postYieldRatio,.02))}));if(bs.length<2)throw new Error('Slip/bearing: informe ao menos dois parafusos.');const lv=loadVector(loads),n=Math.max(1,Math.min(120,Math.round(finite(steps,20)))),L=Math.max(.01,...bs.map(b=>Math.hypot(b.x,b.y))),history=[];let q=[0,0,0],last=null;for(let step=1;step<=n;step++){const lambda=step/n,P=lv.P.map(v=>v*lambda);if(step===1)q=predictor(P,bs);let norm=Infinity,ok=false,it=0;for(it=1;it<=maxIterations;it++){const st=responseAt(q,bs),R=P.map((v,i)=>v-st.transferred[i]);norm=residualNorm(R,P,L);if(norm<=tolerance){last=st;ok=true;break}const J=jacobian(q,bs),s=Math.max(EPS,...J.flat().map(Math.abs));for(let i=0;i<3;i++)J[i][i]+=s*1e-10;const dq=solve3(J,R);let alpha=1,best=null,bn=norm;for(let ls=0;ls<14;ls++){const qt=q.map((v,i)=>v+alpha*dq[i]),stt=responseAt(qt,bs),Rt=P.map((v,i)=>v-stt.transferred[i]),nt=residualNorm(Rt,P,L);if(nt<bn){best=qt;bn=nt}if(nt<norm){q=qt;break}alpha*=.5}if(best&&bn>=norm)q=best}if(!ok){const st=responseAt(q,bs),R=P.map((v,i)=>v-st.transferred[i]);norm=residualNorm(R,P,L);if(norm>1e-6)throw new Error(`Slip/bearing: não convergiu no passo ${step}/${n} (${norm.toExponential(2)}).`);last=st}history.push({step,lambda,iterations:it,residualNorm:norm,ux:q[0],uy:q[1],theta:q[2],slippedBolts:last.items.filter(b=>b.slipped).length,bearingBolts:last.items.filter(b=>b.bearingActive).length,maxForce:Math.max(...last.items.map(b=>b.force.magnitude))})}const final=responseAt(q,bs),R=lv.P.map((v,i)=>v-final.transferred[i]),rn=residualNorm(R,lv.P,L);return{type:'bolt-group-slip-bearing-2d',solverVersion:'0.31.0',bolts:final.items,plateDisplacement:{ux:q[0],uy:q[1],theta:q[2]},loads:lv,equilibrium:{transferred:{fx:final.transferred[0],fy:final.transferred[1],mz:final.transferred[2]},residual:{fx:R[0],fy:R[1],mz:R[2]},residualNorm:rn},history,events:{firstSlip:history.find(h=>h.slippedBolts>0)||null,firstBearing:history.find(h=>h.bearingBolts>0)||null},assumptions:['placa rígida no plano','resistência de deslizamento por interface μ·pré-tensão·n_planos·fator_furo','mola tangencial/interface elástica-perfeitamente limitada antes do bearing','bearing radial unilateral após consumo da folga','sem perda temporal de pré-tensão, sem distribuição detalhada de pressão entre chapas e sem resistência normativa embutida']}}
+export function solveSlipCriticalToBearing({bolts=[],loads={},steps=20,maxIterations=70,tolerance=1e-9}={}){
+  const bs=(bolts||[]).map((b,i)=>({id:String(b.id||`B${i+1}`),x:finite(b.x),y:finite(b.y),mu:Math.max(0,finite(b.mu,.3)),preload:Math.max(0,finite(b.preload)),slipPlanes:Math.max(1,finite(b.slipPlanes,1)),holeFactor:Math.max(0,finite(b.holeFactor,1)),slipStiffness:Math.max(EPS,finite(b.slipStiffness,8e5)),gap:Math.max(0,finite(b.gap,.001)),bearingStiffness:Math.max(EPS,finite(b.bearingStiffness,2.5e5)),bearingYieldForce:Math.max(0,finite(b.bearingYieldForce)),postYieldRatio:Math.max(0,finite(b.postYieldRatio,.02))}));
+  if(bs.length<2)throw new Error('Slip/bearing: informe ao menos dois parafusos.');
+  const lv=loadVector(loads),n=Math.max(1,Math.min(120,Math.round(finite(steps,20)))),L=Math.max(.01,...bs.map(b=>Math.hypot(b.x,b.y))),history=[];let q=[0,0,0],last=null;
+  for(let step=1;step<=n;step++){
+    const lambda=step/n,P=lv.P.map(v=>v*lambda);
+    if(step===1||needsContactJump(q,P,bs,L,tolerance))q=eventPredictor(P,bs,L,tolerance);
+    let norm=Infinity,ok=false,it=0;
+    for(it=1;it<=maxIterations;it++){
+      const st=responseAt(q,bs),R=P.map((v,i)=>v-st.transferred[i]);norm=residualNorm(R,P,L);if(norm<=tolerance){last=st;ok=true;break}
+      const J=jacobian(q,bs),s=Math.max(EPS,...J.flat().map(Math.abs));for(let i=0;i<3;i++)J[i][i]+=s*1e-10;
+      let dq;try{dq=solve3(J,R)}catch{q=eventPredictor(P,bs,L,tolerance);continue}
+      let alpha=1,best=null,bn=norm;
+      for(let ls=0;ls<14;ls++){const qt=q.map((v,i)=>v+alpha*dq[i]),stt=responseAt(qt,bs),Rt=P.map((v,i)=>v-stt.transferred[i]),nt=residualNorm(Rt,P,L);if(nt<bn){best=qt;bn=nt}if(nt<norm){q=qt;break}alpha*=.5}
+      if(best&&bn>=norm)q=best;
+      if(needsContactJump(q,P,bs,L,tolerance))q=eventPredictor(P,bs,L,tolerance);
+    }
+    if(!ok){const st=responseAt(q,bs),R=P.map((v,i)=>v-st.transferred[i]);norm=residualNorm(R,P,L);if(norm>1e-6)throw new Error(`Slip/bearing: não convergiu no passo ${step}/${n} (${norm.toExponential(2)}).`);last=st}
+    history.push({step,lambda,iterations:it,residualNorm:norm,ux:q[0],uy:q[1],theta:q[2],slippedBolts:last.items.filter(b=>b.slipped).length,bearingBolts:last.items.filter(b=>b.bearingActive).length,maxForce:Math.max(...last.items.map(b=>b.force.magnitude))});
+  }
+  const final=responseAt(q,bs),R=lv.P.map((v,i)=>v-final.transferred[i]),rn=residualNorm(R,lv.P,L);
+  return{type:'bolt-group-slip-bearing-2d',solverVersion:'0.31.0',bolts:final.items,plateDisplacement:{ux:q[0],uy:q[1],theta:q[2]},loads:lv,equilibrium:{transferred:{fx:final.transferred[0],fy:final.transferred[1],mz:final.transferred[2]},residual:{fx:R[0],fy:R[1],mz:R[2]},residualNorm:rn},history,events:{firstSlip:history.find(h=>h.slippedBolts>0)||null,firstBearing:history.find(h=>h.bearingBolts>0)||null},assumptions:['placa rígida no plano','resistência de deslizamento por interface μ·pré-tensão·n_planos·fator_furo','mola tangencial/interface elástica-perfeitamente limitada antes do bearing','salto de deslocamento através da folga tratado por preditor de evento sob controle de carga','bearing radial unilateral após consumo da folga','sem perda temporal de pré-tensão, sem distribuição detalhada de pressão entre chapas e sem resistência normativa embutida']};
+}

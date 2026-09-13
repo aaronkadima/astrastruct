@@ -29,6 +29,20 @@ test('spatial Inspector edits Z, six support DOFs and 3D loads',async({page},tes
   for(const k of ['ux','uy','uz','rx','ry','rz'])await expect(page.getByTestId(`spatial-support-${k}`)).toBeChecked();
 });
 
+test('spatial Inspector persists 3D springs and prescribed support motion',async({page},testInfo)=>{
+  test.skip(testInfo.project.name!=='desktop-chromium','spatial inspector data-entry test');
+  await loadProject(page);await select3D(page,'Selecionar nó N2');
+  const uzSupport=page.getByTestId('spatial-support-uz'),uzSettlement=page.getByTestId('spatial-settlement-uz');
+  await expect(uzSupport).not.toBeChecked();await expect(uzSettlement).toBeDisabled();
+  await uzSupport.check();await expect(uzSettlement).toBeEnabled();await uzSettlement.fill('-0.004');
+  await page.getByTestId('spatial-spring-kz').fill('250');await page.getByTestId('spatial-spring-krx').fill('1000');
+  await page.getByTestId('spatial-node-apply').click();
+  await expect.poll(async()=>page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('astrastruct.project')||'{}');const s=(p.nodeSprings||[]).find((x:any)=>x.nodeId==='N2');const st=(p.settlements||[]).find((x:any)=>x.nodeId==='N2'&&x.caseId==='LC1');const sp=(p.supports||[]).find((x:any)=>x.nodeId==='N2');return{uz:sp?.uz,kz:s?.kz,krx:s?.krx,settlement:st?.uz}})).toEqual({uz:true,kz:250,krx:1000,settlement:-.004});
+  await expect(page.getByTestId('spatial-spring-kz')).toHaveValue('250');await expect(page.getByTestId('spatial-spring-krx')).toHaveValue('1000');await expect(uzSettlement).toHaveValue('-0.004');
+  await uzSupport.uncheck();await expect(uzSettlement).toBeDisabled();await expect(uzSettlement).toHaveValue('0');await page.getByTestId('spatial-node-apply').click();
+  await expect.poll(async()=>page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('astrastruct.project')||'{}');const st=(p.settlements||[]).find((x:any)=>x.nodeId==='N2'&&x.caseId==='LC1');return st?.uz??0})).toBe(0);
+});
+
 test('spatial Inspector exposes frame3d section and qz properties',async({page},testInfo)=>{
   test.skip(testInfo.project.name!=='desktop-chromium','spatial inspector geometry test');
   await loadProject(page);await select3D(page,'Selecionar elemento E2');

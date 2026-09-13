@@ -21,6 +21,7 @@ import './scientificExportPanel';
 import './workspaceChrome';
 import './contextToolbar';
 import './modelLabBootstrap';
+import './anchorLabBootstrap';
 import './dxfPlanBootstrap';
 import './levelsBootstrap';
 import './shellLabBootstrap';

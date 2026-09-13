@@ -8,17 +8,17 @@ export function solveSparseDirect(A,b,{relativePivotTolerance=1e-12,absolutePivo
   A=asCSR(A);if(A.nRows!==A.nCols)throw new Error('Solver direto: matriz deve ser quadrada.');
   const n=A.nRows,rhs=finiteVector(b,n,'Solver direto RHS'),rows=Array.from({length:n},()=>new Map()),scales=Array(n).fill(0);
   A.forEachNonZero((v,i,j)=>{rows[i].set(j,v);scales[i]=Math.max(scales[i],Math.abs(v))});
-  const matrixInfo=inspectMatrix(A),globalScale=Math.max(1,matrixInfo.maxAbs),pivots=[];
+  const matrixInfo=inspectMatrix(A),pivots=[],scaledPivots=[];
   for(let k=0;k<n;k++){
     let pivotRow=-1,best=-1;
     for(let i=k;i<n;i++){
-      const a=Math.abs(rows[i].get(k)||0),scale=Math.max(scales[i],globalScale*Number.EPSILON),score=a/scale;
+      const a=Math.abs(rows[i].get(k)||0),scale=Math.max(scales[i],Number.MIN_VALUE),score=a/scale;
       if(score>best){best=score;pivotRow=i}
     }
-    const pivotAbs=pivotRow>=0?Math.abs(rows[pivotRow].get(k)||0):0,threshold=Math.max(absolutePivotTolerance,relativePivotTolerance*globalScale);
-    if(!(pivotAbs>threshold))throw new NumericalSingularityError(`Matriz singular ou quase singular no pivô ${k}.`,{pivotIndex:k,pivotAbs,threshold,rankEstimate:k,matrix:matrixInfo,pivots:[...pivots]});
+    const pivotAbs=pivotRow>=0?Math.abs(rows[pivotRow].get(k)||0):0,threshold=absolutePivotTolerance;
+    if(!(pivotAbs>threshold))throw new NumericalSingularityError(`Matriz singular no pivô ${k}.`,{pivotIndex:k,pivotAbs,threshold,rankEstimate:k,matrix:matrixInfo,pivots:[...pivots],scaledPivots:[...scaledPivots]});
     if(pivotRow!==k){[rows[k],rows[pivotRow]]=[rows[pivotRow],rows[k]];[rhs[k],rhs[pivotRow]]=[rhs[pivotRow],rhs[k]];[scales[k],scales[pivotRow]]=[scales[pivotRow],scales[k]]}
-    const pivot=rows[k].get(k);pivots.push(Math.abs(pivot));
+    const pivot=rows[k].get(k),pivotScale=Math.max(scales[k],Math.abs(pivot),Number.MIN_VALUE);pivots.push(Math.abs(pivot));scaledPivots.push(Math.abs(pivot)/pivotScale);
     for(let i=k+1;i<n;i++){
       const aik=rows[i].get(k)||0;if(Math.abs(aik)<=dropTolerance){rows[i].delete(k);continue}
       const factor=aik/pivot;rows[i].delete(k);
@@ -32,11 +32,11 @@ export function solveSparseDirect(A,b,{relativePivotTolerance=1e-12,absolutePivo
   const x=Array(n).fill(0);
   for(let i=n-1;i>=0;i--){
     let s=rhs[i];for(const [j,v] of rows[i])if(j>i)s-=v*x[j];const d=rows[i].get(i)||0;
-    if(Math.abs(d)<=Math.max(absolutePivotTolerance,relativePivotTolerance*globalScale))throw new NumericalSingularityError(`Matriz singular na retro-substituição do DOF ${i}.`,{pivotIndex:i,pivotAbs:Math.abs(d),rankEstimate:i,matrix:matrixInfo,pivots:[...pivots]});
+    if(Math.abs(d)<=absolutePivotTolerance)throw new NumericalSingularityError(`Matriz singular na retro-substituição do DOF ${i}.`,{pivotIndex:i,pivotAbs:Math.abs(d),threshold:absolutePivotTolerance,rankEstimate:i,matrix:matrixInfo,pivots:[...pivots],scaledPivots:[...scaledPivots]});
     x[i]=s/d;
   }
-  const residual=relativeResidual(A,x,b),pivotMin=pivots.length?Math.min(...pivots):0,pivotMax=pivots.length?Math.max(...pivots):0;
-  return {x,diagnostics:{method:'sparse-direct-pivoted',iterations:1,residual,pivotMin,pivotMax,pivotRatio:pivotMax>0?pivotMin/pivotMax:0,rankEstimate:n,matrix:matrixInfo}};
+  const residual=relativeResidual(A,x,b),pivotMin=pivots.length?Math.min(...pivots):0,pivotMax=pivots.length?Math.max(...pivots):0,minScaledPivot=scaledPivots.length?Math.min(...scaledPivots):0,pivotRatio=pivotMax>0?pivotMin/pivotMax:0;
+  return {x,diagnostics:{method:'sparse-direct-pivoted',iterations:1,residual,pivotMin,pivotMax,pivotRatio,minScaledPivot,illConditioned:minScaledPivot<=relativePivotTolerance||pivotRatio<=relativePivotTolerance,rankEstimate:n,matrix:matrixInfo}};
 }
 
 export function solveConjugateGradient(A,b,{relativeTolerance=1e-10,absoluteTolerance=1e-12,maxIterations,initial=null,jacobi=true}={}){

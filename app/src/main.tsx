@@ -25,6 +25,7 @@ import './labRegistryBootstrap';
 import './advancedExamplesBootstrap';
 import './coreLocalLabsBootstrap';
 import './connectionPlateHoleContactLabBootstrap';
+import './localVerificationBootstrap';
 import './dxfPlanBootstrap';
 import './levelsBootstrap';
 import './shellLabBootstrap';

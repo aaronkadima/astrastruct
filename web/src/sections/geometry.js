@@ -25,17 +25,35 @@ function principalData(Iy,Iz,Iyz){
   return{I1,I2,thetaRad:theta,thetaDeg:theta*180/Math.PI};
 }
 
+function referenceModuli({area,centroid,Iy,Iz,bounds}){
+  const yPos=Math.max(0,Number(bounds?.yMax)-centroid.y),yNeg=Math.max(0,centroid.y-Number(bounds?.yMin)),zPos=Math.max(0,Number(bounds?.zMax)-centroid.z),zNeg=Math.max(0,centroid.z-Number(bounds?.zMin));
+  const safe=(I,c)=>c>1e-18?I/c:null;
+  return{
+    radiiOfGyration:{ry:Math.sqrt(Math.max(0,Iy/area)),rz:Math.sqrt(Math.max(0,Iz/area))},
+    elasticSectionModulus:{WyPositive:safe(Iy,zPos),WyNegative:safe(Iy,zNeg),WzPositive:safe(Iz,yPos),WzNegative:safe(Iz,yNeg)}
+  };
+}
+
+function rectangleTorsionConstant(width,height){
+  const a=Math.max(width,height),t=Math.min(width,height),r=t/a;
+  return a*t**3*(1/3-.21*r*(1-r**4/12));
+}
+
+function enrich(properties,extra={}){
+  return{...properties,...referenceModuli(properties),plasticSectionModulus:extra.plasticSectionModulus??null,J:extra.J??properties.J??null,Cw:extra.Cw??properties.Cw??null,shearCenter:extra.shearCenter??properties.shearCenter??null,shearAreas:extra.shearAreas??properties.shearAreas??null,torsionModel:extra.torsionModel??properties.torsionModel??null,warpingModel:extra.warpingModel??properties.warpingModel??null};
+}
+
 export function polygonSectionProperties(vertices){
   let pts=normalizeVertices(vertices),raw=signedPolygonIntegrals(pts);
   if(raw.area<0){pts=[...pts].reverse();raw=signedPolygonIntegrals(pts)}
-  const {area,cy,cz,Iy0,Iz0,Iyz0}=raw,Iy=Iy0-area*cz*cz,Iz=Iz0-area*cy*cy,Iyz=Iyz0-area*cy*cz;
-  return{contract:'section-geometry/v1',shape:'polygon',area,centroid:{y:cy,z:cz},Iy,Iz,Iyz,principal:principalData(Iy,Iz,Iyz),bounds:{yMin:Math.min(...pts.map(p=>p.y)),yMax:Math.max(...pts.map(p=>p.y)),zMin:Math.min(...pts.map(p=>p.z)),zMax:Math.max(...pts.map(p=>p.z))},vertices:pts,J:null,Cw:null};
+  const {area,cy,cz,Iy0,Iz0,Iyz0}=raw,Iy=Iy0-area*cz*cz,Iz=Iz0-area*cy*cy,Iyz=Iyz0-area*cy*cz,bounds={yMin:Math.min(...pts.map(p=>p.y)),yMax:Math.max(...pts.map(p=>p.y)),zMin:Math.min(...pts.map(p=>p.z)),zMax:Math.max(...pts.map(p=>p.z))};
+  return enrich({contract:'section-geometry/v1',shape:'polygon',area,centroid:{y:cy,z:cz},Iy,Iz,Iyz,principal:principalData(Iy,Iz,Iyz),bounds,vertices:pts,J:null,Cw:null},{torsionModel:'not-evaluated-arbitrary',warpingModel:'not-evaluated-arbitrary'});
 }
 
 export function rectangleSectionProperties({width,height,cy=0,cz=0}={}){
   const b=finite('width',width),h=finite('height',height),y=finite('cy',cy),z=finite('cz',cz);if(!(b>0&&h>0))throw new Error('SectionGeometry: width e height devem ser positivos.');
-  const area=b*h,Iy=b*h**3/12,Iz=h*b**3/12,Iyz=0;
-  return{contract:'section-geometry/v1',shape:'rectangle',area,centroid:{y,z},Iy,Iz,Iyz,principal:principalData(Iy,Iz,Iyz),bounds:{yMin:y-b/2,yMax:y+b/2,zMin:z-h/2,zMax:z+h/2},J:null,Cw:null};
+  const area=b*h,Iy=b*h**3/12,Iz=h*b**3/12,Iyz=0,bounds={yMin:y-b/2,yMax:y+b/2,zMin:z-h/2,zMax:z+h/2};
+  return enrich({contract:'section-geometry/v1',shape:'rectangle',area,centroid:{y,z},Iy,Iz,Iyz,principal:principalData(Iy,Iz,Iyz),bounds},{plasticSectionModulus:{Wy:b*h*h/4,Wz:h*b*b/4},J:rectangleTorsionConstant(b,h),shearCenter:{y,z,model:'double-symmetry'},shearAreas:{Ay:5*area/6,Az:5*area/6,model:'solid-rectangle-5/6'},torsionModel:'solid-rectangle-roark-approximation',warpingModel:'not-used-solid'});
 }
 
 function shiftedInertias(properties,cy,cz,factor){
@@ -49,21 +67,25 @@ export function combineSectionProperties(parts){
   const area=rows.reduce((s,r)=>s+r.factor*r.properties.area,0);if(!(area>1e-18))throw new Error('SectionGeometry: área composta resultante deve ser positiva.');
   const cy=rows.reduce((s,r)=>s+r.factor*r.properties.area*r.properties.centroid.y,0)/area,cz=rows.reduce((s,r)=>s+r.factor*r.properties.area*r.properties.centroid.z,0)/area;
   let Iy=0,Iz=0,Iyz=0;for(const row of rows){const shifted=shiftedInertias(row.properties,cy,cz,row.factor);Iy+=shifted.Iy;Iz+=shifted.Iz;Iyz+=shifted.Iyz}
-  return{contract:'section-geometry/v1',shape:'composite',area,centroid:{y:cy,z:cz},Iy,Iz,Iyz,principal:principalData(Iy,Iz,Iyz),parts:rows.map(r=>({factor:r.factor,shape:r.properties.shape,area:r.properties.area,centroid:{...r.properties.centroid}})),J:null,Cw:null};
+  const positive=rows.filter(r=>r.factor>0&&r.properties.bounds),bounds=positive.length?{yMin:Math.min(...positive.map(r=>r.properties.bounds.yMin)),yMax:Math.max(...positive.map(r=>r.properties.bounds.yMax)),zMin:Math.min(...positive.map(r=>r.properties.bounds.zMin)),zMax:Math.max(...positive.map(r=>r.properties.bounds.zMax))}:null;
+  const base={contract:'section-geometry/v1',shape:'composite',area,centroid:{y:cy,z:cz},Iy,Iz,Iyz,principal:principalData(Iy,Iz,Iyz),bounds,parts:rows.map(r=>({factor:r.factor,shape:r.properties.shape,area:r.properties.area,centroid:{...r.properties.centroid}})),J:null,Cw:null};
+  return bounds?enrich(base,{torsionModel:'not-evaluated-composite',warpingModel:'not-evaluated-composite'}):base;
 }
 
 export function iSectionProperties({height,width,webThickness,flangeThickness}={}){
   const h=finite('height',height),b=finite('width',width),tw=finite('webThickness',webThickness),tf=finite('flangeThickness',flangeThickness);if(!(h>0&&b>0&&tw>0&&tf>0&&2*tf<h&&tw<=b))throw new Error('SectionGeometry: geometria I/H inválida.');
-  return{...combineSectionProperties([
+  const hw=h-2*tf,base=combineSectionProperties([
     rectangleSectionProperties({width:b,height:tf,cz:-(h-tf)/2}),
-    rectangleSectionProperties({width:tw,height:h-2*tf}),
+    rectangleSectionProperties({width:tw,height:hw}),
     rectangleSectionProperties({width:b,height:tf,cz:(h-tf)/2})
-  ]),shape:'i-section',dimensions:{height:h,width:b,webThickness:tw,flangeThickness:tf}};
+  ]),J=(2*b*tf**3+hw*tw**3)/3,Cw=b**3*tf*(h-tf)**2/24;
+  return enrich({...base,shape:'i-section',dimensions:{height:h,width:b,webThickness:tw,flangeThickness:tf},bounds:{yMin:-b/2,yMax:b/2,zMin:-h/2,zMax:h/2}},{plasticSectionModulus:{Wy:b*tf*(h-tf)+tw*hw**2/4,Wz:tf*b**2/2+hw*tw**2/4},J,Cw,shearCenter:{y:0,z:0,model:'double-symmetry'},shearAreas:{Ay:null,Az:tw*hw,model:'thin-web-major-axis-approximation'},torsionModel:'open-thin-wall-sum-bt3-over-3',warpingModel:'doubly-symmetric-i-vlasov'});
 }
 
 export function rhsSectionProperties({height,width,thickness}={}){
   const h=finite('height',height),b=finite('width',width),t=finite('thickness',thickness);if(!(h>0&&b>0&&t>0&&2*t<h&&2*t<b))throw new Error('SectionGeometry: geometria RHS inválida.');
-  return{...combineSectionProperties([{properties:rectangleSectionProperties({width:b,height:h}),factor:1},{properties:rectangleSectionProperties({width:b-2*t,height:h-2*t}),factor:-1}]),shape:'rhs',dimensions:{height:h,width:b,thickness:t}};
+  const hi=h-2*t,bi=b-2*t,bm=b-t,hm=h-t,base=combineSectionProperties([{properties:rectangleSectionProperties({width:b,height:h}),factor:1},{properties:rectangleSectionProperties({width:bi,height:hi}),factor:-1}]),Am=bm*hm,J=2*Am*Am*t/(bm+hm);
+  return enrich({...base,shape:'rhs',dimensions:{height:h,width:b,thickness:t},bounds:{yMin:-b/2,yMax:b/2,zMin:-h/2,zMax:h/2}},{plasticSectionModulus:{Wy:(b*h*h-bi*hi*hi)/4,Wz:(h*b*b-hi*bi*bi)/4},J,Cw:null,shearCenter:{y:0,z:0,model:'double-symmetry'},shearAreas:null,torsionModel:'bredt-batho-thin-wall-median-line',warpingModel:'not-evaluated-closed-section'});
 }
 
 export function pointInPolygon(y,z,vertices){

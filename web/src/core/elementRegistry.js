@@ -38,7 +38,9 @@ export function classifyElementSet(project = {}) {
   if ([...types].every(t => t === 'frame2d' || t === 'truss2d')) return 'mixed2d';
   if (types.size === 1 && types.has('truss3d')) return 'truss3d';
   if (types.size === 1 && types.has('frame3d')) return 'frame3d';
-  if (types.size === 1 && types.has('shell4')) return 'shell4';
+  // shell4 is dispatched through the spatial mixed3d assembler even when it is
+  // the only element family; solveSpatial3D still reports result.type='shell4'.
+  if (types.size === 1 && types.has('shell4')) return 'mixed3d';
   if ([...types].every(t => t === 'frame3d' || t === 'truss3d' || t === 'shell4')) return 'mixed3d';
   return 'unsupported';
 }

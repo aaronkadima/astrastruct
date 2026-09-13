@@ -25,6 +25,7 @@ import './levelsBootstrap';
 import './shellLabBootstrap';
 import './shellMeshBootstrap';
 import './shellRefinementBootstrap';
+import './shellQualityBootstrap';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('AstraStruct: elemento #root não encontrado.');

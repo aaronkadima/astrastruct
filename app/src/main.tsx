@@ -24,6 +24,7 @@ import './modelLabBootstrap';
 import './advancedExamplesBootstrap';
 import './anchorLabBootstrap';
 import './boltGroupLabBootstrap';
+import './boltContactLabBootstrap';
 import './punchingLabBootstrap';
 import './labStatusBootstrap';
 import './dxfPlanBootstrap';

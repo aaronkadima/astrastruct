@@ -1,5 +1,10 @@
 const RULESETS = new Map();
-const finiteOrNull=v=>Number.isFinite(Number(v))?Number(v):null;
+const finiteOrNull=v=>{
+  if(v===null||v===undefined)return null;
+  if(typeof v==='string'&&v.trim()==='')return null;
+  const n=Number(v);
+  return Number.isFinite(n)?n:null;
+};
 
 function normalizeCheck(check,index){
   const raw=check&&typeof check==='object'?check:{value:check};

@@ -4,6 +4,7 @@ import {sectionDepth} from './model.js';
 import {mul} from '../solver/matrix.js';
 import {prepareFrameElement,recoverFrameEndForces} from '../solver/frameElement.js';
 import {registerAdvancedElementComponents} from '../elements/registry.js';
+import {registerNonlinearRCComponents} from '../rc/registry.js';
 
 function byId(rows,id,label,elementId){const row=(rows||[]).find(item=>item.id===id);if(!row)throw new Error(`ElementComponent ${elementId}: ${label} ${id} não encontrado.`);return row}
 function geometry2d(project,element){
@@ -52,5 +53,5 @@ export function createFrame2DComponent({element,project}){
 export function registerBuiltInElementComponents(){
   registerElementComponentFactory('truss2d',createTruss2DComponent);
   registerElementComponentFactory('frame2d',createFrame2DComponent);
-  return['truss2d','frame2d',...registerAdvancedElementComponents()];
+  return['truss2d','frame2d',...registerAdvancedElementComponents(),...registerNonlinearRCComponents()];
 }

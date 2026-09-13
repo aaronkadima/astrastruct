@@ -14,6 +14,6 @@ const project={
 const r=solve(project,'ULS');assert.equal(r.dimension,'3d');assert.equal(r.type,'shell4');assert.equal(r.solverVersion,'0.30.0');assert.equal(r.contract.request.model.elementTypes[0],'shell4');
 const d2=r.displacements.find(x=>x.nodeId==='N2'),d3=r.displacements.find(x=>x.nodeId==='N3');assert.ok(Number.isFinite(d2.uz)&&d2.uz<0);assert.ok(Number.isFinite(d3.uz)&&d3.uz<0);assert.ok(Math.abs(d2.uz-d3.uz)<1e-10);
 const totalRz=r.reactions.reduce((s,x)=>s+x.fz,0),expectedLoad=-10*1.4*12;assert.ok(Math.abs(totalRz+expectedLoad)<1e-6,`surface-load equilibrium: Rz=${totalRz}, load=${expectedLoad}`);
-const s=r.elementForces.find(x=>x.elementId==='S1');assert.equal(s.type,'shell4');assert.ok(Number.isFinite(s.bendingMoments.Mx));assert.ok(Number.isFinite(s.bendingMoments.My));assert.ok(Number.isFinite(s.transverseShear.Qx));assert.ok(Math.abs(s.loadSummary[0].pressure+14)<1e-12,'load combination must scale shell pressure');
+const s=r.elementForces.find(x=>x.elementId==='S1');assert.equal(s.type,'shell4');assert.ok(Number.isFinite(s.bendingMoments.Mx));assert.ok(Number.isFinite(s.bendingMoments.My));assert.ok(Number.isFinite(s.transverseShear.Qx));assert.ok(Math.abs(s.loadSummary[0].pressure+14)<1e-12,'load combination must scale shell pressure');assert.equal(s.gaussPoints.length,4);for(const gp of s.gaussPoints){assert.ok(gp.detJ>0);assert.ok(Number.isFinite(gp.bendingMoments.Mx));assert.ok(Number.isFinite(gp.transverseShear.Qx))}
 
 console.log('shell4-integration-v030-smoke: OK');

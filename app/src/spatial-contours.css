@@ -1,0 +1,5 @@
+.spatial3d-vector-scene{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:-1}
+.spatial3d-contour-status{position:absolute;right:10px;bottom:10px;display:flex;align-items:center;gap:7px;max-width:min(72%,700px);padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:rgba(247,248,249,.94);box-shadow:0 3px 12px rgba(20,28,36,.12);color:#384651;font-size:11px;white-space:nowrap;pointer-events:none}
+.spatial3d-contour-status b{font-size:12px;color:#243746}.spatial3d-contour-status span+span{padding-left:7px;border-left:1px solid #c5cbd1}
+.canvas-black .spatial3d-contour-status{background:rgba(28,30,33,.94);color:#e4e7ea;border-color:#555a61}.canvas-black .spatial3d-contour-status b{color:#f5f6f7}.canvas-black .spatial3d-contour-status span+span{border-left-color:#5c6168}
+@media(max-width:760px){.spatial3d-contour-status{left:6px;right:6px;bottom:6px;max-width:none;overflow-x:auto;font-size:10px}.spatial3d-contour-status b{font-size:11px}.spatial3d-options{max-height:112px}}

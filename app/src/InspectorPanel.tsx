@@ -11,7 +11,7 @@ const defaultDistributedPlasticity={enabled:false,integrationPoints:5,nFibers:80
 export function InspectorPanel({project,selection,onCommit}:{project:any;selection:Selection;onCommit:(p:any)=>void}){
   const activeCase=project.settings?.activeLoadCaseId||project.loadCases?.[0]?.id;
   const entity=useMemo(()=>selection?.kind==='node'?project.nodes.find((n:any)=>n.id===selection.id):selection?.kind==='element'?project.elements.find((e:any)=>e.id===selection.id):null,[project,selection]);
-  const spatial=useMemo(()=>project.elements?.some((e:any)=>e.type==='frame3d'||e.type==='truss3d')||project.nodes?.some((n:any)=>Number.isFinite(Number(n.z))&&Math.abs(Number(n.z))>1e-12),[project]);
+  const spatial=useMemo(()=>project.elements?.some((e:any)=>e.type==='frame3d'||e.type==='truss3d'||e.type==='shell4')||project.nodes?.some((n:any)=>Number.isFinite(Number(n.z))&&Math.abs(Number(n.z))>1e-12),[project]);
   const [draft,setDraft]=useState<any>(null);
   useEffect(()=>{
     if(!entity){setDraft(null);return}

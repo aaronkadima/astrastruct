@@ -65,6 +65,38 @@ BEAM
 20
 4000
 0
+POLYLINE
+8
+CLASSIC
+70
+1
+0
+VERTEX
+8
+CLASSIC
+10
+1000
+20
+1000
+0
+VERTEX
+8
+CLASSIC
+10
+2500
+20
+3000
+0
+VERTEX
+8
+CLASSIC
+10
+4000
+20
+1000
+0
+SEQEND
+0
 CIRCLE
 8
 ARCH
@@ -79,8 +111,9 @@ ENDSEC
 0
 EOF`;
 
-const info=inspectDxfPlan(dxf);assert.equal(info.unitsCode,4);assert.equal(info.unitsLabel,'mm');assert.deepEqual(info.layers,['BEAM','GRID']);assert.equal(info.stats.supportedEntities,3);assert.equal(info.stats.segments,6);assert.equal(info.stats.unsupported.CIRCLE,1);
+const info=inspectDxfPlan(dxf);assert.equal(info.unitsCode,4);assert.equal(info.unitsLabel,'mm');assert.deepEqual(info.layers,['BEAM','CLASSIC','GRID']);assert.equal(info.stats.supportedEntities,4);assert.equal(info.stats.segments,9);assert.equal(info.stats.unsupported.CIRCLE,1);assert.equal(info.stats.unsupported.VERTEX,undefined);assert.equal(info.stats.unsupported.SEQEND,undefined);
 const plan=dxfToPlan(dxf,{layers:['BEAM'],tolerance:.01});assert.equal(plan.planNodes.length,4);assert.equal(plan.planEdges.length,4);assert.ok(Math.abs(plan.bounds.width-5)<1e-12);assert.ok(Math.abs(plan.bounds.height-4)<1e-12);
-const all=dxfToPlan(dxf,{tolerance:.01});assert.equal(all.planEdges.length,4,'duplicate LINE/LWPOLYLINE edges should merge');
+const classic=dxfToPlan(dxf,{layers:['CLASSIC'],tolerance:.01});assert.equal(classic.planNodes.length,3);assert.equal(classic.planEdges.length,3);assert.ok(Math.abs(classic.bounds.width-3)<1e-12);assert.ok(Math.abs(classic.bounds.height-2)<1e-12);
+const duplicate=dxfToPlan(dxf,{layers:['BEAM','GRID'],tolerance:.01});assert.equal(duplicate.planEdges.length,4,'duplicate LINE/LWPOLYLINE edges should merge');
 const building=createPlanBuilding3D({name:'DXF smoke',planNodes:plan.planNodes,planEdges:plan.planEdges,storeys:2,storeyHeight:3});assert.equal(building.nodes.length,12);assert.equal(building.supports.length,4);assert.equal(building.elements.length,16);assert.equal(building.meta.exampleKind,'building-plan');
 console.log('dxf-plan-v030-smoke: OK');

@@ -24,6 +24,10 @@ assert.throws(()=>solveSparseDirect(csrFromDense([[1,2],[2,4]]),[3,6]),error=>{
   assert.ok(error instanceof NumericalSingularityError);assert.equal(error.code,'ASTRA_NUMERICAL_SINGULARITY');assert.equal(error.diagnostics.rankEstimate,1);return true;
 });
 
+// Strongly mixed units/scales may be ill-conditioned without being singular.
+const mixedScale=solveSparseDirect(csrFromDense([[1e8,0],[0,1e-9]]),[1e8,2e-9]);
+close(mixedScale.x[0],1,1e-12,'mixed scale x0');close(mixedScale.x[1],2,1e-10,'mixed scale x1');assert.equal(mixedScale.diagnostics.illConditioned,true);
+
 // Generic DOF manager.
 const dofs=new DofManager();const n1=dofs.registerNode('N1',['ux','uy']),n2=dofs.registerNode('N2',['ux','uy']);
 assert.deepEqual(n1,{ux:0,uy:1});assert.deepEqual(n2,{ux:2,uy:3});assert.equal(dofs.count,4);assert.equal(dofs.get('N2','uy'),3);
@@ -54,4 +58,4 @@ const sqrt2=newtonSolve({
 close(sqrt2.x[0],Math.SQRT2,1e-11,'Newton sqrt(2)');assert.equal(sqrt2.converged,true);assert.ok(sqrt2.iterations<=8);
 assert.deepEqual(newtonStrategies(),['full','modified','line-search']);
 
-console.log('AstraStruct v0.32 Numerical Core 2 smoke: CSR, direct/CG, singularity, DOF, MPC, units, Newton and legacy bridge OK.');
+console.log('AstraStruct v0.32 Numerical Core 2 smoke: CSR, direct/CG, singularity, mixed scaling, DOF, MPC, units, Newton and legacy bridge OK.');

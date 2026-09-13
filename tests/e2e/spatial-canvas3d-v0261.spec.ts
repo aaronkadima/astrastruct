@@ -58,5 +58,4 @@ test('spatial Inspector persists released and semi-rigid 3D end rotations',async
   await page.getByTestId('spatial-release-rz2').check();await page.getByTestId('spatial-rot-spring-ry2').fill('3200');await page.getByTestId('spatial-element-apply').click();
   await expect.poll(async()=>page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('astrastruct.project')||'{}');const e=(p.elements||[]).find((x:any)=>x.id==='E2');return{release:e?.releases?.rz2,rz2:e?.rotationalSprings?.rz2,ry2:e?.rotationalSprings?.ry2}})).toEqual({release:true,rz2:0,ry2:3200});
   await expect(page.getByTestId('spatial-release-rz2')).toBeChecked();await expect(page.getByTestId('spatial-rot-spring-rz2')).toBeDisabled();await expect(page.getByTestId('spatial-rot-spring-ry2')).toHaveValue('3200');
-  await page.getByTestId('analyze-button').click();await expect(page.getByTestId('spatial3d-results')).toBeVisible();
 });

@@ -19,7 +19,11 @@ assert.ok(bearing.appliedLoad>1,`bearing load ${bearing.appliedLoad}`);
 assert.ok(Math.abs(bearing.equilibrium.relativeFxResidual)<2e-5,JSON.stringify(bearing.equilibrium));
 assert.ok(Math.abs(bearing.totalBoltFy)<1e-5,`symmetry Fy ${bearing.totalBoltFy}`);
 const forces=bearing.state.bolts.map(b=>b.force.magnitude);
-assert.ok(Math.max(...forces)-Math.min(...forces)<1e-3,`symmetric bolt forces ${forces.join(',')}`);
+// Rows mirrored about y=0 must match, while different x-columns are allowed to
+// redistribute force because the plate is no longer assumed rigid.
+assert.ok(Math.abs(forces[0]-forces[2])<1e-3,`left-column symmetry ${forces.join(',')}`);
+assert.ok(Math.abs(forces[1]-forces[3])<1e-3,`right-column symmetry ${forces.join(',')}`);
+assert.ok(Math.abs(forces[0]-forces[1])>1e-4,`flexible plate should redistribute between x-columns ${forces.join(',')}`);
 
 // Lower yield strength must create a yielded zone and reduce the monotonic tangent/load.
 const elastic=solveFlexibleConnectionPlate({...base,bolts,fy:1e9,edgeDisplacementMax:.005,steps:10});

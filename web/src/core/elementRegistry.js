@@ -1,4 +1,5 @@
 const ELEMENT_TYPES = new Map();
+const ELEMENT_COMPONENT_FACTORIES = new Map();
 
 export function registerElementType(definition) {
   if (!definition?.type) throw new Error('ElementRegistry: definition.type é obrigatório.');
@@ -21,6 +22,29 @@ export function getElementDefinition(type) {
 
 export function listElementDefinitions() {
   return [...ELEMENT_TYPES.values()];
+}
+
+export function registerElementComponentFactory(type, factory) {
+  const key=String(type||'').trim();
+  if(!ELEMENT_TYPES.has(key))throw new Error(`ElementRegistry: tipo não registrado para component factory: ${key||'(vazio)'}.`);
+  if(typeof factory!=='function')throw new Error(`ElementRegistry: component factory de ${key} deve ser função.`);
+  ELEMENT_COMPONENT_FACTORIES.set(key,factory);
+  return factory;
+}
+
+export function getElementComponentFactory(type) {
+  return ELEMENT_COMPONENT_FACTORIES.get(String(type||'').trim()) || null;
+}
+
+export function hasElementComponentFactory(type) {
+  return ELEMENT_COMPONENT_FACTORIES.has(String(type||'').trim());
+}
+
+export function createRegisteredElementComponent(element, context={}) {
+  if(!element?.type)throw new Error('ElementRegistry: element.type é obrigatório para criar component.');
+  const factory=getElementComponentFactory(element.type);
+  if(!factory)throw new Error(`ElementRegistry: component factory não registrada para ${element.type}.`);
+  return factory({element,...context});
 }
 
 export function inferProjectDimension(project = {}) {

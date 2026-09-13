@@ -27,3 +27,12 @@ test('Model Lab creates a shell4 from four nodes on the same level',async({page}
   await expect(page.getByTestId('spatial-canvas-3d')).toHaveAttribute('data-shell-count','1');
   await expect.poll(async()=>page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('astrastruct.project')||'{}'),e=(p.elements||[]).find((x:any)=>x.type==='shell4'),l=(p.elementLoads||[]).find((x:any)=>x.elementId===e?.id);return{nodes:e?.nodeIds?.length,unique:new Set(e?.nodeIds||[]).size,t:e?.thickness,p:l?.pressure,mode:p.settings?.analysisType}})).toEqual({nodes:4,unique:4,t:.18,p:-5,mode:'linear'});
 });
+
+test('Model Lab auto-fills a closed rectangular bay with shell4',async({page},testInfo)=>{
+  test.skip(testInfo.project.name!=='desktop-chromium','automatic shell panel fill smoke');
+  const frame=(id:string,n1:string,n2:string)=>({id,type:'frame3d',n1,n2,materialId:'C',sectionId:'SEC',A:.15,Iy:.004,Iz:.004,J:.002});
+  const launch={...project,id:'shell4-auto',name:'Auto shell',levels:[{id:'L0',name:'Pavimento teste',elevation:0,index:0}],nodes:project.nodes.map(n=>({...n,levelId:'L0'})),elements:[frame('E1','N1','N2'),frame('E2','N2','N3'),frame('E3','N3','N4'),frame('E4','N4','N1')],sections:[{id:'SEC',name:'Seção E2E',A:.15,Iy:.004,Iz:.004,J:.002,I:.004}],supports:[],elementLoads:[]};
+  await loadProject(page,launch);await page.getByTestId('model-lab-launch').click();await page.getByTestId('shell4-lab-tab').click();const auto=page.getByTestId('auto-shell4-panels');await expect(auto).toBeVisible();await expect(auto).toContainText('1 vão');
+  await Promise.all([page.waitForEvent('framenavigated'),auto.click()]);await expect(page.getByTestId('spatial-canvas-3d')).toHaveAttribute('data-shell-count','1');
+  await expect.poll(async()=>page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('astrastruct.project')||'{}');return{shells:(p.elements||[]).filter((e:any)=>e.type==='shell4').length,surface:(p.elementLoads||[]).filter((l:any)=>l.kind==='surface').length,created:p.meta?.lastShellMeshReport?.created}})).toEqual({shells:1,surface:1,created:1});
+});

@@ -24,6 +24,14 @@ function maxFree(v,free){let m=0;for(const i of free)m=Math.max(m,Math.abs(Numbe
 function addVectors(a,b){return a.map((v,i)=>v+(Number(b[i])||0))}
 function subtractMatrices(A,B,scaleB=1){return A.map((r,i)=>r.map((v,j)=>v-scaleB*B[i][j]))}
 function elementDofs(i,j){return[0,1,2,3,4,5].map(k=>6*i+k).concat([0,1,2,3,4,5].map(k=>6*j+k))}
+function springStiffnesses(spring={}){
+  const values=[Number(spring.kx)||0,Number(spring.ky)||0,Number(spring.kz)||0,Number(spring.krx)||0,Number(spring.kry)||0,Number(spring.krz??spring.kr)||0];
+  if(values.some(v=>v<0))throw new Error(`Mola ${spring.id||spring.nodeId||''}: rigidez não pode ser negativa.`);
+  return values;
+}
+function addNodalSpringInternal(project,u,map,Fint){for(const spring of project.nodeSprings||[]){const i=map.get(spring.nodeId);if(i==null)continue;const k=springStiffnesses(spring);for(let d=0;d<6;d++)Fint[6*i+d]+=k[d]*(Number(u[6*i+d])||0)}}
+function addNodalSpringTangent(project,map,K){for(const spring of project.nodeSprings||[]){const i=map.get(spring.nodeId);if(i==null)continue;const k=springStiffnesses(spring);for(let d=0;d<6;d++)K[6*i+d][6*i+d]+=k[d]}}
+function recoverNodalSpringForces(project,u,map){return(project.nodeSprings||[]).map(spring=>{const i=map.get(spring.nodeId),k=springStiffnesses(spring),d=i==null?[0,0,0,0,0,0]:[0,1,2,3,4,5].map(j=>Number(u[6*i+j])||0);return{springId:spring.id,nodeId:spring.nodeId,kx:k[0],ky:k[1],kz:k[2],krx:k[3],kry:k[4],krz:k[5],fx:-k[0]*d[0],fy:-k[1]*d[1],fz:-k[2]*d[2],mx:-k[3]*d[3],my:-k[4]*d[4],mz:-k[5]*d[5]}})}
 
 /** Rodrigues exponential map: global rotation vector -> proper orthogonal matrix. */
 export function rotationVectorToMatrix(theta=[0,0,0]){
@@ -107,7 +115,8 @@ function validateGlobalScope(project){
   if((project.elements||[]).some(e=>e.type!=='frame3d'))throw new Error('Co-rotacional 3D v0.30 experimental suporta somente elementos frame3d.');
   const unsupported=(project.elementLoads||[]).find(l=>!['thermal','followerEnd'].includes(l.kind));if(unsupported)throw new Error(`Co-rotacional 3D v0.30 experimental: carga de barra '${unsupported.kind||'desconhecida'}' deve ser preparada como carga morta equivalente antes da solução.`);
   for(const load of(project.elementLoads||[]).filter(l=>l.kind==='followerEnd'))validateFollowerLoad(project,load);
-  if((project.nodeSprings||[]).length||(project.settlements||[]).length)throw new Error('Co-rotacional 3D v0.30 experimental: molas nodais e recalques ainda não são suportados.');
+  for(const spring of project.nodeSprings||[])springStiffnesses(spring);
+  if((project.settlements||[]).length)throw new Error('Co-rotacional 3D v0.30 experimental: recalques ainda não são suportados.');
   for(const e of project.elements||[])if(e.releases&&Object.values(e.releases).some(Boolean))throw new Error(`Co-rotacional 3D v0.30 experimental: releases ainda não suportados em ${e.id}.`);
   for(const s of project.supports||[])for(const key of ['ux','uy','uz','rx','ry','rz'])if(s[key]&&Math.abs(Number(s[`${key}Value`])||0)>1e-12)throw new Error('Co-rotacional 3D v0.30 experimental: apoios devem possuir deslocamentos prescritos nulos.');
 }
@@ -115,7 +124,7 @@ function validateGlobalScope(project){
 function modelAssembly(project,u){
   const nodes=project.nodes||[],map=new Map(nodes.map((n,i)=>[n.id,i])),Fint=Array(nodes.length*6).fill(0),responses=[];
   for(const e of project.elements||[]){const i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Co-rotacional 3D: elemento ${e.id} referencia nó inexistente.`);const idx=elementDofs(i,j),ue=idx.map(k=>u[k]),r=corotationalFrame3DInternalForce(project,e,nodes[i],nodes[j],ue);idx.forEach((g,k)=>{Fint[g]+=r.global[k]});responses.push({elementId:e.id,type:'frame3d',N1:-r.local[0],N2:r.local[6],Vy1:r.Vy1,Vz1:r.Vz1,T1:r.T1,My1:r.My1,Mz1:r.Mz1,Vy2:r.Vy2,Vz2:r.Vz2,T2:r.T2,My2:r.My2,Mz2:r.Mz2,thermal:r.thermal,localForces:r.local,localDisplacements:r.kinematics.basic,currentAxes:r.kinematics.currentAxes,currentLength:r.kinematics.currentLength,initialLength:r.kinematics.initialLength})}
-  return{Fint,responses};
+  addNodalSpringInternal(project,u,map,Fint);return{Fint,responses};
 }
 function fixedExternalVector(project,map){const F=Array((project.nodes||[]).length*6).fill(0);for(const l of project.loads||[]){const i=map.get(l.nodeId);if(i==null)continue;const vals=[l.fx,l.fy,l.fz,l.mx,l.my,l.mz];for(let k=0;k<6;k++)F[6*i+k]+=Number(vals[k])||0}return F}
 function followerGroups(project){
@@ -149,7 +158,7 @@ function fdIncrement(project,u,j,fdStep,charLength=null){const rotational=j%6>=3
  * Numerical Jacobian of the spatial resisting-force vector assembled element by
  * element. The finite-difference formula is unchanged, but only the 12 DOFs of
  * each incident frame are perturbed instead of reassembling the complete model
- * for every global column.
+ * for every global column. Linear nodal springs are added exactly on the diagonal.
  */
 export function numericalCorotational3DTangent(project,u,{fdStep=2e-7,scheme='central'}={}){
   const nodes=project.nodes||[],nd=u.length,K=zeros(nd),mode=scheme==='forward'?'forward':'central',map=new Map(nodes.map((n,i)=>[n.id,i])),char=characteristicLength(project);
@@ -161,7 +170,7 @@ export function numericalCorotational3DTangent(project,u,{fdStep=2e-7,scheme='ce
       const um=[...ue];um[c]-=h;const fm=corotationalFrame3DInternalForce(project,e,nodes[i],nodes[j],um).global;for(let r=0;r<12;r++)K[idx[r]][gcol]+=(fp[r]-fm[r])/(2*h);
     }
   }
-  return K;
+  addNodalSpringTangent(project,map,K);return K;
 }
 
 /** Centered Jacobian dF_follower/du assembled only on follower-loaded elements. */
@@ -201,6 +210,6 @@ export function solveFrameCorotational3D(project,options={}){
     if(!converged)throw new Error(`Co-rotacional 3D não convergiu no passo ${step}/${steps} após ${maxIterations} iterações (‖r‖∞=${residualNorm.toExponential(3)}).`);
     history.push({step,lambda,iterations,residualNorm,tangentAsymmetry:lastAsymmetry,thermalLoadFactor:lambda,followerLoadFactor:hasFollower?lambda:0});
   }
-  last=last||modelAssembly(project,u);const Ffinal=externalVector(project,u,map,Ffixed),reactions=last.Fint.map((v,i)=>v-Ffinal[i]),displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[6*i],uy:u[6*i+1],uz:u[6*i+2],rx:u[6*i+3],ry:u[6*i+4],rz:u[6*i+5]}));
-  return{type:'frame3d-corotational',dimension:'3d',analysisType:'corotational',solverVersion:'0.30.0-exp',dofs:nd,activeDofs:free.length,displacements,reactions:nodes.map((n,i)=>({nodeId:n.id,fx:reactions[6*i],fy:reactions[6*i+1],fz:reactions[6*i+2],mx:reactions[6*i+3],my:reactions[6*i+4],mz:reactions[6*i+5]})),elementForces:last.responses,nonlinear:{formulation:'spatial co-rotational Euler-Bernoulli frame; element-wise numerical internal/external Jacobians',tangentAssembly:'element-local-finite-difference',steps,maxIterations,tolerance,fdStep,lineSearch,tangentScheme,thermalProportionalLoading:true,nonconservativeFollower:hasFollower,followerCount:(project.elementLoads||[]).filter(l=>l.kind==='followerEnd').length,history,converged:true}};
+  last=last||modelAssembly(project,u);const Ffinal=externalVector(project,u,map,Ffixed),reactions=last.Fint.map((v,i)=>v-Ffinal[i]),displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[6*i],uy:u[6*i+1],uz:u[6*i+2],rx:u[6*i+3],ry:u[6*i+4],rz:u[6*i+5]})),springForces=recoverNodalSpringForces(project,u,map);
+  return{type:'frame3d-corotational',dimension:'3d',analysisType:'corotational',solverVersion:'0.30.0-exp',dofs:nd,activeDofs:free.length,displacements,reactions:nodes.map((n,i)=>({nodeId:n.id,fx:reactions[6*i],fy:reactions[6*i+1],fz:reactions[6*i+2],mx:reactions[6*i+3],my:reactions[6*i+4],mz:reactions[6*i+5]})),springForces,elementForces:last.responses,nonlinear:{formulation:'spatial co-rotational Euler-Bernoulli frame; element-wise numerical internal/external Jacobians',tangentAssembly:'element-local-finite-difference',steps,maxIterations,tolerance,fdStep,lineSearch,tangentScheme,thermalProportionalLoading:true,nonconservativeFollower:hasFollower,followerCount:(project.elementLoads||[]).filter(l=>l.kind==='followerEnd').length,springCount:(project.nodeSprings||[]).length,history,converged:true}};
 }

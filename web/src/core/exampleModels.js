@@ -1,4 +1,4 @@
-import { emptyProject, makeFrame3DElement, normalizeProject } from './model.js';
+import { emptyProject, normalizeProject } from './model.js';
 
 const EPS=1e-9;
 const sumSpans=spans=>{const out=[0];for(const s of spans)out.push(out[out.length-1]+Number(s));return out};
@@ -6,7 +6,7 @@ const positiveList=(raw,fallback)=>{const a=(Array.isArray(raw)?raw:String(raw??
 const fixed3d=nodeId=>({nodeId,ux:true,uy:true,uz:true,rx:true,ry:true,rz:true});
 const load3d=(id,caseId,nodeId,{fx=0,fy=0,fz=0,mx=0,my=0,mz=0}={})=>({id,caseId,nodeId,fx,fy,fz,mx,my,mz});
 function ensureSections(p,sections){for(const s of sections)if(!p.sections.some(x=>x.id===s.id))p.sections.push(s)}
-function frame(id,n1,n2,{materialId='steel355',sectionId='steel_space_demo',label=id,orientation}={}){return makeFrame3DElement({id,n1,n2,materialId,sectionId,label,orientation})}
+function frame(id,n1,n2,{materialId='steel355',sectionId='steel_space_demo',label=id,orientation}={}){return{id,type:'frame3d',n1,n2,materialId,sectionId,label,...(orientation?{orientation}:{})}}
 
 export function createGridBuilding3D({name='Edifício paramétrico 3D',xSpans=[5,5,5],ySpans=[4,4],storeys=5,storeyHeight=3,floorLoadPerNode=-18}={}){
   const xs=sumSpans(positiveList(xSpans,[5,5,5])),ys=sumSpans(positiveList(ySpans,[4,4])),nStoreys=Math.max(1,Math.min(30,Math.round(Number(storeys)||5))),h=Math.max(.5,Number(storeyHeight)||3);

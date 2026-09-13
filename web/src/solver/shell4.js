@@ -82,7 +82,15 @@ export function shell4MassMatrix({nodes,massDensity,thickness,formulation='consi
   return{ml,mg,T,axes,coords,area,thickness:t,massDensity:rho,totalMass,totalRotaryMass,formulation:kind,drillingRotaryFactor:drill};
 }
 
+function recoverAtLocal(elementData,ul,xi,eta){
+  const b=bMatrices(elementData.coords,xi,eta),eps=mv(b.Bm,ul),kappa=mv(b.Bb,ul),gamma=mv(b.Bs,ul),N=mv(elementData.constitutive.Dm,eps),M=mv(elementData.constitutive.Db,kappa),Q=mv(elementData.constitutive.Ds,gamma),stress=N.map(v=>v/elementData.thickness);
+  return{naturalCoordinates:{xi,eta},detJ:b.detJ,membraneStrain:{ex:eps[0],ey:eps[1],gxy:eps[2]},membraneStress:{sx:stress[0],sy:stress[1],txy:stress[2]},membraneResultants:{Nx:N[0],Ny:N[1],Nxy:N[2]},curvature:{kx:kappa[0],ky:kappa[1],kxy:kappa[2]},bendingMoments:{Mx:M[0],My:M[1],Mxy:M[2]},transverseShearStrain:{gxz:gamma[0],gyz:gamma[1]},transverseShear:{Qx:Q[0],Qy:Q[1]}};
+}
+
+export function recoverShell4At(elementData,globalDisplacements,xi=0,eta=0){
+  if(!Array.isArray(globalDisplacements)||globalDisplacements.length!==24)throw new Error('shell4: recuperação requer 24 deslocamentos globais.');const x=Number(xi),y=Number(eta);if(!Number.isFinite(x)||!Number.isFinite(y)||Math.abs(x)>1+1e-12||Math.abs(y)>1+1e-12)throw new Error('shell4: coordenadas naturais de recuperação devem estar em [-1, 1].');const ul=mv(elementData.T,globalDisplacements);return{localDisplacements:ul,...recoverAtLocal(elementData,ul,x,y)};
+}
+
 export function recoverShell4(elementData,globalDisplacements){
-  if(!Array.isArray(globalDisplacements)||globalDisplacements.length!==24)throw new Error('shell4: recuperação requer 24 deslocamentos globais.');const ul=mv(elementData.T,globalDisplacements),b=bMatrices(elementData.coords,0,0),eps=mv(b.Bm,ul),kappa=mv(b.Bb,ul),gamma=mv(b.Bs,ul),N=mv(elementData.constitutive.Dm,eps),M=mv(elementData.constitutive.Db,kappa),Q=mv(elementData.constitutive.Ds,gamma),stress=N.map(v=>v/elementData.thickness);
-  return{localDisplacements:ul,membraneStrain:{ex:eps[0],ey:eps[1],gxy:eps[2]},membraneStress:{sx:stress[0],sy:stress[1],txy:stress[2]},membraneResultants:{Nx:N[0],Ny:N[1],Nxy:N[2]},curvature:{kx:kappa[0],ky:kappa[1],kxy:kappa[2]},bendingMoments:{Mx:M[0],My:M[1],Mxy:M[2]},transverseShearStrain:{gxz:gamma[0],gyz:gamma[1]},transverseShear:{Qx:Q[0],Qy:Q[1]}};
+  if(!Array.isArray(globalDisplacements)||globalDisplacements.length!==24)throw new Error('shell4: recuperação requer 24 deslocamentos globais.');const ul=mv(elementData.T,globalDisplacements),center=recoverAtLocal(elementData,ul,0,0),g=1/Math.sqrt(3),gaussPoints=[[-g,-g],[g,-g],[g,g],[-g,g]].map(([xi,eta],index)=>({index:index+1,...recoverAtLocal(elementData,ul,xi,eta)}));return{localDisplacements:ul,...center,gaussPoints};
 }

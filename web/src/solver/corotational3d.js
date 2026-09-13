@@ -21,6 +21,8 @@ function addMatrices(A,B){return A.map((r,i)=>r.map((v,j)=>v+B[i][j]))}
 function scaleMatrix(A,s){return A.map(r=>r.map(v=>v*s))}
 function transform12(R){const T=zeros(12);for(const o of [0,3,6,9])for(let i=0;i<3;i++)for(let j=0;j<3;j++)T[o+i][o+j]=R[i][j];return T}
 function maxFree(v,free){let m=0;for(const i of free)m=Math.max(m,Math.abs(Number(v[i])||0));return m}
+function addVectors(a,b){return a.map((v,i)=>v+(Number(b[i])||0))}
+function subtractMatrices(A,B,scaleB=1){return A.map((r,i)=>r.map((v,j)=>v-scaleB*B[i][j]))}
 
 /** Rodrigues exponential map: global rotation vector -> proper orthogonal matrix. */
 export function rotationVectorToMatrix(theta=[0,0,0]){
@@ -92,10 +94,18 @@ export function corotationalFrame3DInternalForce(project,e,a,b,elementDisplaceme
   return{kinematics:k,properties:p,thermal,local,global,N,Vy1:Vyi,Vz1:Vzi,T1:Ti,My1:Myi,Mz1:Mzi,Vy2:Vyj,Vz2:Vzj,T2:Tj,My2:Myj,Mz2:Mzj};
 }
 
+function validateFollowerLoad(project,load){
+  if(Number(load.end??2)!==2)throw new Error(`Co-rotacional 3D follower ${load.id||load.elementId||''}: somente a extremidade 2 é suportada na v0.30.`);
+  if(['mx','my','mz','moment','m'].some(k=>Math.abs(Number(load[k])||0)>EPS))throw new Error(`Co-rotacional 3D follower ${load.id||load.elementId||''}: momentos seguidores ainda não são suportados.`);
+  const e=(project.elements||[]).find(x=>x.id===load.elementId);if(!e)throw new Error(`Co-rotacional 3D follower: elemento ${load.elementId||'ausente'} não encontrado.`);
+  return e;
+}
+
 function validateGlobalScope(project){
   if(!(project.nodes||[]).length||!(project.elements||[]).length)throw new Error('Co-rotacional 3D: modelo vazio.');
   if((project.elements||[]).some(e=>e.type!=='frame3d'))throw new Error('Co-rotacional 3D v0.30 experimental suporta somente elementos frame3d.');
-  const unsupported=(project.elementLoads||[]).find(l=>l.kind!=='thermal');if(unsupported)throw new Error(`Co-rotacional 3D v0.30 experimental: carga de barra '${unsupported.kind||'desconhecida'}' deve ser preparada como carga morta equivalente antes da solução.`);
+  const unsupported=(project.elementLoads||[]).find(l=>!['thermal','followerEnd'].includes(l.kind));if(unsupported)throw new Error(`Co-rotacional 3D v0.30 experimental: carga de barra '${unsupported.kind||'desconhecida'}' deve ser preparada como carga morta equivalente antes da solução.`);
+  for(const load of(project.elementLoads||[]).filter(l=>l.kind==='followerEnd'))validateFollowerLoad(project,load);
   if((project.nodeSprings||[]).length||(project.settlements||[]).length)throw new Error('Co-rotacional 3D v0.30 experimental: molas nodais e recalques ainda não são suportados.');
   for(const e of project.elements||[])if(e.releases&&Object.values(e.releases).some(Boolean))throw new Error(`Co-rotacional 3D v0.30 experimental: releases ainda não suportados em ${e.id}.`);
   for(const s of project.supports||[])for(const key of ['ux','uy','uz','rx','ry','rz'])if(s[key]&&Math.abs(Number(s[`${key}Value`])||0)>1e-12)throw new Error('Co-rotacional 3D v0.30 experimental: apoios devem possuir deslocamentos prescritos nulos.');
@@ -106,7 +116,19 @@ function modelAssembly(project,u){
   for(const e of project.elements||[]){const i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Co-rotacional 3D: elemento ${e.id} referencia nó inexistente.`);const idx=[0,1,2,3,4,5].map(k=>6*i+k).concat([0,1,2,3,4,5].map(k=>6*j+k)),ue=idx.map(k=>u[k]),r=corotationalFrame3DInternalForce(project,e,nodes[i],nodes[j],ue);idx.forEach((g,k)=>{Fint[g]+=r.global[k]});responses.push({elementId:e.id,type:'frame3d',N1:-r.local[0],N2:r.local[6],Vy1:r.Vy1,Vz1:r.Vz1,T1:r.T1,My1:r.My1,Mz1:r.Mz1,Vy2:r.Vy2,Vz2:r.Vz2,T2:r.T2,My2:r.My2,Mz2:r.Mz2,thermal:r.thermal,localForces:r.local,localDisplacements:r.kinematics.basic,currentAxes:r.kinematics.currentAxes,currentLength:r.kinematics.currentLength,initialLength:r.kinematics.initialLength})}
   return{Fint,responses};
 }
-function externalVector(project,map){const F=Array((project.nodes||[]).length*6).fill(0);for(const l of project.loads||[]){const i=map.get(l.nodeId);if(i==null)continue;const vals=[l.fx,l.fy,l.fz,l.mx,l.my,l.mz];for(let k=0;k<6;k++)F[6*i+k]+=Number(vals[k])||0}return F}
+function fixedExternalVector(project,map){const F=Array((project.nodes||[]).length*6).fill(0);for(const l of project.loads||[]){const i=map.get(l.nodeId);if(i==null)continue;const vals=[l.fx,l.fy,l.fz,l.mx,l.my,l.mz];for(let k=0;k<6;k++)F[6*i+k]+=Number(vals[k])||0}return F}
+
+/** Current-configuration follower force vector. Local components rotate with the co-rotated element frame. */
+export function followerExternalVector3D(project,u,mapOverride=null){
+  const nodes=project.nodes||[],map=mapOverride||new Map(nodes.map((n,i)=>[n.id,i])),F=Array(nodes.length*6).fill(0);
+  for(const load of(project.elementLoads||[]).filter(l=>l.kind==='followerEnd')){
+    const e=validateFollowerLoad(project,load),i=map.get(e.n1),j=map.get(e.n2);if(i==null||j==null)throw new Error(`Co-rotacional 3D follower: nó ausente em ${e.id}.`);
+    const idx=[0,1,2,3,4,5].map(k=>6*i+k).concat([0,1,2,3,4,5].map(k=>6*j+k)),ue=idx.map(k=>Number(u[k])||0),kin=corotationalFrame3DKinematics(nodes[i],nodes[j],e,ue),local=[Number(load.px)||0,Number(load.py)||0,Number(load.pz)||0],global=matVec(transpose(kin.currentAxes.R),local);
+    F[6*j]+=global[0];F[6*j+1]+=global[1];F[6*j+2]+=global[2];
+  }
+  return F;
+}
+function externalVector(project,u,map,fixed=null){return addVectors(fixed||fixedExternalVector(project,map),followerExternalVector3D(project,u,map))}
 function prescribedDofs(project,map){const p=new Map(),keys=['ux','uy','uz','rx','ry','rz'];for(const s of project.supports||[]){const i=map.get(s.nodeId);if(i==null)continue;keys.forEach((k,d)=>{if(s[k])p.set(6*i+d,0)})}return p}
 function characteristicLength(project){return Math.max(1,...(project.elements||[]).map(e=>{const a=(project.nodes||[]).find(n=>n.id===e.n1),b=(project.nodes||[]).find(n=>n.id===e.n2);return a&&b?spatialAxes(a,b,e).L:1}))}
 function tangentAsymmetry(K,free){let maxA=0,maxD=0;for(const i of free)for(const j of free){maxA=Math.max(maxA,Math.abs(K[i][j]),Math.abs(K[j][i]));maxD=Math.max(maxD,Math.abs(K[i][j]-K[j][i]))}return maxD/Math.max(EPS,maxA)}
@@ -114,42 +136,53 @@ function scaledThermalProject(project,factor){
   if(!(project.elementLoads||[]).some(l=>l.kind==='thermal')||Math.abs(factor-1)<1e-14)return project;
   return{...project,elementLoads:(project.elementLoads||[]).map(load=>{if(load.kind!=='thermal')return load;const next={...load,dT:(Number(load.dT)||0)*factor};if(load.dTGradient!==undefined)next.dTGradient=(Number(load.dTGradient)||0)*factor;if(load.dTGradientY!==undefined)next.dTGradientY=(Number(load.dTGradientY)||0)*factor;if(load.dTGradientZ!==undefined)next.dTGradientZ=(Number(load.dTGradientZ)||0)*factor;return next})};
 }
+function fdIncrement(project,u,j,fdStep){const rotational=j%6>=3,char=characteristicLength(project);return Math.max(1e-9,fdStep*Math.max(1,rotational?Math.abs(u[j]):char,Math.abs(u[j])))}
 
 /** Centered numerical Jacobian of the spatial resisting-force vector. */
 export function numericalCorotational3DTangent(project,u,{fdStep=2e-7,scheme='central',base=null}={}){
-  const nd=u.length,K=zeros(nd),char=characteristicLength(project),mode=scheme==='forward'?'forward':'central',f0=base||modelAssembly(project,u).Fint;
+  const nd=u.length,K=zeros(nd),mode=scheme==='forward'?'forward':'central',f0=base||modelAssembly(project,u).Fint;
   for(let j=0;j<nd;j++){
-    const rotational=j%6>=3,h=Math.max(1e-9,fdStep*Math.max(1,rotational?Math.abs(u[j]):char,Math.abs(u[j]))),up=[...u];up[j]+=h;const fp=modelAssembly(project,up).Fint;
+    const h=fdIncrement(project,u,j,fdStep),up=[...u];up[j]+=h;const fp=modelAssembly(project,up).Fint;
     if(mode==='forward'){for(let i=0;i<nd;i++)K[i][j]=(fp[i]-f0[i])/h;continue}
     const um=[...u];um[j]-=h;const fm=modelAssembly(project,um).Fint;for(let i=0;i<nd;i++)K[i][j]=(fp[i]-fm[i])/(2*h);
   }
   return K;
 }
 
+/** Centered Jacobian dF_follower/du. It is generally non-symmetric. */
+export function numericalFollower3DTangent(project,u,{fdStep=2e-7,map=null}={}){
+  const nd=u.length,K=zeros(nd),nodeMap=map||new Map((project.nodes||[]).map((n,i)=>[n.id,i]));if(!(project.elementLoads||[]).some(l=>l.kind==='followerEnd'))return K;
+  for(let j=0;j<nd;j++){
+    const h=fdIncrement(project,u,j,fdStep),up=[...u],um=[...u];up[j]+=h;um[j]-=h;const fp=followerExternalVector3D(project,up,nodeMap),fm=followerExternalVector3D(project,um,nodeMap);for(let i=0;i<nd;i++)K[i][j]=(fp[i]-fm[i])/(2*h);
+  }
+  return K;
+}
+
 /**
  * Experimental global elastic co-rotational frame3d solver (v0.30 foundation).
- * Mechanical loads and thermal initial states advance with the same load factor.
- * The tangent is a centered numerical approximation of the consistent Jacobian.
+ * Mechanical loads, thermal initial states and local follower forces advance with
+ * the same load factor. Follower actions contribute the non-conservative external
+ * tangent so Newton uses K_eff = K_int - lambda K_ext.
  */
 export function solveFrameCorotational3D(project,options={}){
-  validateGlobalScope(project);const nodes=project.nodes||[],nd=nodes.length*6,map=new Map(nodes.map((n,i)=>[n.id,i])),prescribed=prescribedDofs(project,map),free=Array.from({length:nd},(_,i)=>i).filter(i=>!prescribed.has(i)),Fref=externalVector(project,map);
+  validateGlobalScope(project);const nodes=project.nodes||[],nd=nodes.length*6,map=new Map(nodes.map((n,i)=>[n.id,i])),prescribed=prescribedDofs(project,map),free=Array.from({length:nd},(_,i)=>i).filter(i=>!prescribed.has(i)),Ffixed=fixedExternalVector(project,map),hasFollower=(project.elementLoads||[]).some(l=>l.kind==='followerEnd');
   if(!free.length)throw new Error('Co-rotacional 3D: modelo sem graus de liberdade livres.');
   const steps=Math.max(1,Math.min(100,Math.round(Number(options.steps??project.settings?.nonlinearSteps??10)))),maxIterations=Math.max(3,Math.min(80,Math.round(Number(options.maxIterations??project.settings?.nonlinearMaxIterations??30)))),tolerance=Math.max(1e-10,Number(options.tolerance??project.settings?.nonlinearTolerance??1e-7)),fdStep=Math.max(1e-9,Math.min(1e-4,Number(options.fdStep??2e-7))),lineSearch=options.lineSearch??true,tangentScheme=options.tangentScheme==='forward'?'forward':'central';
   let u=Array(nd).fill(0),last=null;const history=[];
   for(let step=1;step<=steps;step++){
     const lambda=step/steps,stepProject=scaledThermalProject(project,lambda);let converged=false,residualNorm=Infinity,iterations=0,lastAsymmetry=null;
     for(let iteration=1;iteration<=maxIterations;iteration++){
-      iterations=iteration;const assembled=modelAssembly(stepProject,u),target=Fref.map(v=>lambda*v),residual=target.map((v,i)=>v-assembled.Fint[i]);residualNorm=maxFree(residual,free);const scaleR=Math.max(1,maxFree(target,free),maxFree(assembled.Fint,free));
+      iterations=iteration;const assembled=modelAssembly(stepProject,u),Fcurrent=externalVector(stepProject,u,map,Ffixed),target=Fcurrent.map(v=>lambda*v),residual=target.map((v,i)=>v-assembled.Fint[i]);residualNorm=maxFree(residual,free);const scaleR=Math.max(1,maxFree(target,free),maxFree(assembled.Fint,free));
       if(residualNorm<=tolerance*scaleR){converged=true;last=assembled;break}
-      const K=numericalCorotational3DTangent(stepProject,u,{fdStep,scheme:tangentScheme,base:assembled.Fint});lastAsymmetry=tangentAsymmetry(K,free);const du=solveConstrained(K,residual,prescribed).u;if(du.some(v=>!Number.isFinite(v)))throw new Error(`Co-rotacional 3D: incremento não finito no passo ${step}.`);
+      const Kint=numericalCorotational3DTangent(stepProject,u,{fdStep,scheme:tangentScheme,base:assembled.Fint}),Kext=hasFollower?numericalFollower3DTangent(stepProject,u,{fdStep,map}):zeros(nd),K=subtractMatrices(Kint,Kext,lambda);lastAsymmetry=tangentAsymmetry(K,free);const du=solveConstrained(K,residual,prescribed).u;if(du.some(v=>!Number.isFinite(v)))throw new Error(`Co-rotacional 3D: incremento não finito no passo ${step}.`);
       let alpha=1,best=u.map((v,i)=>v+du[i]),bestNorm=Infinity;
-      if(lineSearch){for(let cut=0;cut<8;cut++){const trial=u.map((v,i)=>v+alpha*du[i]),fi=modelAssembly(stepProject,trial).Fint,rr=target.map((v,i)=>v-fi[i]),n=maxFree(rr,free);if(n<bestNorm){bestNorm=n;best=trial}if(n<residualNorm)break;alpha*=.5}}
+      if(lineSearch){for(let cut=0;cut<8;cut++){const trial=u.map((v,i)=>v+alpha*du[i]),fi=modelAssembly(stepProject,trial).Fint,ft=externalVector(stepProject,trial,map,Ffixed).map(v=>lambda*v),rr=ft.map((v,i)=>v-fi[i]),n=maxFree(rr,free);if(n<bestNorm){bestNorm=n;best=trial}if(n<residualNorm)break;alpha*=.5}}
       u=best;if(Math.max(...u.map(Math.abs))>1e4)throw new Error('Co-rotacional 3D divergiu: deslocamentos/rotações não físicos.');
     }
-    if(!converged){const a=modelAssembly(stepProject,u),target=Fref.map(v=>lambda*v),r=target.map((v,i)=>v-a.Fint[i]);residualNorm=maxFree(r,free);if(residualNorm<=tolerance*Math.max(1,maxFree(target,free),maxFree(a.Fint,free))){converged=true;last=a}}
+    if(!converged){const a=modelAssembly(stepProject,u),target=externalVector(stepProject,u,map,Ffixed).map(v=>lambda*v),r=target.map((v,i)=>v-a.Fint[i]);residualNorm=maxFree(r,free);if(residualNorm<=tolerance*Math.max(1,maxFree(target,free),maxFree(a.Fint,free))){converged=true;last=a}}
     if(!converged)throw new Error(`Co-rotacional 3D não convergiu no passo ${step}/${steps} após ${maxIterations} iterações (‖r‖∞=${residualNorm.toExponential(3)}).`);
-    history.push({step,lambda,iterations,residualNorm,tangentAsymmetry:lastAsymmetry,thermalLoadFactor:lambda});
+    history.push({step,lambda,iterations,residualNorm,tangentAsymmetry:lastAsymmetry,thermalLoadFactor:lambda,followerLoadFactor:hasFollower?lambda:0});
   }
-  last=last||modelAssembly(project,u);const reactions=last.Fint.map((v,i)=>v-Fref[i]),displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[6*i],uy:u[6*i+1],uz:u[6*i+2],rx:u[6*i+3],ry:u[6*i+4],rz:u[6*i+5]}));
-  return{type:'frame3d-corotational',dimension:'3d',analysisType:'corotational',solverVersion:'0.30.0-exp',dofs:nd,activeDofs:free.length,displacements,reactions:nodes.map((n,i)=>({nodeId:n.id,fx:reactions[6*i],fy:reactions[6*i+1],fz:reactions[6*i+2],mx:reactions[6*i+3],my:reactions[6*i+4],mz:reactions[6*i+5]})),elementForces:last.responses,nonlinear:{formulation:'spatial co-rotational Euler-Bernoulli frame; centered numerical consistent-Jacobian approximation',steps,maxIterations,tolerance,fdStep,lineSearch,tangentScheme,thermalProportionalLoading:true,history,converged:true}};
+  last=last||modelAssembly(project,u);const Ffinal=externalVector(project,u,map,Ffixed),reactions=last.Fint.map((v,i)=>v-Ffinal[i]),displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[6*i],uy:u[6*i+1],uz:u[6*i+2],rx:u[6*i+3],ry:u[6*i+4],rz:u[6*i+5]}));
+  return{type:'frame3d-corotational',dimension:'3d',analysisType:'corotational',solverVersion:'0.30.0-exp',dofs:nd,activeDofs:free.length,displacements,reactions:nodes.map((n,i)=>({nodeId:n.id,fx:reactions[6*i],fy:reactions[6*i+1],fz:reactions[6*i+2],mx:reactions[6*i+3],my:reactions[6*i+4],mz:reactions[6*i+5]})),elementForces:last.responses,nonlinear:{formulation:'spatial co-rotational Euler-Bernoulli frame; centered numerical internal/external Jacobians',steps,maxIterations,tolerance,fdStep,lineSearch,tangentScheme,thermalProportionalLoading:true,nonconservativeFollower:hasFollower,followerCount:(project.elementLoads||[]).filter(l=>l.kind==='followerEnd').length,history,converged:true}};
 }

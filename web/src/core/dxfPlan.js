@@ -11,25 +11,50 @@ function headerUnits(ps){for(let i=0;i<ps.length-2;i++)if(ps[i].code===9&&ps[i].
 function entitiesPairs(ps){let inside=false;const out=[];for(let i=0;i<ps.length;i++){const p=ps[i];if(p.code===0&&p.value==='SECTION'&&ps[i+1]?.code===2&&ps[i+1]?.value==='ENTITIES'){inside=true;i++;continue}if(inside&&p.code===0&&p.value==='ENDSEC')break;if(inside)out.push(p)}return out}
 function entityRecords(ps){const out=[];let current=null;for(const p of ps){if(p.code===0){if(current)out.push(current);current={type:p.value,pairs:[]};continue}if(current)current.pairs.push(p)}if(current)out.push(current);return out}
 function one(rec,code,fallback=''){const p=rec.pairs.find(x=>x.code===code);return p?p.value:fallback}
-function all(rec,code){return rec.pairs.filter(x=>x.code===code).map(x=>x.value)}
 function lineEntity(rec){const layer=one(rec,8,'0'),x1=finite(one(rec,10)),y1=finite(one(rec,20)),x2=finite(one(rec,11)),y2=finite(one(rec,21));return{type:'LINE',layer,segments:[{x1,y1,x2,y2}]}}
+function pointsToSegments(type,layer,pts,closed=false){
+  const segments=[];for(let i=0;i<pts.length-1;i++)segments.push({x1:pts[i].x,y1:pts[i].y,x2:pts[i+1].x,y2:pts[i+1].y});if(closed&&pts.length>2)segments.push({x1:pts[pts.length-1].x,y1:pts[pts.length-1].y,x2:pts[0].x,y2:pts[0].y});return{type,layer,closed,points:pts,segments};
+}
 function lwpolylineEntity(rec){
   const layer=one(rec,8,'0'),closed=(Number(one(rec,70,'0'))&1)!==0,pts=[];let pending=null;
   for(const p of rec.pairs){if(p.code===10){if(pending&&Number.isFinite(pending.x)&&Number.isFinite(pending.y))pts.push(pending);pending={x:finite(p.value),y:NaN}}else if(p.code===20&&pending)pending.y=finite(p.value)}if(pending&&Number.isFinite(pending.x)&&Number.isFinite(pending.y))pts.push(pending);
-  const segments=[];for(let i=0;i<pts.length-1;i++)segments.push({x1:pts[i].x,y1:pts[i].y,x2:pts[i+1].x,y2:pts[i+1].y});if(closed&&pts.length>2)segments.push({x1:pts[pts.length-1].x,y1:pts[pts.length-1].y,x2:pts[0].x,y2:pts[0].y});return{type:'LWPOLYLINE',layer,closed,points:pts,segments};
+  return pointsToSegments('LWPOLYLINE',layer,pts,closed);
+}
+function classicPolylineEntity(rec,vertexRecords=[]){
+  const layer=one(rec,8,one(vertexRecords[0]||{pairs:[]},8,'0')),closed=(Number(one(rec,70,'0'))&1)!==0,pts=[];
+  for(const v of vertexRecords){const x=Number(one(v,10,'NaN')),y=Number(one(v,20,'NaN'));if(Number.isFinite(x)&&Number.isFinite(y))pts.push({x,y})}
+  return pointsToSegments('POLYLINE',layer,pts,closed);
+}
+function supportedEntities(records){
+  const entities=[],consumed=new Set();
+  for(let i=0;i<records.length;i++){
+    if(consumed.has(i))continue;const r=records[i];
+    if(r.type==='LINE'){entities.push(lineEntity(r));continue}
+    if(r.type==='LWPOLYLINE'){entities.push(lwpolylineEntity(r));continue}
+    if(r.type==='POLYLINE'){
+      const vertices=[];let j=i+1;
+      for(;j<records.length;j++){
+        if(records[j].type==='VERTEX'){vertices.push(records[j]);consumed.add(j);continue}
+        if(records[j].type==='SEQEND'){consumed.add(j);break}
+        break;
+      }
+      entities.push(classicPolylineEntity(r,vertices));
+    }
+  }
+  return{entities,consumed};
 }
 
 export function inspectDxfPlan(text){
-  const ps=pairs(text),unitsCode=headerUnits(ps),records=entityRecords(entitiesPairs(ps)),entities=[];
-  for(const r of records){if(r.type==='LINE')entities.push(lineEntity(r));else if(r.type==='LWPOLYLINE')entities.push(lwpolylineEntity(r))}
+  const ps=pairs(text),unitsCode=headerUnits(ps),records=entityRecords(entitiesPairs(ps)),parsed=supportedEntities(records),entities=parsed.entities;
   const layers=[...new Set(entities.map(e=>e.layer))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
-  return{unitsCode,unitsLabel:UNIT_LABEL[unitsCode]||`código ${unitsCode}`,unitScale:UNIT_TO_M[unitsCode]??1,layers,entities,stats:{records:records.length,supportedEntities:entities.length,segments:entities.reduce((s,e)=>s+e.segments.length,0),unsupported:records.filter(r=>!['LINE','LWPOLYLINE'].includes(r.type)).reduce((m,r)=>(m[r.type]=(m[r.type]||0)+1,m),{})}};
+  const unsupported=records.reduce((m,r,i)=>{if(['LINE','LWPOLYLINE','POLYLINE'].includes(r.type)||parsed.consumed.has(i))return m;m[r.type]=(m[r.type]||0)+1;return m},{});
+  return{unitsCode,unitsLabel:UNIT_LABEL[unitsCode]||`código ${unitsCode}`,unitScale:UNIT_TO_M[unitsCode]??1,layers,entities,stats:{records:records.length,supportedEntities:entities.length,segments:entities.reduce((s,e)=>s+e.segments.length,0),unsupported}};
 }
 
 export function dxfToPlan(text,{layers=null,manualScale=1,tolerance=.01,shiftToOrigin=true}={}){
   const inspected=inspectDxfPlan(text),selected=Array.isArray(layers)&&layers.length?new Set(layers):null,scale=(inspected.unitScale||1)*Math.max(1e-12,finite(manualScale)||1),tol=Math.max(1e-8,finite(tolerance)||.01),segments=[];
   for(const e of inspected.entities){if(selected&&!selected.has(e.layer))continue;for(const s of e.segments){const x1=s.x1*scale,y1=s.y1*scale,x2=s.x2*scale,y2=s.y2*scale;if(Math.hypot(x2-x1,y2-y1)>tol*1e-3)segments.push({layer:e.layer,x1,y1,x2,y2})}}
-  if(!segments.length)throw new Error('DXF: nenhuma LINE/LWPOLYLINE válida nas layers selecionadas.');
+  if(!segments.length)throw new Error('DXF: nenhuma LINE/LWPOLYLINE/POLYLINE válida nas layers selecionadas.');
   let minX=Math.min(...segments.flatMap(s=>[s.x1,s.x2])),minY=Math.min(...segments.flatMap(s=>[s.y1,s.y2]));if(!shiftToOrigin){minX=0;minY=0}
   const nodes=[],edges=[],buckets=new Map();
   const key=(x,y)=>`${Math.round(x/tol)}:${Math.round(y/tol)}`;

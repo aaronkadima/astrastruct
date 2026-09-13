@@ -6,6 +6,7 @@ import type { Selection } from './ModelingCanvas';
 const clone=(v:any)=>JSON.parse(JSON.stringify(v));
 const num=(v:any,f=0)=>Number.isFinite(Number(v))?Number(v):f;
 const positive=(v:any,f=0)=>Math.max(0,num(v,f));
+const DOFS=['ux','uy','uz','rx','ry','rz'] as const;
 
 export function SpatialInspectorPanel({project,selection,onCommit}:{project:any;selection:Selection;onCommit:(p:any)=>void}){
   const activeCase=project.settings?.activeLoadCaseId||project.loadCases?.[0]?.id;
@@ -18,7 +19,9 @@ export function SpatialInspectorPanel({project,selection,onCommit}:{project:any;
       const support=project.supports.find((s:any)=>s.nodeId===entity.id)||{nodeId:entity.id,ux:false,uy:false,uz:false,rx:false,ry:false,rz:false};
       const load=project.loads.find((l:any)=>l.caseId===activeCase&&l.nodeId===entity.id)||{id:null,caseId:activeCase,nodeId:entity.id,fx:0,fy:0,fz:0,mx:0,my:0,mz:0};
       const nodalMass=(project.nodalMasses||[]).find((m:any)=>m.nodeId===entity.id)||{id:null,nodeId:entity.id,mx:0,my:0,mz:0,mrx:0,mry:0,mrz:0};
-      setDraft({x:entity.x,y:entity.y,z:entity.z||0,support:clone(support),load:clone(load),nodalMass:clone(nodalMass)});
+      const spring=(project.nodeSprings||[]).find((s:any)=>s.nodeId===entity.id)||{id:null,nodeId:entity.id,kx:0,ky:0,kz:0,krx:0,kry:0,krz:0};
+      const settlement=(project.settlements||[]).find((s:any)=>s.caseId===activeCase&&s.nodeId===entity.id)||{id:null,caseId:activeCase,nodeId:entity.id,ux:0,uy:0,uz:0,rx:0,ry:0,rz:0};
+      setDraft({x:entity.x,y:entity.y,z:entity.z||0,support:clone(support),load:clone(load),nodalMass:clone(nodalMass),spring:clone({...spring,krz:spring.krz??spring.kr??0}),settlement:clone(settlement)});
       return;
     }
     const uniform=(project.elementLoads||[]).find((l:any)=>l.caseId===activeCase&&l.elementId===entity.id&&l.kind==='uniform')||{id:null,caseId:activeCase,elementId:entity.id,kind:'uniform',qx:0,qy:0,qz:0};
@@ -43,10 +46,16 @@ export function SpatialInspectorPanel({project,selection,onCommit}:{project:any;
     n.x=num(draft.x);n.y=num(draft.y);n.z=num(draft.z);
     p.supports=(p.supports||[]).filter((s:any)=>s.nodeId!==entity.id);
     const s={...draft.support,nodeId:entity.id};
-    if(['ux','uy','uz','rx','ry','rz'].some(k=>!!s[k]))p.supports.push(s);
+    if(DOFS.some(k=>!!s[k]))p.supports.push(s);
     p.loads=(p.loads||[]).filter((l:any)=>!(l.caseId===activeCase&&l.nodeId===entity.id));
     const load={...draft.load,id:draft.load.id||uid('L3D'),caseId:activeCase,nodeId:entity.id,fx:num(draft.load.fx),fy:num(draft.load.fy),fz:num(draft.load.fz),mx:num(draft.load.mx),my:num(draft.load.my),mz:num(draft.load.mz)};
     if(['fx','fy','fz','mx','my','mz'].some(k=>Math.abs(num(load[k]))>1e-12))p.loads.push(load);
+    p.nodeSprings=(p.nodeSprings||[]).filter((x:any)=>x.nodeId!==entity.id);
+    const krz=positive(draft.spring?.krz??draft.spring?.kr),spring={...draft.spring,id:draft.spring?.id||uid('SPR3D'),nodeId:entity.id,kx:positive(draft.spring?.kx),ky:positive(draft.spring?.ky),kz:positive(draft.spring?.kz),krx:positive(draft.spring?.krx),kry:positive(draft.spring?.kry),krz,kr:krz};
+    if(['kx','ky','kz','krx','kry','krz'].some(k=>spring[k]>0))p.nodeSprings.push(spring);
+    p.settlements=(p.settlements||[]).filter((x:any)=>!(x.caseId===activeCase&&x.nodeId===entity.id));
+    const settlement={...draft.settlement,id:draft.settlement?.id||uid('SET3D'),caseId:activeCase,nodeId:entity.id};for(const k of DOFS)settlement[k]=s[k]?num(draft.settlement?.[k]):0;
+    if(DOFS.some(k=>Math.abs(settlement[k])>1e-12))p.settlements.push(settlement);
     p.nodalMasses=(p.nodalMasses||[]).filter((m:any)=>m.nodeId!==entity.id);
     const mass={...draft.nodalMass,id:draft.nodalMass?.id||uid('MASS3D'),nodeId:entity.id,mx:positive(draft.nodalMass?.mx),my:positive(draft.nodalMass?.my),mz:positive(draft.nodalMass?.mz),mrx:positive(draft.nodalMass?.mrx),mry:positive(draft.nodalMass?.mry),mrz:positive(draft.nodalMass?.mrz??draft.nodalMass?.mr)};
     if(['mx','my','mz','mrx','mry','mrz'].some(k=>mass[k]>0))p.nodalMasses.push(mass);
@@ -99,13 +108,18 @@ export function SpatialInspectorPanel({project,selection,onCommit}:{project:any;
     <div className="inspector-title"><div><b>{entity.id}</b><small>Nó 3D · 6 DOFs</small></div><button className="danger small" onClick={remove}>Excluir</button></div>
     <div className="inspector-grid spatial-three"><label>X [m]<input data-testid="spatial-node-x" type="number" step=".05" value={draft.x} onChange={e=>setDraft({...draft,x:e.target.value})}/></label><label>Y [m]<input data-testid="spatial-node-y" type="number" step=".05" value={draft.y} onChange={e=>setDraft({...draft,y:e.target.value})}/></label><label>Z [m]<input data-testid="spatial-node-z" type="number" step=".05" value={draft.z} onChange={e=>setDraft({...draft,z:e.target.value})}/></label></div>
     <h4>Apoio / restrições espaciais</h4>
-    <div className="check-grid spatial-six">{(['ux','uy','uz','rx','ry','rz'] as const).map(k=><label key={k}><input data-testid={`spatial-support-${k}`} type="checkbox" checked={!!draft.support[k]} onChange={e=>setDraft({...draft,support:{...draft.support,[k]:e.target.checked}})}/> {k.toUpperCase()}</label>)}</div>
+    <div className="check-grid spatial-six">{DOFS.map(k=><label key={k}><input data-testid={`spatial-support-${k}`} type="checkbox" checked={!!draft.support[k]} onChange={e=>setDraft({...draft,support:{...draft.support,[k]:e.target.checked},settlement:e.target.checked?draft.settlement:{...draft.settlement,[k]:0}})}/> {k.toUpperCase()}</label>)}</div>
+    <h4>Recalque / movimento imposto · {activeCase}</h4>
+    <div className="inspector-grid spatial-three">{DOFS.map(k=><label key={k}>{k.toUpperCase()} {k[0]==='u'?'[m]':'[rad]'}<input data-testid={`spatial-settlement-${k}`} type="number" step={k[0]==='u'?'0.001':'0.0001'} disabled={!draft.support[k]} value={draft.settlement?.[k]??0} onChange={e=>setDraft({...draft,settlement:{...draft.settlement,[k]:e.target.value}})}/></label>)}</div>
+    <div className="panel-note">Movimentos impostos são associados ao caso ativo e só podem atuar em DOFs restritos. No co‑rotacional 3D são aplicados cinematicamente, não como forças equivalentes.</div>
+    <h4>Molas nodais globais</h4>
+    <div className="inspector-grid spatial-three"><label>kx [kN/m]<input data-testid="spatial-spring-kx" type="number" min="0" value={draft.spring?.kx??0} onChange={e=>setDraft({...draft,spring:{...draft.spring,kx:e.target.value}})}/></label><label>ky [kN/m]<input data-testid="spatial-spring-ky" type="number" min="0" value={draft.spring?.ky??0} onChange={e=>setDraft({...draft,spring:{...draft.spring,ky:e.target.value}})}/></label><label>kz [kN/m]<input data-testid="spatial-spring-kz" type="number" min="0" value={draft.spring?.kz??0} onChange={e=>setDraft({...draft,spring:{...draft.spring,kz:e.target.value}})}/></label><label>krx [kN·m/rad]<input data-testid="spatial-spring-krx" type="number" min="0" value={draft.spring?.krx??0} onChange={e=>setDraft({...draft,spring:{...draft.spring,krx:e.target.value}})}/></label><label>kry [kN·m/rad]<input data-testid="spatial-spring-kry" type="number" min="0" value={draft.spring?.kry??0} onChange={e=>setDraft({...draft,spring:{...draft.spring,kry:e.target.value}})}/></label><label>krz [kN·m/rad]<input data-testid="spatial-spring-krz" type="number" min="0" value={draft.spring?.krz??draft.spring?.kr??0} onChange={e=>setDraft({...draft,spring:{...draft.spring,krz:e.target.value}})}/></label></div>
     <h4>Carga nodal · {activeCase}</h4>
     <div className="inspector-grid spatial-three"><label>Fx [kN]<input type="number" value={draft.load.fx??0} onChange={e=>setDraft({...draft,load:{...draft.load,fx:e.target.value}})}/></label><label>Fy [kN]<input type="number" value={draft.load.fy??0} onChange={e=>setDraft({...draft,load:{...draft.load,fy:e.target.value}})}/></label><label>Fz [kN]<input data-testid="spatial-load-fz" type="number" value={draft.load.fz??0} onChange={e=>setDraft({...draft,load:{...draft.load,fz:e.target.value}})}/></label><label>Mx [kN·m]<input type="number" value={draft.load.mx??0} onChange={e=>setDraft({...draft,load:{...draft.load,mx:e.target.value}})}/></label><label>My [kN·m]<input type="number" value={draft.load.my??0} onChange={e=>setDraft({...draft,load:{...draft.load,my:e.target.value}})}/></label><label>Mz [kN·m]<input type="number" value={draft.load.mz??0} onChange={e=>setDraft({...draft,load:{...draft.load,mz:e.target.value}})}/></label></div>
     <h4>Massa nodal adicional</h4>
     <div className="inspector-grid spatial-three"><label>mx [t]<input type="number" min="0" value={draft.nodalMass?.mx??0} onChange={e=>setDraft({...draft,nodalMass:{...draft.nodalMass,mx:e.target.value}})}/></label><label>my [t]<input type="number" min="0" value={draft.nodalMass?.my??0} onChange={e=>setDraft({...draft,nodalMass:{...draft.nodalMass,my:e.target.value}})}/></label><label>mz [t]<input type="number" min="0" value={draft.nodalMass?.mz??0} onChange={e=>setDraft({...draft,nodalMass:{...draft.nodalMass,mz:e.target.value}})}/></label><label>Jx [t·m²]<input type="number" min="0" value={draft.nodalMass?.mrx??0} onChange={e=>setDraft({...draft,nodalMass:{...draft.nodalMass,mrx:e.target.value}})}/></label><label>Jy [t·m²]<input type="number" min="0" value={draft.nodalMass?.mry??0} onChange={e=>setDraft({...draft,nodalMass:{...draft.nodalMass,mry:e.target.value}})}/></label><label>Jz [t·m²]<input type="number" min="0" value={draft.nodalMass?.mrz??draft.nodalMass?.mr??0} onChange={e=>setDraft({...draft,nodalMass:{...draft.nodalMass,mrz:e.target.value}})}/></label></div>
     <button className="inspector-apply" data-testid="spatial-node-apply" onClick={applyNode}>Aplicar alterações</button>
-    <p className="hint">O kernel espacial usa Ux, Uy, Uz, Rx, Ry e Rz por nó. Massas translacionais e rotacionais são consideradas na análise modal 3D.</p>
+    <p className="hint">O kernel espacial usa Ux, Uy, Uz, Rx, Ry e Rz por nó. Molas, movimentos impostos e massas adicionais usam os mesmos eixos globais.</p>
   </div>;
 
   const isFrame=entity.type==='frame3d';

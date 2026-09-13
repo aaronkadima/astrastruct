@@ -5,7 +5,7 @@ import { dxfToPlan, inspectDxfPlan } from '../../web/src/core/dxfPlan.js';
 import { createPlanBuilding3D } from '../../web/src/core/exampleModels.js';
 
 const STORAGE_KEY='astrastruct.project';
-const $=<T extends HTMLElement=HTMLElement>(sel:string,root:ParentNode=document)=>root.querySelector(sel) as T|null;
+const $=<T extends Element=HTMLElement>(sel:string,root:ParentNode=document)=>root.querySelector(sel) as T|null;
 const esc=(v:any)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]||ch));
 
 type Parsed={planNodes:any[];planEdges:any[];layers:string[];unitsCode:number;unitsLabel:string;unitScale:number;manualScale:number;tolerance:number;bounds:any;stats:any};

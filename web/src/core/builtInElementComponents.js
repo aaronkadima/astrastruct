@@ -6,6 +6,7 @@ import {prepareFrameElement,recoverFrameEndForces} from '../solver/frameElement.
 import {registerAdvancedElementComponents} from '../elements/registry.js';
 import {registerNonlinearRCComponents} from '../rc/registry.js';
 import {registerAdvancedShellContactComponents} from '../shellContact/registry.js';
+import {registerConnectionComponents} from '../connections/registry.js';
 
 function byId(rows,id,label,elementId){const row=(rows||[]).find(item=>item.id===id);if(!row)throw new Error(`ElementComponent ${elementId}: ${label} ${id} não encontrado.`);return row}
 function geometry2d(project,element){
@@ -33,7 +34,7 @@ export function createTruss2DComponent({element,project}){
     id:element.id,type:element.type,dofs:elementDofs2d(element,['ux','uy']),metadata:{dimension:'2d',family:'truss',linear:true},
     evaluate:({u})=>{
       const internalForce=mul(tangent,u),de=-c*u[0]-s*u[1]+c*u[2]+s*u[3],N=E*A*(de/g.L-thermalStrain);
-      return{tangent,residual:subtract(internalForce,externalForce),internalForce,externalForce,outputs:{N,thermalStrain,L:g.L,c,s}};
+      return{tangent,residual:subtract(internalForce,externalForce),internalForce,externalForce,outputs:{N,thermalStrain,L:g.L,c:g.c,s:g.s}};
     }
   });
 }
@@ -54,5 +55,5 @@ export function createFrame2DComponent({element,project}){
 export function registerBuiltInElementComponents(){
   registerElementComponentFactory('truss2d',createTruss2DComponent);
   registerElementComponentFactory('frame2d',createFrame2DComponent);
-  return['truss2d','frame2d',...registerAdvancedElementComponents(),...registerNonlinearRCComponents(),...registerAdvancedShellContactComponents()];
+  return['truss2d','frame2d',...registerAdvancedElementComponents(),...registerNonlinearRCComponents(),...registerAdvancedShellContactComponents(),...registerConnectionComponents()];
 }

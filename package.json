@@ -1,6 +1,6 @@
 {
   "name": "astrastruct",
-  "version": "0.30.9",
+  "version": "0.31.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,20 +11,7 @@
     "test:e2e": "playwright test",
     "check": "node scripts/check.mjs"
   },
-  "dependencies": {
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.55.0",
-    "@types/node": "^24.3.0",
-    "@types/react": "^19.1.12",
-    "@types/react-dom": "^19.1.9",
-    "@vitejs/plugin-react": "^5.0.2",
-    "typescript": "^5.9.2",
-    "vite": "^7.1.5"
-  },
-  "engines": {
-    "node": ">=24"
-  }
+  "dependencies": {"react":"^19.1.1","react-dom":"^19.1.1"},
+  "devDependencies": {"@playwright/test":"^1.55.0","@types/node":"^24.3.0","@types/react":"^19.1.12","@types/react-dom":"^19.1.9","@vitejs/plugin-react":"^5.0.2","typescript":"^5.9.2","vite":"^7.1.5"},
+  "engines": {"node":">=24"}
 }

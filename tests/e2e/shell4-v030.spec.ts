@@ -54,6 +54,15 @@ test('Model Lab refines shell4 into a conforming 2x2 mesh and preserves pressure
   await expect.poll(async()=>page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('astrastruct.project')||'{}');return{nodes:p.nodes?.length,shells:(p.elements||[]).filter((e:any)=>e.type==='shell4').length,loads:(p.elementLoads||[]).filter((l:any)=>l.kind==='surface').length,pressures:[...new Set((p.elementLoads||[]).filter((l:any)=>l.kind==='surface').map((l:any)=>l.pressure))],created:p.meta?.lastShellRefinementReport?.createdNodes,areaError:p.meta?.lastShellRefinementReport?.areaRelativeError}})).toMatchObject({nodes:9,shells:4,loads:4,pressures:[-10],created:5});
 });
 
+test('Model Lab runs and applies a shell4 mesh convergence study',async({page},testInfo)=>{
+  test.skip(testInfo.project.name!=='desktop-chromium','shell4 convergence UI smoke');
+  const launch={...project,id:'shell4-convergence-ui',name:'Shell convergence UI',levels:[{id:'L0',name:'Pavimento teste',elevation:0,index:0}],nodes:project.nodes.map(n=>({...n,levelId:'L0'})),elements:project.elements.map(e=>({...e,levelId:'L0'}))};
+  await loadProject(page,launch);await page.getByTestId('model-lab-launch').click();await page.getByTestId('shell4-lab-tab').click();const controls=page.getByTestId('shell4-convergence-controls');await expect(controls).toBeVisible();await controls.locator('[data-conv-max]').fill('2');await controls.locator('[data-conv-tol]').fill('0.1');await page.getByTestId('run-shell4-convergence').click();
+  await expect(controls).toContainText('1×1');await expect(controls).toContainText('2×2');const apply=page.getByTestId('apply-shell4-convergence');await expect(apply).toBeEnabled();
+  await Promise.all([page.waitForEvent('framenavigated'),apply.click()]);await expect(page.getByTestId('spatial-canvas-3d')).toHaveAttribute('data-shell-count','4');
+  await expect.poll(async()=>page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('astrastruct.project')||'{}');return{shells:(p.elements||[]).filter((e:any)=>e.type==='shell4').length,steps:p.meta?.lastShellConvergenceReport?.steps?.length,sampling:p.meta?.lastShellConvergenceReport?.responseSampling}})).toEqual({shells:4,steps:2,sampling:'gauss-2x2'});
+});
+
 test('Model Lab auto-fills a closed quadrilateral bay with shell4',async({page},testInfo)=>{
   test.skip(testInfo.project.name!=='desktop-chromium','automatic shell panel fill smoke');
   const frame=(id:string,n1:string,n2:string)=>({id,type:'frame3d',n1,n2,materialId:'C',sectionId:'SEC',A:.15,Iy:.004,Iz:.004,J:.002});

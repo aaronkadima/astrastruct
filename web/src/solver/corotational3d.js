@@ -116,9 +116,8 @@ function validateGlobalScope(project){
   const unsupported=(project.elementLoads||[]).find(l=>!['thermal','followerEnd'].includes(l.kind));if(unsupported)throw new Error(`Co-rotacional 3D v0.30 experimental: carga de barra '${unsupported.kind||'desconhecida'}' deve ser preparada como carga morta equivalente antes da solução.`);
   for(const load of(project.elementLoads||[]).filter(l=>l.kind==='followerEnd'))validateFollowerLoad(project,load);
   for(const spring of project.nodeSprings||[])springStiffnesses(spring);
-  if((project.settlements||[]).length)throw new Error('Co-rotacional 3D v0.30 experimental: recalques ainda não são suportados.');
+  if((project.settlements||[]).length)throw new Error('Co-rotacional 3D: recalques brutos devem ser resolvidos pelo Scenario Engine antes da solução.');
   for(const e of project.elements||[])if(e.releases&&Object.values(e.releases).some(Boolean))throw new Error(`Co-rotacional 3D v0.30 experimental: releases ainda não suportados em ${e.id}.`);
-  for(const s of project.supports||[])for(const key of ['ux','uy','uz','rx','ry','rz'])if(s[key]&&Math.abs(Number(s[`${key}Value`])||0)>1e-12)throw new Error('Co-rotacional 3D v0.30 experimental: apoios devem possuir deslocamentos prescritos nulos.');
 }
 
 function modelAssembly(project,u){
@@ -145,7 +144,8 @@ export function followerExternalVector3D(project,u,mapOverride=null){
   return F;
 }
 function externalVector(project,u,map,fixed=null){return addVectors(fixed||fixedExternalVector(project,map),followerExternalVector3D(project,u,map))}
-function prescribedDofs(project,map){const p=new Map(),keys=['ux','uy','uz','rx','ry','rz'];for(const s of project.supports||[]){const i=map.get(s.nodeId);if(i==null)continue;keys.forEach((k,d)=>{if(s[k])p.set(6*i+d,0)})}return p}
+function prescribedDofs(project,map){const p=new Map(),keys=['ux','uy','uz','rx','ry','rz'];for(const s of project.supports||[]){const i=map.get(s.nodeId);if(i==null)continue;keys.forEach((k,d)=>{if(s[k]){const value=Number(s[`${k}Value`])||0;p.set(6*i+d,value)}})}return p}
+function zeroCorrectionConstraints(prescribed){return new Map([...prescribed.keys()].map(d=>[d,0]))}
 function characteristicLength(project){return Math.max(1,...(project.elements||[]).map(e=>{const a=(project.nodes||[]).find(n=>n.id===e.n1),b=(project.nodes||[]).find(n=>n.id===e.n2);return a&&b?spatialAxes(a,b,e).L:1}))}
 function tangentAsymmetry(K,free){let maxA=0,maxD=0;for(const i of free)for(const j of free){maxA=Math.max(maxA,Math.abs(K[i][j]),Math.abs(K[j][i]));maxD=Math.max(maxD,Math.abs(K[i][j]-K[j][i]))}return maxD/Math.max(EPS,maxA)}
 function scaledThermalProject(project,factor){
@@ -187,29 +187,27 @@ export function numericalFollower3DTangent(project,u,{fdStep=2e-7,map=null}={}){
 
 /**
  * Experimental global elastic co-rotational frame3d solver (v0.30 foundation).
- * Mechanical loads, thermal initial states and local follower forces advance with
- * the same load factor. Follower actions contribute the non-conservative external
- * tangent so Newton uses K_eff = K_int - lambda K_ext.
+ * Mechanical/thermal loads and prescribed support motion advance with the same
+ * load factor. Newton corrections are constrained to zero at prescribed DOFs.
  */
 export function solveFrameCorotational3D(project,options={}){
-  validateGlobalScope(project);const nodes=project.nodes||[],nd=nodes.length*6,map=new Map(nodes.map((n,i)=>[n.id,i])),prescribed=prescribedDofs(project,map),free=Array.from({length:nd},(_,i)=>i).filter(i=>!prescribed.has(i)),Ffixed=fixedExternalVector(project,map),hasFollower=(project.elementLoads||[]).some(l=>l.kind==='followerEnd');
-  if(!free.length)throw new Error('Co-rotacional 3D: modelo sem graus de liberdade livres.');
+  validateGlobalScope(project);const nodes=project.nodes||[],nd=nodes.length*6,map=new Map(nodes.map((n,i)=>[n.id,i])),prescribed=prescribedDofs(project,map),correctionConstraints=zeroCorrectionConstraints(prescribed),free=Array.from({length:nd},(_,i)=>i).filter(i=>!prescribed.has(i)),Ffixed=fixedExternalVector(project,map),hasFollower=(project.elementLoads||[]).some(l=>l.kind==='followerEnd');
   const steps=Math.max(1,Math.min(100,Math.round(Number(options.steps??project.settings?.nonlinearSteps??10)))),maxIterations=Math.max(3,Math.min(80,Math.round(Number(options.maxIterations??project.settings?.nonlinearMaxIterations??30)))),tolerance=Math.max(1e-10,Number(options.tolerance??project.settings?.nonlinearTolerance??1e-7)),fdStep=Math.max(1e-9,Math.min(1e-4,Number(options.fdStep??2e-7))),lineSearch=options.lineSearch??true,tangentScheme=options.tangentScheme==='forward'?'forward':'central';
   let u=Array(nd).fill(0),last=null;const history=[];
   for(let step=1;step<=steps;step++){
-    const lambda=step/steps,stepProject=scaledThermalProject(project,lambda);let converged=false,residualNorm=Infinity,iterations=0,lastAsymmetry=null;
+    const lambda=step/steps,stepProject=scaledThermalProject(project,lambda);for(const[d,value]of prescribed)u[d]=lambda*value;let converged=false,residualNorm=Infinity,iterations=0,lastAsymmetry=null;
     for(let iteration=1;iteration<=maxIterations;iteration++){
       iterations=iteration;const assembled=modelAssembly(stepProject,u),Fcurrent=externalVector(stepProject,u,map,Ffixed),target=Fcurrent.map(v=>lambda*v),residual=target.map((v,i)=>v-assembled.Fint[i]);residualNorm=maxFree(residual,free);const scaleR=Math.max(1,maxFree(target,free),maxFree(assembled.Fint,free));
       if(residualNorm<=tolerance*scaleR){converged=true;last=assembled;break}
-      const Kint=numericalCorotational3DTangent(stepProject,u,{fdStep,scheme:tangentScheme}),Kext=hasFollower?numericalFollower3DTangent(stepProject,u,{fdStep,map}):zeros(nd),K=subtractMatrices(Kint,Kext,lambda);lastAsymmetry=tangentAsymmetry(K,free);const du=solveConstrained(K,residual,prescribed).u;if(du.some(v=>!Number.isFinite(v)))throw new Error(`Co-rotacional 3D: incremento não finito no passo ${step}.`);
+      const Kint=numericalCorotational3DTangent(stepProject,u,{fdStep,scheme:tangentScheme}),Kext=hasFollower?numericalFollower3DTangent(stepProject,u,{fdStep,map}):zeros(nd),K=subtractMatrices(Kint,Kext,lambda);lastAsymmetry=tangentAsymmetry(K,free);const du=solveConstrained(K,residual,correctionConstraints).u;if(du.some(v=>!Number.isFinite(v)))throw new Error(`Co-rotacional 3D: incremento não finito no passo ${step}.`);
       let alpha=1,best=u.map((v,i)=>v+du[i]),bestNorm=Infinity;
       if(lineSearch){for(let cut=0;cut<8;cut++){const trial=u.map((v,i)=>v+alpha*du[i]),fi=modelAssembly(stepProject,trial).Fint,ft=externalVector(stepProject,trial,map,Ffixed).map(v=>lambda*v),rr=ft.map((v,i)=>v-fi[i]),n=maxFree(rr,free);if(n<bestNorm){bestNorm=n;best=trial}if(n<residualNorm)break;alpha*=.5}}
-      u=best;if(Math.max(...u.map(Math.abs))>1e4)throw new Error('Co-rotacional 3D divergiu: deslocamentos/rotações não físicos.');
+      u=best;for(const[d,value]of prescribed)u[d]=lambda*value;if(Math.max(...u.map(Math.abs))>1e4)throw new Error('Co-rotacional 3D divergiu: deslocamentos/rotações não físicos.');
     }
     if(!converged){const a=modelAssembly(stepProject,u),target=externalVector(stepProject,u,map,Ffixed).map(v=>lambda*v),r=target.map((v,i)=>v-a.Fint[i]);residualNorm=maxFree(r,free);if(residualNorm<=tolerance*Math.max(1,maxFree(target,free),maxFree(a.Fint,free))){converged=true;last=a}}
     if(!converged)throw new Error(`Co-rotacional 3D não convergiu no passo ${step}/${steps} após ${maxIterations} iterações (‖r‖∞=${residualNorm.toExponential(3)}).`);
-    history.push({step,lambda,iterations,residualNorm,tangentAsymmetry:lastAsymmetry,thermalLoadFactor:lambda,followerLoadFactor:hasFollower?lambda:0});
+    history.push({step,lambda,iterations,residualNorm,tangentAsymmetry:lastAsymmetry,thermalLoadFactor:lambda,followerLoadFactor:hasFollower?lambda:0,prescribedDisplacementFactor:prescribed.size?lambda:0});
   }
   last=last||modelAssembly(project,u);const Ffinal=externalVector(project,u,map,Ffixed),reactions=last.Fint.map((v,i)=>v-Ffinal[i]),displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[6*i],uy:u[6*i+1],uz:u[6*i+2],rx:u[6*i+3],ry:u[6*i+4],rz:u[6*i+5]})),springForces=recoverNodalSpringForces(project,u,map);
-  return{type:'frame3d-corotational',dimension:'3d',analysisType:'corotational',solverVersion:'0.30.0-exp',dofs:nd,activeDofs:free.length,displacements,reactions:nodes.map((n,i)=>({nodeId:n.id,fx:reactions[6*i],fy:reactions[6*i+1],fz:reactions[6*i+2],mx:reactions[6*i+3],my:reactions[6*i+4],mz:reactions[6*i+5]})),springForces,elementForces:last.responses,nonlinear:{formulation:'spatial co-rotational Euler-Bernoulli frame; element-wise numerical internal/external Jacobians',tangentAssembly:'element-local-finite-difference',steps,maxIterations,tolerance,fdStep,lineSearch,tangentScheme,thermalProportionalLoading:true,nonconservativeFollower:hasFollower,followerCount:(project.elementLoads||[]).filter(l=>l.kind==='followerEnd').length,springCount:(project.nodeSprings||[]).length,history,converged:true}};
+  return{type:'frame3d-corotational',dimension:'3d',analysisType:'corotational',solverVersion:'0.30.0-exp',dofs:nd,activeDofs:free.length,displacements,reactions:nodes.map((n,i)=>({nodeId:n.id,fx:reactions[6*i],fy:reactions[6*i+1],fz:reactions[6*i+2],mx:reactions[6*i+3],my:reactions[6*i+4],mz:reactions[6*i+5]})),springForces,elementForces:last.responses,nonlinear:{formulation:'spatial co-rotational Euler-Bernoulli frame; element-wise numerical internal/external Jacobians',tangentAssembly:'element-local-finite-difference',steps,maxIterations,tolerance,fdStep,lineSearch,tangentScheme,thermalProportionalLoading:true,nonconservativeFollower:hasFollower,followerCount:(project.elementLoads||[]).filter(l=>l.kind==='followerEnd').length,springCount:(project.nodeSprings||[]).length,prescribedDofCount:prescribed.size,prescribedLoading:prescribed.size?'proportional':null,history,converged:true}};
 }

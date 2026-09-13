@@ -1,5 +1,6 @@
-import { zeros, solveConstrained, addSub } from './matrix.js';
+import { zeros, addSub } from './matrix.js';
 import { condenseEndConnections3D, recoverEndConnections3D } from './endConnections3d.js';
+import { solveRigidDiaphragmSystem3D } from './diaphragm3d.js';
 
 const EPS=1e-12;
 const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
@@ -87,10 +88,10 @@ export function solveSpatial3D(project){
     else{const prepared=prepareTruss3D(project,e,a,b);addSub(K,prepared.kg,idx);cache.push({e,idx,prepared})}
   }
   for(const l of project.loads||[]){const i=map.get(l.nodeId);if(i==null)continue;const values=[l.fx,l.fy,l.fz,l.mx,l.my,l.mz];for(let k=0;k<6;k++)F[6*i+k]+=Number(values[k])||0}
-  const prescribed=prescribedSupportDofs(project,map,frameNodes),{u,R,free}=solveConstrained(K,F,prescribed),displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[6*i],uy:u[6*i+1],uz:u[6*i+2],rx:u[6*i+3],ry:u[6*i+4],rz:u[6*i+5]})),reactions=nodes.map((n,i)=>({nodeId:n.id,fx:R[6*i],fy:R[6*i+1],fz:R[6*i+2],mx:R[6*i+3],my:R[6*i+4],mz:R[6*i+5]}));
+  const prescribed=prescribedSupportDofs(project,map,frameNodes),solved=solveRigidDiaphragmSystem3D(K,F,prescribed,project,nodes),{u,R,free,diaphragms}=solved,displacements=nodes.map((n,i)=>({nodeId:n.id,ux:u[6*i],uy:u[6*i+1],uz:u[6*i+2],rx:u[6*i+3],ry:u[6*i+4],rz:u[6*i+5]})),reactions=nodes.map((n,i)=>({nodeId:n.id,fx:R[6*i],fy:R[6*i+1],fz:R[6*i+2],mx:R[6*i+3],my:R[6*i+4],mz:R[6*i+5]}));
   const elementForces=cache.map(({e,idx,prepared})=>{
     const ug=idx.map(d=>u[d]);if(e.type==='truss3d'){const du=[ug[6]-ug[0],ug[7]-ug[1],ug[8]-ug[2]],N=prepared.properties.E*prepared.properties.A/prepared.axes.L*dot(prepared.axes.ex,du);return {elementId:e.id,type:'truss3d',axialForce:N,N1:-N,N2:N,localAxes:prepared.axes}}
     const {ul,q,connectionRotations,elementLocalDisplacements}=recoverFrame(prepared,ug);return {elementId:e.id,type:'frame3d',N1:q[0],Vy1:q[1],Vz1:q[2],T1:q[3],My1:q[4],Mz1:q[5],N2:q[6],Vy2:q[7],Vz2:q[8],T2:q[9],My2:q[10],Mz2:q[11],localDisplacements:ul,elementLocalDisplacements,connectionRotations,localAxes:prepared.axes,properties:prepared.properties,loadSummary:prepared.loadSummary};
   });
-  const types=new Set(elements.map(e=>e.type)),type=types.size===1?[...types][0]:'mixed3d';return {type,dimension:'3d',solverVersion:'0.30.0',dofs:nd,activeDofs:free.length,displacements,reactions,elementForces};
+  const types=new Set(elements.map(e=>e.type)),type=types.size===1?[...types][0]:'mixed3d';return {type,dimension:'3d',solverVersion:'0.30.0',dofs:nd,reducedDofs:solved.reducedDofs??nd,activeDofs:free.length,displacements,reactions,elementForces,diaphragms};
 }

@@ -1,5 +1,6 @@
 import { mul } from './matrix.js';
 import { condenseEndConnections, recoverEndConnections, endRotationalStiffness } from './endConnections.js';
+import { prestressInitialState2D } from '../loadStage/prestress.js';
 
 export function transpose(A) { return A[0].map((_, j) => A.map(r => r[j])); }
 export function mm(A, B) { return A.map(r => B[0].map((_, j) => r.reduce((s, v, k) => s + v * B[k][j], 0))); }
@@ -53,7 +54,7 @@ export function prepareFrameElement({E,A,I,L,c,s,loads=[],releases={},rotational
   if(!(L>1e-12))throw new Error('Comprimento do elemento deve ser positivo.');
   const kl=frameLocalStiffness(E,A,I,L),tr=frameTransform(c,s);
   let pOriginal=Array(6).fill(0);
-  const loadSummary={uniform:{qx:0,qy:0},points:[],thermal:{dT:0,dTGradient:0,eps0:0,kappa0:0}};
+  const loadSummary={uniform:{qx:0,qy:0},points:[],thermal:{dT:0,dTGradient:0,eps0:0,kappa0:0},prestress:[]};
 
   for(const load of loads){
     if(load.kind==='uniform'){
@@ -76,6 +77,10 @@ export function prepareFrameElement({E,A,I,L,c,s,loads=[],releases={},rotational
       pOriginal=addVectors(pOriginal,th.vector);
       loadSummary.thermal.dT+=dT;loadSummary.thermal.dTGradient+=dTGradient;
       loadSummary.thermal.eps0+=th.eps0;loadSummary.thermal.kappa0+=th.kappa0;
+    } else if(load.kind==='prestress'){
+      const ps=prestressInitialState2D({force:load.force,eccentricity:load.eccentricity??load.eccentricityY??0,effectiveFactor:load.effectiveFactor??1,E,A,I});
+      pOriginal=addVectors(pOriginal,ps.equivalentLocal);
+      loadSummary.prestress.push({id:load.id||null,force:ps.effectiveForce,eccentricity:ps.eccentricity,eps0:ps.eps0,kappa0:ps.kappa0,N0:ps.N0,M0:ps.M0});
     }
   }
 

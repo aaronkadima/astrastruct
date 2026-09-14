@@ -27,6 +27,9 @@ export {
   IFC_MATERIAL_STRENGTH_CONTRACT,IFC_MATERIAL_STRENGTH_VERSION,extractIfcStrengthMaterialProperties
 } from './ifcStrength.js';
 export {
+  IFC_LOAD_EXCHANGE_CONTRACT,IFC_LOAD_EXCHANGE_VERSION,createIfcStructuralLoadMapping,validateIfcStructuralLoadMapping,summarizeIfcStructuralLoadMapping
+} from './ifcLoads.js';
+export {
   IFC_STEP_OWNER_CONTRACT,IFC_STEP_OWNER_VERSION,validateIfcOwnerMetadata,emitIfcStepOwner
 } from './ifcStepOwner.js';
 export {

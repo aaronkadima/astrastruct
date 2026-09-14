@@ -7,4 +7,5 @@ async function walk(dir){const out=[];for(const e of await readdir(dir,{withFile
 run('npx',['tsc','-p','tsconfig.json','--noEmit']);
 const files=(await walk(resolve('web/src'))).sort();
 for(const file of files)run(process.execPath,['--check',file]);
-console.log(`AstraStruct check: TypeScript + ${files.length} módulos JS validados.`);
+run(process.execPath,['tests/visual-detail-foundation-v052-smoke.mjs']);
+console.log(`AstraStruct check: TypeScript + ${files.length} módulos JS validados + gate funcional v0.52.`);

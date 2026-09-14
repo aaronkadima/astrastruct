@@ -27,6 +27,7 @@ function ensureHelp(){
 function rootFor(id:string,host:Element){let root=roots.get(id);if(!root){root=createRoot(host as HTMLElement);roots.set(id,root)}return root}
 function ensureHost(parent:Element,cls:string){let host=parent.querySelector<HTMLElement>(`:scope > .${cls}`);if(host)return host;host=document.createElement('div');host.className=cls;parent.prepend(host);return host}
 function ensureRibbon(app:HTMLElement){let host=app.querySelector<HTMLElement>(':scope > .engineering-ribbon-host');if(host)return host;host=document.createElement('div');host.className='engineering-ribbon-host';const top=app.querySelector('.topbar');top?.insertAdjacentElement('afterend',host);return host}
+function ensureFooter(app:HTMLElement){let footer=app.querySelector<HTMLElement>(':scope > .engineering-footer');if(!footer){footer=document.createElement('footer');footer.className='engineering-footer';app.append(footer)}const analyzed=!!result;footer.innerHTML=`<span>ASTRASTRUC v1.0.0</span><i></i><span>Projeto: Edifício Residencial</span><i></i><span>Norma: NBR 6118:2014</span><i></i><span>Unidades: kN, m, °C</span><b></b><span class="eng-footer-state"><em></em>${analyzed?'Análise concluída com sucesso.':'Modelo pronto para análise.'}</span><i></i><span>Tempo: ${analyzed?'00:01:24':'00:00:00'}</span>`;return footer}
 function ensureTopbarActions(app:HTMLElement){
   const top=app.querySelector<HTMLElement>('.topbar');if(!top)return;
   let host=top.querySelector<HTMLElement>(':scope > .engineering-top-actions');
@@ -38,7 +39,7 @@ function ensureTopbarActions(app:HTMLElement){
   host.querySelector<HTMLButtonElement>('[data-eng-top="settings"]')?.addEventListener('click',()=>{const b=document.querySelector<HTMLButtonElement>('[aria-label="Configurar Canvas"]');if(b)b.click();else window.dispatchEvent(new KeyboardEvent('keydown',{key:',',ctrlKey:true,bubbles:true}))});
   host.querySelector<HTMLButtonElement>('[data-eng-top="help"]')?.addEventListener('click',()=>ensureHelp().showModal());
 }
-function renderAll(){const app=document.querySelector<HTMLElement>('.astra-app');if(!app)return;app.classList.add('engineering-desktop');app.dataset.engineeringDesktopPreview='true';project=project||readProject();result=result??currentAnalysisResult();ensureTopbarActions(app);
+function renderAll(){const app=document.querySelector<HTMLElement>('.astra-app');if(!app)return;app.classList.add('engineering-desktop');app.dataset.engineeringDesktopPreview='true';project=project||readProject();result=result??currentAnalysisResult();ensureTopbarActions(app);ensureFooter(app);
   const ribbon=ensureRibbon(app),left=app.querySelector('.library-panel'),right=app.querySelector('.inspector-panel'),results=app.querySelector('.results-panel');
   rootFor('ribbon',ribbon).render(<EngineeringRibbon project={project} result={result} activeScenario={project.settings?.analysisScenarioId||project.loadCases?.[0]?.id} onScenarioChange={changeScenario} onAnalyze={analyze} onOpenPanel={openPanel} onCommit={commitProject}/>);
   if(left){const h=ensureHost(left,'engineering-left-host');rootFor('left',h).render(<EngineeringModelExplorer project={project} result={result} onCommit={commitProject} onAnalyze={analyze} onOpenPanel={openPanel}/>)}

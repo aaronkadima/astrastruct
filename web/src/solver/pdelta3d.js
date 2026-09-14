@@ -2,6 +2,7 @@ import { zeros, solveConstrained, addSub } from './matrix.js';
 import { spatialAxes, frame3DLocalStiffness } from './spatial3d.js';
 import { frame3DLocalGeometricStiffness } from './modalStability3d.js';
 import { condenseEndConnections3D, recoverEndConnections3D, endConnectionKinematicMap3D } from './endConnections3d.js';
+import { addSpatialNodalSprings, recoverSpatialSpringForces } from './springs.js';
 
 const EPS = 1e-12;
 const transpose = A => A[0].map((_,j) => A.map(r => r[j]));
@@ -115,6 +116,7 @@ export function solveFramePDelta3D(project,options={}){
         fImp.forEach((v,k) => { F[item.idx[k]] += v; });
       }
     }
+    addSpatialNodalSprings(K,project,map,6);
     for(const l of project.loads || []){
       const i = map.get(l.nodeId); if(i == null) continue;
       const values = [l.fx,l.fy,l.fz,l.mx,l.my,l.mz];
@@ -141,6 +143,7 @@ export function solveFramePDelta3D(project,options={}){
   const initialDisplacements = nodes.map((n,i) => ({nodeId:n.id,ux:u0[6*i],uy:u0[6*i+1],uz:u0[6*i+2],rx:u0[6*i+3],ry:u0[6*i+4],rz:u0[6*i+5]}));
   const totalDisplacements = nodes.map((n,i) => ({nodeId:n.id,ux:last.u[6*i]+u0[6*i],uy:last.u[6*i+1]+u0[6*i+1],uz:last.u[6*i+2]+u0[6*i+2],rx:last.u[6*i+3]+u0[6*i+3],ry:last.u[6*i+4]+u0[6*i+4],rz:last.u[6*i+5]+u0[6*i+5]}));
   const reactions = nodes.map((n,i) => ({nodeId:n.id,fx:last.R[6*i],fy:last.R[6*i+1],fz:last.R[6*i+2],mx:last.R[6*i+3],my:last.R[6*i+4],mz:last.R[6*i+5]}));
-  const releaseCount=elements.reduce((s,e)=>s+Object.values(e.releases||{}).filter(Boolean).length,0),semiRigidConnectionCount=elements.reduce((s,e)=>s+Object.values(e.rotationalSprings||{}).filter(v=>v!==null&&v!==undefined&&Number(v)>0).length,0);
-  return {type:'frame3d-pdelta',dimension:'3d',analysisType:'pdelta',solverVersion:'0.29.0',dofs:nd,activeDofs:last.free.length,displacements,initialDisplacements:imperfection?initialDisplacements:null,totalDisplacements:imperfection?totalDisplacements:null,reactions,elementForces:last.forces,pDelta:{converged:true,iterations:last.iteration,tolerance,maxDelta,axialForces:[...last.axial].map(([elementId,N]) => ({elementId,N})),releaseCount,semiRigidConnectionCount,imperfection:imperfection?{enabled:true,source:imperfection.source||'bucklingMode',mode:imperfection.mode||null,referenceScenarioId:imperfection.referenceScenarioId||null,amplitude:imperfection.maxTranslation,amplitudeMm:imperfection.maxTranslation*1000,criticalFactor:imperfection.criticalFactor||null}:null,formulation:'elastic-frame3d with released/semi-rigid end rotations + projected consistent geometric stiffness in both bending planes + equivalent modal imperfection load',convention:'N>0 tension; compression negative'}};
+  const springForces = recoverSpatialSpringForces(project,displacements);
+  const releaseCount=elements.reduce((s,e)=>s+Object.values(e.releases||{}).filter(Boolean).length,0),semiRigidConnectionCount=elements.reduce((s,e)=>s+Object.values(e.rotationalSprings||{}).filter(v=>v!==null&&v!==undefined&&Number(v)>0).length,0),springCount=(project.nodeSprings||[]).length;
+  return {type:'frame3d-pdelta',dimension:'3d',analysisType:'pdelta',solverVersion:'0.29.0',dofs:nd,activeDofs:last.free.length,displacements,initialDisplacements:imperfection?initialDisplacements:null,totalDisplacements:imperfection?totalDisplacements:null,reactions,springForces,elementForces:last.forces,pDelta:{converged:true,iterations:last.iteration,tolerance,maxDelta,axialForces:[...last.axial].map(([elementId,N]) => ({elementId,N})),releaseCount,semiRigidConnectionCount,springCount,imperfection:imperfection?{enabled:true,source:imperfection.source||'bucklingMode',mode:imperfection.mode||null,referenceScenarioId:imperfection.referenceScenarioId||null,amplitude:imperfection.maxTranslation,amplitudeMm:imperfection.maxTranslation*1000,criticalFactor:imperfection.criticalFactor||null}:null,formulation:'elastic-frame3d with released/semi-rigid end rotations + spatial nodal springs + projected consistent geometric stiffness in both bending planes + equivalent modal imperfection load',convention:'N>0 tension; compression negative'}};
 }

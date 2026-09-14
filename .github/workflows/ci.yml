@@ -24,6 +24,8 @@ jobs:
         run: npm run check
       - name: Run structural solver tests
         run: npm test
+      - name: Validate v0.53.13 foundation reaction transfer
+        run: node tests/foundation-reaction-transfer-v05313-smoke.mjs
       - name: Validate persistent IFC application exchange
         run: node tests/ifc-exchange-ui-v045-smoke.mjs
       - name: Build React/Vite application

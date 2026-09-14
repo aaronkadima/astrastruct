@@ -2,14 +2,17 @@ import {emptyProject} from '../core/model.js';
 import {parseIfcStepEntities,parseIfcStructuralStep} from './ifcStepParse.js';
 import {extractIfcMechanicalMaterialProperties} from './ifcMechanical.js';
 import {extractIfcStrengthMaterialProperties} from './ifcStrength.js';
+import {extractIfcStructuralLoads,IFC_STEP_LOAD_PARSE_VERSION} from './ifcStepLoadParse.js';
+import {IFC_EXCHANGE_STATE_CONTRACT,IFC_EXCHANGE_VERSION} from './ifcExchange.js';
 
 export const IFC_IMPORT_STAGING_CONTRACT='ifc-import-staging/v1';
-export const IFC_IMPORT_STAGING_VERSION='0.47.0-exp';
+export const IFC_IMPORT_STAGING_VERSION='0.48.0-exp';
 
 const text=v=>String(v??'').trim();
 const finite=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v));
 const positive=v=>finite(v)&&Number(v)>0;
 const copy=v=>v==null?v:typeof structuredClone==='function'?structuredClone(v):JSON.parse(JSON.stringify(v));
+const EPS=1e-15;
 
 function entity(parsed,id,expectedType=null){
   const e=parsed.entities.get(Number(id));
@@ -37,6 +40,7 @@ function uniqueId(preferred,prefix,index,used){
   const raw=text(preferred).replace(/[^A-Za-z0-9_.:-]+/g,'_').replace(/^_+|_+$/g,'');
   const base=raw||`${prefix}${index+1}`;let id=base,n=2;while(used.has(id))id=`${base}_${n++}`;used.add(id);return id;
 }
+function deterministicId(prefix,index,used){return uniqueId(`${prefix}${index+1}`,prefix,index,used)}
 
 function normalizeMaterialType(category){
   const c=text(category).toLowerCase();
@@ -132,15 +136,73 @@ function mechanicalIssues(project){
   return issues;
 }
 
+function nativeCaseType(actionType){if(actionType==='PERMANENT_G')return'permanent';if(actionType==='VARIABLE_Q')return'variable';if(actionType==='EXTRAORDINARY_A')return'extraordinary';return'user'}
+function nonzero(values){return values.some(v=>Math.abs(Number(v)||0)>EPS)}
+
+function reconstructLoads(loadData,nodeIdByEntity,elementIdByEntity,issues){
+  const usedCaseIds=new Set(),usedCombinationIds=new Set(),usedLoadIds=new Set(),usedElementLoadIds=new Set(),caseIdByEntity=new Map(),combinationIdByEntity=new Map(),actionNativeIdByEntity=new Map();
+  const loadCases=[],loadCombinations=[],loads=[],elementLoads=[];
+  for(const [i,c] of loadData.loadCases.entries()){
+    const id=deterministicId('IFC_LC_',i,usedCaseIds);caseIdByEntity.set(c.entityId,id);
+    loadCases.push({id,name:text(c.name)||`IFC load case ${i+1}`,type:nativeCaseType(c.actionType),ifcGlobalId:c.globalId,ifcEntityId:c.entityId,ifcActionType:c.actionType,ifcActionSource:c.actionSource});
+  }
+  for(const [i,c] of loadData.loadCombinations.entries()){
+    const id=deterministicId('IFC_COMB_',i,usedCombinationIds);combinationIdByEntity.set(c.entityId,id);
+    const terms=[];
+    for(const term of c.terms||[]){const caseId=caseIdByEntity.get(term.caseEntityId);if(!caseId){issues.push({severity:'BLOCKING',code:'IMPORT_COMBINATION_CASE_UNRESOLVED',entityId:c.entityId,message:`Combinação IFC #${c.entityId} referencia caso não reconstruído #${term.caseEntityId}.`});continue}if(!Number.isFinite(Number(term.factor))){issues.push({severity:'BLOCKING',code:'IMPORT_COMBINATION_FACTOR_INVALID',entityId:c.entityId,message:`Combinação IFC #${c.entityId} possui fator inválido.`});continue}terms.push({caseId,factor:Number(term.factor),ifcRelationGlobalId:term.relationGlobalId})}
+    if(!terms.length)issues.push({severity:'BLOCKING',code:'IMPORT_COMBINATION_EMPTY',entityId:c.entityId,message:`Combinação IFC #${c.entityId} não possui termos importáveis.`});
+    loadCombinations.push({id,name:text(c.name)||`IFC combination ${i+1}`,type:'custom',terms,ifcGlobalId:c.globalId,ifcEntityId:c.entityId});
+  }
+  let nodalIndex=0,elementIndex=0;
+  for(const action of loadData.actions){
+    const caseId=caseIdByEntity.get(action.caseEntityId);if(!caseId){issues.push({severity:'BLOCKING',code:'IMPORT_LOAD_CASE_UNRESOLVED',entityId:action.entityId,message:`Ação IFC #${action.entityId} não possui caso nativo resolvido.`});continue}
+    if(action.ifcClass==='IfcStructuralPointAction'){
+      if(action.globalOrLocal!=='GLOBAL_COORDS'||action.appliedLoad?.ifcClass!=='IfcStructuralLoadSingleForce'||action.targetType!=='IFCSTRUCTURALPOINTCONNECTION'){issues.push({severity:'BLOCKING',code:'IMPORT_POINT_ACTION_UNSUPPORTED',entityId:action.entityId,message:`Ação pontual IFC #${action.entityId} não corresponde ao subconjunto nodal global suportado.`});continue}
+      const nodeId=nodeIdByEntity.get(action.targetEntityId);if(!nodeId){issues.push({severity:'BLOCKING',code:'IMPORT_LOAD_NODE_UNRESOLVED',entityId:action.entityId,message:`Ação IFC #${action.entityId} referencia point connection não importada #${action.targetEntityId}.`});continue}
+      const a=action.appliedLoad,values=[a.forceX,a.forceY,a.forceZ,a.momentX,a.momentY,a.momentZ];if(!nonzero(values)){issues.push({severity:'BLOCKING',code:'IMPORT_ZERO_LOAD_UNSUPPORTED',entityId:action.entityId,message:`Ação IFC #${action.entityId} é nula e seria perdida em uma reexportação conservadora.`});continue}
+      const id=deterministicId('IFC_LOAD_',nodalIndex++,usedLoadIds);actionNativeIdByEntity.set(action.entityId,id);
+      loads.push({id,name:text(action.name)||id,caseId,nodeId,fx:Number(a.forceX),fy:Number(a.forceY),fz:Number(a.forceZ),mx:Number(a.momentX),my:Number(a.momentY),mz:Number(a.momentZ),ifcGlobalId:action.globalId,ifcEntityId:action.entityId});
+    }else if(action.ifcClass==='IfcStructuralLinearAction'){
+      const a=action.appliedLoad;
+      if(action.globalOrLocal!=='LOCAL_COORDS'||action.predefinedType!=='CONST'||a?.ifcClass!=='IfcStructuralLoadLinearForce'||action.targetType!=='IFCSTRUCTURALCURVEMEMBER'){issues.push({severity:'BLOCKING',code:'IMPORT_LINEAR_ACTION_UNSUPPORTED',entityId:action.entityId,message:`Ação linear IFC #${action.entityId} não corresponde à carga uniforme local suportada.`});continue}
+      if(nonzero([a.linearMomentX,a.linearMomentY,a.linearMomentZ])){issues.push({severity:'BLOCKING',code:'IMPORT_DISTRIBUTED_MOMENT_UNSUPPORTED',entityId:action.entityId,message:`Ação linear IFC #${action.entityId} contém momento distribuído sem equivalente nativo seguro.`});continue}
+      const elementId=elementIdByEntity.get(action.targetEntityId);if(!elementId){issues.push({severity:'BLOCKING',code:'IMPORT_LOAD_ELEMENT_UNRESOLVED',entityId:action.entityId,message:`Ação IFC #${action.entityId} referencia membro não importado #${action.targetEntityId}.`});continue}
+      const values=[a.linearForceX,a.linearForceY,a.linearForceZ];if(!nonzero(values)){issues.push({severity:'BLOCKING',code:'IMPORT_ZERO_LOAD_UNSUPPORTED',entityId:action.entityId,message:`Ação IFC #${action.entityId} é nula e seria perdida em uma reexportação conservadora.`});continue}
+      const id=deterministicId('IFC_ELOAD_',elementIndex++,usedElementLoadIds);actionNativeIdByEntity.set(action.entityId,id);
+      elementLoads.push({id,name:text(action.name)||id,caseId,elementId,kind:'uniform',qx:Number(a.linearForceX),qy:Number(a.linearForceY),qz:Number(a.linearForceZ),ifcGlobalId:action.globalId,ifcEntityId:action.entityId});
+    }else issues.push({severity:'BLOCKING',code:'IMPORT_LOAD_ACTION_UNSUPPORTED',entityId:action.entityId,message:`Classe de ação IFC não suportada ${action.ifcClass}.`});
+  }
+  return{loadCases,loadCombinations,loads,elementLoads,caseIdByEntity,combinationIdByEntity,actionNativeIdByEntity};
+}
+
+function findRootGuid(generic,type,predicate=()=>true){for(const e of generic.byType.get(type)||[])if(predicate(e)&&typeof e.args?.[0]==='string')return e.args[0];return null}
+function buildExchangeStateSeed({project,parsed,generic,loadData,nodeIdByEntity,elementIdByEntity,loadNative}){
+  const ids={[`project:${project.id}`]:parsed.project.globalId,[`analysis:${project.id}`]:parsed.analysisModel.globalId};
+  for(const n of parsed.nodes){const nativeId=nodeIdByEntity.get(n.entityId);if(nativeId)ids[`node:${nativeId}`]=n.globalId}
+  for(const m of parsed.members){const nativeId=elementIdByEntity.get(m.entityId);if(nativeId)ids[`member:${nativeId}`]=m.globalId}
+  const nodeGlobalByEntity=new Map(parsed.nodes.map(n=>[n.entityId,n.globalId])),memberByEntity=new Map(parsed.members.map(m=>[m.entityId,m]));
+  for(const rel of parsed.connections||[]){const nativeElementId=elementIdByEntity.get(rel.memberEntityId),member=memberByEntity.get(rel.memberEntityId),nodeGuid=nodeGlobalByEntity.get(rel.nodeEntityId);if(!nativeElementId||!member||!nodeGuid)continue;const position=(member.nodeGlobalIds||[]).indexOf(nodeGuid);if(position>=0)ids[`rel:${nativeElementId}:${position+1}`]=rel.globalId}
+  const materialAssociationGlobalIds={};for(const rel of parsed.materials||[])for(const memberEntityId of rel.relatedEntityIds||[]){const nativeId=elementIdByEntity.get(memberEntityId);if(nativeId)materialAssociationGlobalIds[nativeId]=rel.globalId}
+  const loadGlobalIds={};
+  for(const c of loadData.loadCases){const id=loadNative.caseIdByEntity.get(c.entityId);if(id)loadGlobalIds[`load-case:${id}`]=c.globalId}
+  for(const c of loadData.loadCombinations){const id=loadNative.combinationIdByEntity.get(c.entityId);if(id)loadGlobalIds[`load-combination:${id}`]=c.globalId}
+  for(const a of loadData.actions){const id=loadNative.actionNativeIdByEntity.get(a.entityId);if(!id)continue;loadGlobalIds[`load-action:${id}`]=a.globalId;if(a.caseAssignmentGlobalId)loadGlobalIds[`rel-load-case:${id}`]=a.caseAssignmentGlobalId;if(a.activityConnectionGlobalId)loadGlobalIds[`rel-load-activity:${id}`]=a.activityConnectionGlobalId}
+  for(const term of loadData.relationships?.combinationFactors||[]){const combinationId=loadNative.combinationIdByEntity.get(term.combinationEntityId),caseId=loadNative.caseIdByEntity.get(term.caseEntityId);if(combinationId&&caseId)loadGlobalIds[`rel-load-factor:${combinationId}:${caseId}`]=term.relationGlobalId}
+  const analysisEntityId=parsed.analysisModel.entityId;
+  const declarationGlobalId=findRootGuid(generic,'IFCRELDECLARES',e=>{const related=Array.isArray(e.args?.[5])?e.args[5]:[];return related.some(x=>refId(x)===analysisEntityId)});
+  const groupGlobalId=findRootGuid(generic,'IFCRELASSIGNSTOGROUP',e=>refId(e.args?.[6])===analysisEntityId);
+  return{contract:IFC_EXCHANGE_STATE_CONTRACT,version:IFC_EXCHANGE_VERSION,projectId:project.id,ids,declarationGlobalId,groupGlobalId,materialAssociationGlobalIds,loadGlobalIds,creationDate:parsed.owner?.creationDate??null};
+}
+
 export function createIfcImportStaging(step,{projectId=null,projectName=null}={}){
-  const parsed=parseIfcStructuralStep(step),generic=parseIfcStepEntities(step),mechanical=extractIfcMechanicalMaterialProperties(generic),strength=extractIfcStrengthMaterialProperties(generic),issues=[],usedNodeIds=new Set(),usedElementIds=new Set(),usedMaterialIds=new Set(),usedSectionIds=new Set();
+  const parsed=parseIfcStructuralStep(step),generic=parseIfcStepEntities(step),mechanical=extractIfcMechanicalMaterialProperties(generic),strength=extractIfcStrengthMaterialProperties(generic),loadData=extractIfcStructuralLoads(generic),issues=[],usedNodeIds=new Set(),usedElementIds=new Set(),usedMaterialIds=new Set(),usedSectionIds=new Set();
   const project=emptyProject();
   project.id=text(projectId)||`IFC_${parsed.project.globalId}`;project.name=text(projectName)||text(parsed.project.name)||'Projeto importado IFC';
-  project.nodes=[];project.elements=[];project.materials=[];project.sections=[];project.supports=[];project.nodeSprings=[];project.loads=[];project.elementLoads=[];project.settlements=[];project.nodalMasses=[];project.results=null;
+  project.nodes=[];project.elements=[];project.materials=[];project.sections=[];project.supports=[];project.nodeSprings=[];project.loads=[];project.elementLoads=[];project.settlements=[];project.nodalMasses=[];project.loadCases=[];project.loadCombinations=[];project.results=null;
 
-  const nodeIdByGuid=new Map();
+  const nodeIdByGuid=new Map(),nodeIdByEntity=new Map();
   for(const [i,n] of parsed.nodes.entries()){
-    const id=uniqueId(n.name,'N',i,usedNodeIds);nodeIdByGuid.set(n.globalId,id);
+    const id=uniqueId(n.name,'N',i,usedNodeIds);nodeIdByGuid.set(n.globalId,id);nodeIdByEntity.set(n.entityId,id);
     project.nodes.push({id,name:text(n.name)||id,x:Number(n.coordinates[0]),y:Number(n.coordinates[1]),z:Number(n.coordinates[2]),ifcGlobalId:n.globalId,ifcEntityId:n.entityId});
     const pointConnection=entity(generic,n.entityId,'IFCSTRUCTURALPOINTCONNECTION'),boundary=boundaryState(generic,pointConnection);
     if(boundary){
@@ -154,6 +216,7 @@ export function createIfcImportStaging(step,{projectId=null,projectName=null}={}
   }
 
   const mapped=materialAndSectionMaps(parsed,usedMaterialIds,usedSectionIds,issues,mechanical.byMaterialEntityId,strength.byMaterialEntityId);project.materials=mapped.materials;project.sections=mapped.sections;
+  const elementIdByEntity=new Map();
   for(const [i,m] of parsed.members.entries()){
     const id=uniqueId(m.name,'E',i,usedElementIds),nodeIds=(m.nodeGlobalIds||[]).map(g=>nodeIdByGuid.get(g));
     if(nodeIds.some(x=>!x)){issues.push({severity:'BLOCKING',code:'MEMBER_NODE_UNRESOLVED',entityId:m.entityId,message:`Membro #${m.entityId} referencia nó não resolvido.`});continue}
@@ -168,25 +231,31 @@ export function createIfcImportStaging(step,{projectId=null,projectName=null}={}
     if((type==='frame3d'||type==='truss3d')&&!sectionId)issues.push({severity:'BLOCKING',code:'PROFILE_MISSING',entityId:m.entityId,message:`Membro ${id} não possui perfil IFC suportado.`});
     const element={id,name:text(m.name)||id,type,materialId:relation?.materialId||null,sectionId,ifcGlobalId:m.globalId,ifcEntityId:m.entityId,ifcPredefinedType:predefinedType};
     if(type==='shell4'){element.nodeIds=nodeIds;element.n1=nodeIds[0];element.n2=nodeIds[1];element.n3=nodeIds[2];element.n4=nodeIds[3];if(Number(m.thickness)>0)element.thickness=Number(m.thickness)}else{element.n1=nodeIds[0];element.n2=nodeIds[1]}
-    project.elements.push(element);
+    project.elements.push(element);elementIdByEntity.set(m.entityId,id);
   }
 
-  const geometryIssues=issues.filter(x=>x.severity==='BLOCKING'),analysisIssues=[...geometryIssues,...mechanicalIssues(project)];
-  const geometryReady=geometryIssues.length===0,analysisReady=analysisIssues.length===0;
+  for(const issue of loadData.issues||[])issues.push({...copy(issue),source:'IFC_LOAD_PARSE'});
+  const loadImportIssues=[],loadNative=reconstructLoads(loadData,nodeIdByEntity,elementIdByEntity,loadImportIssues);issues.push(...loadImportIssues);
+  project.loadCases=loadNative.loadCases;project.loadCombinations=loadNative.loadCombinations;project.loads=loadNative.loads;project.elementLoads=loadNative.elementLoads;
+  if(project.loadCases.length){project.settings.activeLoadCaseId=project.loadCases[0].id;project.settings.analysisScenarioId=project.loadCombinations[0]?.id||project.loadCases[0].id}
+
+  const blockingIssues=issues.filter(x=>x.severity==='BLOCKING'),loadIssues=blockingIssues.filter(x=>x.source==='IFC_LOAD_PARSE'||String(x.code||'').startsWith('IMPORT_')),geometryIssues=blockingIssues,analysisIssues=[...geometryIssues,...mechanicalIssues(project)];
+  const geometryReady=geometryIssues.length===0,loadReady=loadIssues.length===0,analysisReady=analysisIssues.length===0,commitReady=geometryReady&&loadReady;
   for(const material of project.materials)material.analysisReady=analysisIssues.every(x=>x.materialId!==material.id);
-  project.meta={...project.meta,importedFrom:{format:'IFC',schema:parsed.schema,contract:IFC_IMPORT_STAGING_CONTRACT,parserVersion:parsed.parserVersion,projectGlobalId:parsed.project.globalId,analysisModelGlobalId:parsed.analysisModel.globalId,unitSystem:mechanical.unitSystem,materialStrengthVersion:strength.version},analysisReady,importStatus:analysisReady?'READY':'PENDING'};
-  project.ifcImport={contract:IFC_IMPORT_STAGING_CONTRACT,version:IFC_IMPORT_STAGING_VERSION,projectGlobalId:parsed.project.globalId,analysisModelGlobalId:parsed.analysisModel.globalId,owner:copy(parsed.owner),unitSystem:mechanical.unitSystem,geometryReady,analysisReady};
-  return{contract:IFC_IMPORT_STAGING_CONTRACT,version:IFC_IMPORT_STAGING_VERSION,schema:parsed.schema,project,parsed,readiness:{geometryReady,analysisReady,geometryIssues,analysisIssues},summary:{nodes:project.nodes.length,elements:project.elements.length,curves:project.elements.filter(x=>x.type==='frame3d'||x.type==='truss3d').length,surfaces:project.elements.filter(x=>x.type==='shell4').length,materials:project.materials.length,sections:project.sections.length,supports:project.supports.length,nodeSprings:project.nodeSprings.length,geometryBlocking:geometryIssues.length,analysisBlocking:analysisIssues.length}};
+  const exchangeStateSeed=buildExchangeStateSeed({project,parsed,generic,loadData,nodeIdByEntity,elementIdByEntity,loadNative});
+  project.meta={...project.meta,importedFrom:{format:'IFC',schema:parsed.schema,contract:IFC_IMPORT_STAGING_CONTRACT,parserVersion:parsed.parserVersion,loadParserVersion:IFC_STEP_LOAD_PARSE_VERSION,projectGlobalId:parsed.project.globalId,analysisModelGlobalId:parsed.analysisModel.globalId,unitSystem:mechanical.unitSystem,materialStrengthVersion:strength.version},analysisReady,importStatus:analysisReady?'READY':commitReady?'PENDING_ANALYSIS':'BLOCKED'};
+  project.ifcImport={contract:IFC_IMPORT_STAGING_CONTRACT,version:IFC_IMPORT_STAGING_VERSION,projectGlobalId:parsed.project.globalId,analysisModelGlobalId:parsed.analysisModel.globalId,owner:copy(parsed.owner),unitSystem:mechanical.unitSystem,geometryReady,loadReady,commitReady,analysisReady,exchangeStateSeed};
+  return{contract:IFC_IMPORT_STAGING_CONTRACT,version:IFC_IMPORT_STAGING_VERSION,schema:parsed.schema,project,parsed,loadData,readiness:{geometryReady,loadReady,commitReady,analysisReady,geometryIssues,loadIssues,analysisIssues},summary:{nodes:project.nodes.length,elements:project.elements.length,curves:project.elements.filter(x=>x.type==='frame3d'||x.type==='truss3d').length,surfaces:project.elements.filter(x=>x.type==='shell4').length,materials:project.materials.length,sections:project.sections.length,supports:project.supports.length,nodeSprings:project.nodeSprings.length,loadCases:project.loadCases.length,loadCombinations:project.loadCombinations.length,nodalLoads:project.loads.length,elementLoads:project.elementLoads.length,loadBlocking:loadIssues.length,geometryBlocking:geometryIssues.length,analysisBlocking:analysisIssues.length}};
 }
 
 export function validateIfcImportStaging(staging,{requireAnalysisReady=false}={}){
   if(staging?.contract!==IFC_IMPORT_STAGING_CONTRACT||staging?.version!==IFC_IMPORT_STAGING_VERSION)throw new Error('IFC import: staging incompatível.');
-  if(!staging?.readiness?.geometryReady)throw new Error(`IFC import: geometria possui ${staging?.readiness?.geometryIssues?.length||0} bloqueio(s).`);
+  if(!staging?.readiness?.commitReady)throw new Error(`IFC import: staging possui ${staging?.readiness?.geometryIssues?.length||0} bloqueio(s) de importação segura.`);
   if(requireAnalysisReady&&!staging?.readiness?.analysisReady)throw new Error(`IFC import: análise possui ${staging?.readiness?.analysisIssues?.length||0} pendência(s).`);
   return true;
 }
 
 export function summarizeIfcImportStaging(staging){
   if(staging?.contract!==IFC_IMPORT_STAGING_CONTRACT)throw new Error('IFC import: staging inválido.');
-  return{...staging.summary,schema:staging.schema,geometryReady:!!staging.readiness?.geometryReady,analysisReady:!!staging.readiness?.analysisReady};
+  return{...staging.summary,schema:staging.schema,geometryReady:!!staging.readiness?.geometryReady,loadReady:!!staging.readiness?.loadReady,commitReady:!!staging.readiness?.commitReady,analysisReady:!!staging.readiness?.analysisReady};
 }

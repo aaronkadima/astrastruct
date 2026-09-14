@@ -3,3 +3,7 @@ export {
   ifcClassForElement,createIfcInteroperabilityModel,validateIfcInteroperabilityModel,
   renderIfcInteroperabilityJson,parseIfcInteroperabilityJson,restoreStructuralCoreFromIfcModel,summarizeIfcInteroperability
 } from './ifc.js';
+export {
+  IFC_GUID_ALPHABET,validateIfcGuid,compressIfcGuid,expandIfcGuid,newIfcGuid,
+  createIfcIdentityMap,assignIfcGlobalIds,validateIfcGlobalIds
+} from './ifcGuid.js';

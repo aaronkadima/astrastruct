@@ -42,6 +42,13 @@ def main():
         "IfcApplication": 1,
         "IfcMaterialProperties": 4,
         "IfcPropertySingleValue": 7,
+        "IfcStructuralLoadCase": 2,
+        "IfcStructuralPointAction": 2,
+        "IfcStructuralLinearAction": 1,
+        "IfcStructuralLoadSingleForce": 2,
+        "IfcStructuralLoadLinearForce": 1,
+        "IfcRelAssignsToGroupByFactor": 2,
+        "IfcRelConnectsStructuralActivity": 3,
     }
     counts = {name: len(model.by_type(name)) for name in required}
     wrong = {name: {"expected": required[name], "actual": count} for name, count in counts.items() if count != required[name]}
@@ -66,6 +73,47 @@ def main():
         fail("Unexpected Pset_MaterialConcrete properties", concrete_props)
     if any("TensileStrength" in names for names in names_for("Pset_MaterialConcrete")):
         fail("fctm must not be mapped to TensileStrength in Pset_MaterialConcrete")
+
+    analysis = model.by_type("IfcStructuralAnalysisModel")[0]
+    loaded_by = list(getattr(analysis, "LoadedBy", ()) or ())
+    if len(loaded_by) != 1:
+        fail("IfcStructuralAnalysisModel.LoadedBy must contain exactly the top-level load combination", [str(x) for x in loaded_by])
+    combination = loaded_by[0]
+    if combination.is_a() != "IfcStructuralLoadGroup" or str(getattr(combination, "PredefinedType", "")) != "LOAD_COMBINATION":
+        fail("LoadedBy does not reference an IfcStructuralLoadGroup/LOAD_COMBINATION", str(combination))
+
+    load_cases = model.by_type("IfcStructuralLoadCase")
+    if any(case in loaded_by for case in load_cases):
+        fail("Load cases must not appear directly in LoadedBy when a load combination exists")
+
+    point_actions = model.by_type("IfcStructuralPointAction")
+    if any(str(getattr(action, "GlobalOrLocal", "")) != "GLOBAL_COORDS" for action in point_actions):
+        fail("All nodal point actions must use GLOBAL_COORDS")
+    linear_actions = model.by_type("IfcStructuralLinearAction")
+    if any(str(getattr(action, "GlobalOrLocal", "")) != "LOCAL_COORDS" for action in linear_actions):
+        fail("All uniform curve actions must use LOCAL_COORDS")
+    if any(str(getattr(action, "PredefinedType", "")) != "CONST" for action in linear_actions):
+        fail("All v0.48 linear actions must use CONST predefined type")
+
+    all_actions = [*point_actions, *linear_actions]
+    for action in all_actions:
+        assignments = [rel for rel in getattr(action, "HasAssignments", ()) or () if rel.is_a("IfcRelAssignsToGroup")]
+        if len(assignments) != 1 or assignments[0].RelatingGroup.is_a() != "IfcStructuralLoadCase":
+            fail(f"Structural action #{action.id()} is not assigned to exactly one load case", [str(x) for x in assignments])
+        activity_links = list(getattr(action, "AssignedToStructuralItem", ()) or ())
+        if len(activity_links) != 1:
+            fail(f"Structural action #{action.id()} is not connected to exactly one structural target", [str(x) for x in activity_links])
+
+    factor_relations = model.by_type("IfcRelAssignsToGroupByFactor")
+    factors = sorted(round(float(rel.Factor), 10) for rel in factor_relations)
+    if factors != [1.2, 1.5]:
+        fail("Unexpected load combination factors", factors)
+    for rel in factor_relations:
+        if rel.RelatingGroup != combination:
+            fail("Factored relation does not target the top-level combination", str(rel))
+        related = list(rel.RelatedObjects or ())
+        if len(related) != 1 or related[0].is_a() != "IfcStructuralLoadCase":
+            fail("Factored relation must contain exactly one IfcStructuralLoadCase", str(rel))
 
     logger = ifc_validate.json_logger()
     try:
@@ -99,6 +147,8 @@ def main():
         "root_entities": len(global_ids),
         "counts": counts,
         "material_property_sets": dict(pset_counts),
+        "loaded_by": [x.id() for x in loaded_by],
+        "combination_factors": factors,
     }
     print(json.dumps(result, indent=2, ensure_ascii=False))
 

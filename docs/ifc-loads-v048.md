@@ -6,12 +6,13 @@ A v0.48 está em desenvolvimento somente no branch `develop`. O produto permanec
 
 ## Objetivo
 
-Transportar casos de carga, ações estruturais e combinações do AstraStruct para IFC4X3 com duas camadas explícitas: um mapping canônico auditável e a materialização física no STEP. O writer somente serializa entidades quando o mapping está READY; tipos de carga sem semântica inequívoca permanecem bloqueantes.
+Transportar casos de carga, ações estruturais e combinações do AstraStruct para IFC4X3 com três camadas explícitas: um mapping canônico auditável, a materialização física no STEP e um parser dedicado ao round-trip dessas entidades. O writer somente serializa entidades quando o mapping está READY; tipos de carga sem semântica inequívoca permanecem bloqueantes.
 
 Contratos experimentais:
 
 - `ifc-structural-loads/v1` — `0.48.0-exp`;
 - `ifc-step-loads/v1` — `0.48.0-exp`;
+- `ifc-step-load-parse/v1` — `0.48.0-exp`;
 - `ifc-step-writer/v1` — `0.48.0-exp`;
 - `ifc-exchange-state/v1` — `0.48.0-exp`;
 - schema alvo: `IFC4X3_ADD2`;
@@ -120,6 +121,23 @@ As chaves persistentes incluem:
 
 Ao reexportar o mesmo projeto, esses GlobalIds são reutilizados. O writer também verifica colisões entre identidades de projeto, analysis model, nós, membros, relações estruturais, associações de material, casos, combinações, ações e relações de carga.
 
+## Parser STEP de cargas
+
+`ifc-step-load-parse/v1` lê a hierarquia de cargas diretamente das referências STEP, sem reinterpretar `Name` como ID interno. O parser resolve:
+
+- `IfcStructuralLoadCase` e seus `ActionType`, `ActionSource` e `Coefficient`;
+- `IfcStructuralLoadGroup` de `LOAD_COMBINATION`;
+- `IfcStructuralPointAction` + `IfcStructuralLoadSingleForce`;
+- `IfcStructuralLinearAction` + `IfcStructuralLoadLinearForce`;
+- ação -> caso por `IfcRelAssignsToGroup`;
+- ação -> alvo estrutural por `IfcRelConnectsStructuralActivity`;
+- caso -> combinação por `IfcRelAssignsToGroupByFactor`;
+- grupos de topo por `IfcStructuralAnalysisModel.LoadedBy`.
+
+A identidade primária do round-trip é o `GlobalId`. O nome IFC permanece descrição humana; a etapa de importação deverá criar IDs nativos determinísticos e conservar os GlobalIds originais no seed do estado de intercâmbio.
+
+O parser marca como bloqueantes ações sem caso, ações sem alvo, combinações sem termos válidos, relações fatoradas com tipo incorreto e hierarquias `LoadedBy` incompatíveis com a presença de combinações.
+
 ## Caso implícito
 
 O solver nativo interpreta cargas sem `caseId` como pertencentes ao primeiro caso de carga. O mapping v0.48 preserva exatamente essa regra, mas registra `IMPLICIT_FIRST_LOAD_CASE` como warning para tornar a decisão auditável.
@@ -158,32 +176,31 @@ A emissão STEP mantém exatamente essas relações e atribui `IfcOwnerHistory` 
 
 `validateIfcStepReadiness()` adiciona um segundo gate: todos os registros `IfcRoot` do mapping de cargas precisam possuir GlobalId válido, único e sem colisão com os demais objetos IFC antes da serialização.
 
+O parser possui seu próprio `ready`, que só fica verdadeiro quando cada ação pode ser associada inequivocamente a um caso e a um alvo estrutural e quando a hierarquia das combinações é consistente.
+
+## Validação externa
+
+O fixture de CI inclui G/Q, ações nodais, uma ação uniforme e uma combinação ULS. O IfcOpenShell valida:
+
+- sintaxe STEP;
+- schema IFC4X3 e regras EXPRESS;
+- população esperada de casos e ações;
+- `GLOBAL_COORDS` para ações nodais;
+- `LOCAL_COORDS` e `CONST` para ação linear uniforme;
+- fatores 1,2 e 1,5;
+- uma única conexão ação -> alvo;
+- `LoadedBy` apontando apenas para a combinação de topo.
+
 ## Testes
 
-`tests/ifc-load-mapping-v048-smoke.mjs` cobre:
+`tests/ifc-load-mapping-v048-smoke.mjs` cobre o mapping canônico, casos, ações, relações, combinações, warnings e bloqueios conservadores.
 
-- `PERMANENT_G`, `VARIABLE_Q` e fallback `NOTDEFINED`;
-- ações nodais globais;
-- ações uniformes locais em barras;
-- relações de agrupamento e atividade;
-- agregação de termos duplicados em combinação;
-- caso de carga implícito;
-- omissão de carga totalmente nula;
-- bloqueios conservadores.
+`tests/ifc-step-loads-v048-smoke.mjs` cobre emissão STEP, `LoadedBy`, persistência de `loadGlobalIds` e coexistência com as identidades estruturais.
 
-`tests/ifc-step-loads-v048-smoke.mjs` cobre:
-
-- emissão de `IfcStructuralLoadCase` e `IfcStructuralLoadGroup`;
-- `IfcStructuralPointAction` + `IfcStructuralLoadSingleForce`;
-- `IfcStructuralLinearAction` + `IfcStructuralLoadLinearForce`;
-- fatores por `IfcRelAssignsToGroupByFactor`;
-- conexão por `IfcRelConnectsStructuralActivity`;
-- `LoadedBy` apontando combinações quando elas existem e casos quando não existem;
-- persistência de `loadGlobalIds` entre exportações;
-- coexistência com GlobalIds estruturais e `CreationDate` persistente.
+`tests/ifc-load-parse-v048-smoke.mjs` cobre o round-trip STEP de casos, ações, alvos, fatores, `LoadedBy` e GlobalIds persistentes.
 
 O gate experimental é `tests/development-gate-v048-smoke.mjs`.
 
 ## Próxima etapa
 
-Após o gate STEP, o fixture externo IfcOpenShell será ampliado para exigir os casos, ações e combinações da v0.48. Em seguida, o parser/importador receberá suporte de round-trip para reconstruir `loadCases`, `loads`, `elementLoads` e `loadCombinations` a partir de IFC externo sem heurísticas silenciosas.
+A saída do parser será conectada ao `createIfcImportStaging()` para reconstruir `loadCases`, `loads`, `elementLoads` e `loadCombinations` sem heurísticas silenciosas. O staging deverá bloquear substituição se existirem cargas IFC não suportadas e deverá preparar um seed de identidades para preservar os GlobalIds ao reexportar o projeto importado.

@@ -103,5 +103,6 @@ function solveRaw(project, scenarioId) {
 }
 
 export function solve(project, scenarioId) {
+  if(project?.meta?.importedFrom?.format==='IFC'&&project?.meta?.analysisReady===false)throw new Error('Importação IFC: análise bloqueada enquanto houver propriedades mecânicas pendentes. Complete e valide os materiais antes de executar o solver.');
   return attachResultContract(project, scenarioId, solveRaw(project, scenarioId));
 }

@@ -2,7 +2,7 @@ import {validateIfcGuid} from './ifcGuid.js';
 import {createIfcMaterialMapping,validateIfcMaterialMapping,summarizeIfcMaterialMapping} from './ifcMaterial.js';
 
 export const IFC_STEP_MATERIAL_CONTRACT='ifc-step-material/v1';
-export const IFC_STEP_MATERIAL_VERSION='0.45.0-exp';
+export const IFC_STEP_MATERIAL_VERSION='0.47.0-exp';
 
 const ref=id=>`#${id}`;
 const refs=ids=>`(${ids.map(ref).join(',')})`;
@@ -40,6 +40,26 @@ function emitMechanicalProperties(emitter,materialId,canonicalMaterial){
   return getOrAdd(emitter,`step:material-properties:${materialKey}`,()=>`IFCMATERIALPROPERTIES(${spfString('Pset_MaterialMechanical')},$,${refs(propertyIds)},${ref(materialId)})`);
 }
 
+function emitStrengthProperties(emitter,materialId,canonicalMaterial){
+  const source=canonicalMaterial?.properties||{},kind=String(source.type||canonicalMaterial?.category||'').trim().toLowerCase(),materialKey=canonicalMaterial?.key||`material:${materialId}`;
+  const emitSet=(setName,items)=>{
+    const propertyIds=[];
+    for(const item of items){
+      if(item.value==null||item.value===''||!Number.isFinite(Number(item.value))||!(Number(item.value)>0))continue;
+      propertyIds.push(getOrAdd(emitter,`step:material-strength-property:${materialKey}:${item.suffix}`,()=>`IFCPROPERTYSINGLEVALUE(${spfString(item.name)},$,IFCPRESSUREMEASURE(${num(Number(item.value),item.name)}),$)`));
+    }
+    if(!propertyIds.length)return null;
+    return getOrAdd(emitter,`step:material-strength:${materialKey}:${setName}`,()=>`IFCMATERIALPROPERTIES(${spfString(setName)},$,${refs(propertyIds)},${ref(materialId)})`);
+  };
+  if(kind==='steel'||kind==='rebar'){
+    const fy=Number(source.fy),fu=Number(source.fu);
+    if(fy>0&&fu>0&&fu<fy)throw new Error(`IFC STEP material: fu não pode ser menor que fy em ${canonicalMaterial?.sourceId||materialKey}.`);
+    return emitSet('Pset_MaterialSteel',[{suffix:'yield',name:'YieldStress',value:source.fy},{suffix:'ultimate',name:'UltimateStress',value:source.fu}]);
+  }
+  if(kind==='concrete'||kind==='grout')return emitSet('Pset_MaterialConcrete',[{suffix:'compressive',name:'CompressiveStrength',value:source.fck}]);
+  return null;
+}
+
 function emitProfile(emitter,entry){
   const p=entry.profile,key=`profile:${entry.section.sourceId}`;
   if(p.position)throw new Error(`IFC STEP material: Position explícita de perfil ainda não suportada em ${entry.memberId}.`);
@@ -69,8 +89,7 @@ export function validateIfcStepMaterialReadiness(model,{materialAssociationGloba
   for(const entry of mapping.entries.filter(x=>x.status==='READY')){
     if(entry.mode==='MATERIAL_PROFILE_SET'&&entry.profile?.position)throw new Error(`IFC STEP material: Position explícita de perfil ainda não suportada em ${entry.memberId}.`);
     const guid=relationGuid(materialAssociationGlobalIds,entry);if(!validateIfcGuid(guid))throw new Error(`IFC STEP material: GlobalId de IfcRelAssociatesMaterial obrigatório para ${entry.memberId}.`);
-    if(allGuids.has(guid))throw new Error(`IFC STEP material: GlobalId duplicado ${guid}.`);allGuids.add(guid);
-  }
+    if(allGuids.has(guid))throw new Error(`IFC STEP material: GlobalId duplicado ${guid}.`);allGuids.add(guid)}
   return{contract:IFC_STEP_MATERIAL_CONTRACT,version:IFC_STEP_MATERIAL_VERSION,mapping,summary,associationGlobalIds:[...allGuids]};
 }
 
@@ -78,7 +97,7 @@ export function emitIfcStepMaterials(emitter,model,options={}){
   const ready=validateIfcStepMaterialReadiness(model,options),relationIds=[],ownerHistory=options.ownerHistoryId?ref(options.ownerHistoryId):'$',canonicalMaterials=new Map((model.materials||[]).map(m=>[m.key,m]));
   for(const entry of ready.mapping.entries){
     if(entry.status!=='READY')continue;
-    const materialId=emitMaterial(emitter,entry.material);emitMechanicalProperties(emitter,materialId,canonicalMaterials.get(entry.material.key));
+    const materialId=emitMaterial(emitter,entry.material),canonicalMaterial=canonicalMaterials.get(entry.material.key);emitMechanicalProperties(emitter,materialId,canonicalMaterial);emitStrengthProperties(emitter,materialId,canonicalMaterial);
     const relatingMaterialId=entry.mode==='DIRECT_MATERIAL'?materialId:emitProfileUsage(emitter,entry,materialId);
     const memberId=emitter.id(entry.memberKey),guid=relationGuid(options.materialAssociationGlobalIds,entry);
     relationIds.push(emitter.add(`IFCRELASSOCIATESMATERIAL(${spfString(guid)},${ownerHistory},$,$,(${ref(memberId)}),${ref(relatingMaterialId)})`,`step:material-rel:${entry.memberId}`));

@@ -4,6 +4,8 @@ export const IFC_MATERIAL_MAPPING_VERSION='0.45.0-exp';
 const copy=v=>v==null?v:typeof structuredClone==='function'?structuredClone(v):JSON.parse(JSON.stringify(v));
 const text=v=>String(v??'').trim();
 const finitePositive=(v,name)=>{const n=Number(v);if(!Number.isFinite(n)||!(n>0))throw new Error(`IFC material: ${name} deve ser positivo.`);return n};
+const finiteNonNegative=(v,name)=>{const n=Number(v);if(!Number.isFinite(n)||n<0)throw new Error(`IFC material: ${name} deve ser não negativo.`);return n};
+const finite=(v,name)=>{const n=Number(v);if(!Number.isFinite(n))throw new Error(`IFC material: ${name} deve ser finito.`);return n};
 
 const PROFILE_SCHEMAS={
   IfcRectangleProfileDef:['xDim','yDim'],
@@ -19,8 +21,21 @@ export function validateExplicitIfcProfile(profile){
   const ifcClass=text(profile.ifcClass),required=PROFILE_SCHEMAS[ifcClass];
   if(!required)throw new Error(`IFC material: perfil explícito não suportado: ${ifcClass||'(vazio)'}.`);
   const normalized={ifcClass,profileType:text(profile.profileType)||'AREA',profileName:text(profile.profileName)||null,position:copy(profile.position||null)};
+  if(!['AREA','CURVE'].includes(normalized.profileType.toUpperCase()))throw new Error(`IFC material: ProfileType inválido ${normalized.profileType}.`);
+  normalized.profileType=normalized.profileType.toUpperCase();
   for(const key of required)normalized[key]=finitePositive(profile[key],`${ifcClass}.${key}`);
-  if(profile.filletRadius!=null)normalized.filletRadius=finitePositive(profile.filletRadius,`${ifcClass}.filletRadius`);
+  if(profile.filletRadius!=null)normalized.filletRadius=finiteNonNegative(profile.filletRadius,`${ifcClass}.filletRadius`);
+  if(profile.flangeEdgeRadius!=null)normalized.flangeEdgeRadius=finiteNonNegative(profile.flangeEdgeRadius,`${ifcClass}.flangeEdgeRadius`);
+  if(profile.flangeSlope!=null)normalized.flangeSlope=finite(profile.flangeSlope,`${ifcClass}.flangeSlope`);
+  if(ifcClass==='IfcIShapeProfileDef'){
+    if(!(normalized.webThickness<normalized.overallWidth))throw new Error('IFC material: IfcIShapeProfileDef.webThickness deve ser menor que overallWidth.');
+    if(!((2*normalized.flangeThickness)<normalized.overallDepth))throw new Error('IFC material: 2*IfcIShapeProfileDef.flangeThickness deve ser menor que overallDepth.');
+    if(normalized.filletRadius!=null){
+      const maxWidth=(normalized.overallWidth-normalized.webThickness)/2;
+      const maxDepth=(normalized.overallDepth-2*normalized.flangeThickness)/2;
+      if(normalized.filletRadius>maxWidth||normalized.filletRadius>maxDepth)throw new Error('IFC material: IfcIShapeProfileDef.filletRadius excede a geometria disponível.');
+    }
+  }
   return normalized;
 }
 
@@ -60,7 +75,7 @@ function curveProfileMapping(member,material,section){
     materialProfileSet:{ifcClass:'IfcMaterialProfileSet',name:text(section.name)||section.sourceId,materialProfileRefs:[`material-profile:${member.sourceId}`]},
     usage:{ifcClass:'IfcMaterialProfileSetUsage',cardinalPoint:10,forProfileSetRef:`material-profile-set:${member.sourceId}`,referenceExtent:null},
     relationship:{ifcClass:'IfcRelAssociatesMaterial',relatedObjectRef:member.key,relatingMaterialRef:`material-profile-usage:${member.sourceId}`},
-    note:'Perfil explícito aceito; cardinal point 10 representa inserção centrada no perfil estrutural.'
+    note:'Perfil explícito aceito; cardinal point 10 representa o centroide geométrico do perfil.'
   };
 }
 

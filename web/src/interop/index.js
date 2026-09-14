@@ -13,3 +13,6 @@ export {
 export {
   ifcBoundaryValue,createIfcBoundaryNodeCondition,validateIfcBoundaryNodeCondition,summarizeIfcBoundaryNodeCondition
 } from './ifcBoundary.js';
+export {
+  IFC_STEP_WRITER_CONTRACT,IFC_STEP_WRITER_VERSION,validateIfcStepReadiness,renderIfcStep,validateIfcStepEnvelope
+} from './ifcStep.js';

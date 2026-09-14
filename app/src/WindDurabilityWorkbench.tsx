@@ -43,7 +43,7 @@ export function WindDurabilityWorkbench(){
     const currentDirection=currentLevel?.[dir]||{};
     return{...p,windConfig:normalizeWindConfig({...p.windConfig,storyOverrides:{...(p.windConfig.storyOverrides||{}),[levelId]:{...currentLevel,[dir]:{...currentDirection,[key]:value}}}})};
   });
-  const generate=()=>{try{const base=withEngineeringProfiles(project,profiles),next=generateWindLoads(base,wind);commit(next);setProfiles(engineeringProfilesFromProject(next));setMsg(`Casos de vento gerados: ${wind.config.directions.join(', ')}. Forças distribuídas aos nós dos pavimentos com trilha de auditoria.`)}catch(e:any){setMsg(e?.message||String(e))}};
+  const generate=()=>{try{if(!wind.summary.rows)throw new Error('Wind: o modelo não possui pavimentos elegíveis acima da base. Cadastre/derive os níveis do edifício antes de gerar ações de vento.');const base=withEngineeringProfiles(project,profiles),next=generateWindLoads(base,wind);commit(next);setProfiles(engineeringProfilesFromProject(next));setMsg(`Casos de vento gerados: ${wind.config.directions.join(', ')}. Forças distribuídas aos nós dos pavimentos com trilha de auditoria.`)}catch(e:any){setMsg(e?.message||String(e))}};
 
   if(!open)return null;
   const tabs:[Tab,string][]=[['durability','Durabilidade'],['wind','Vento'],['audit','Auditoria']];
@@ -75,8 +75,8 @@ export function WindDurabilityWorkbench(){
         <section className="wd-card">
           <h3>Forças por pavimento</h3>
           <div className="wd-wind-table"><div className="head"><b>Dir.</b><b>Pavimento</b><b>q</b><b>Cf/Ca</b><b>A</b><b>F</b><b>Estado</b></div>{wind.rows.map((r:any)=><div key={r.id}><span>{r.direction}</span><span>{r.levelName}</span>{profiles.wind.method==='direct-story-pressure'?<input aria-label={`Pressão ${r.id}`} type="number" step=".01" value={r.pressureKPa??''} placeholder="q kPa" onChange={e=>patchStory(r.levelId,r.direction,'pressureKPa',numeric(e.target.value))}/>:<span>{r.pressureKPa==null?'—':r.pressureKPa.toFixed(3)}</span>}<input aria-label={`Cf ${r.id}`} type="number" step=".01" value={r.forceCoefficient??''} onChange={e=>patchStory(r.levelId,r.direction,'forceCoefficient',numeric(e.target.value))}/><input aria-label={`Área ${r.id}`} type="number" step=".1" value={r.areaSource==='explicit'?r.projectedAreaM2??'':''} placeholder={r.autoProjectedAreaM2?.toFixed(2)} onChange={e=>patchStory(r.levelId,r.direction,'projectedAreaM2',numeric(e.target.value))}/><span>{r.forceKN==null?'—':r.forceKN.toFixed(2)}</span><span><Badge status={r.status}/></span></div>)}</div>
-          <div className="wd-actions"><button onClick={saveProfiles}>Salvar configuração</button><button className="primary" data-testid="wd-generate-wind" onClick={generate} disabled={wind.summary.pending>0}>Gerar casos de vento</button></div>
-          <small>{wind.summary.ready}/{wind.summary.rows} linhas prontas. {wind.summary.pending?`Faltam ${wind.summary.pending} linhas.`:'Pronto para geração.'}</small>
+          <div className="wd-actions"><button onClick={saveProfiles}>Salvar configuração</button><button className="primary" data-testid="wd-generate-wind" onClick={generate} disabled={wind.summary.rows===0||wind.summary.pending>0}>Gerar casos de vento</button></div>
+          <small>{wind.summary.rows===0?'Nenhum pavimento elegível acima da base. Cadastre ou derive os níveis do edifício antes de gerar vento.':`${wind.summary.ready}/${wind.summary.rows} linhas prontas. ${wind.summary.pending?`Faltam ${wind.summary.pending} linhas.`:'Pronto para geração.'}`}</small>
         </section>
       </div>}
 

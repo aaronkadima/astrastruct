@@ -57,7 +57,7 @@ function sequentialGraphFromNodes(nodes, options = {}) {
   };
 }
 
-export function defaultGraph(options = {}) {
+export function defaultVnlGraph(options = {}) {
   const types = ['Geometry', 'Material', 'Section', 'Boundary', 'Load', 'Combination', 'Solver', 'Result', 'Plot'];
   return sequentialGraphFromNodes(types.map((type, index) => ({
     id: `B${index + 1}`,
@@ -66,9 +66,14 @@ export function defaultGraph(options = {}) {
   })), options);
 }
 
+// Backward-compatible API used by the pre-v0.49 declarative panels.
+export function defaultGraph(options = {}) {
+  return defaultVnlGraph(options).nodes;
+}
+
 export function normalizeGraph(input) {
   if (Array.isArray(input)) return sequentialGraphFromNodes(input);
-  const source = input && typeof input === 'object' ? clone(input) : defaultGraph();
+  const source = input && typeof input === 'object' ? clone(input) : defaultVnlGraph();
   const nodes = Array.isArray(source.nodes) ? source.nodes.map((node, index) => createVnlNode(node.type, {
     ...node,
     id: node.id || `B${index + 1}`,

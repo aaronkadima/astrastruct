@@ -1,0 +1,70 @@
+import {validateIfcGuid} from './ifcGuid.js';
+import {createIfcMaterialMapping,validateIfcMaterialMapping,summarizeIfcMaterialMapping} from './ifcMaterial.js';
+
+export const IFC_STEP_MATERIAL_CONTRACT='ifc-step-material/v1';
+export const IFC_STEP_MATERIAL_VERSION='0.45.0-exp';
+
+const ref=id=>`#${id}`;
+const refs=ids=>`(${ids.map(ref).join(',')})`;
+const enumValue=v=>`.${String(v).trim().toUpperCase()}.`;
+const finite=(v,name)=>{const n=Number(v);if(!Number.isFinite(n))throw new Error(`IFC STEP material: ${name} deve ser finito.`);return n};
+const num=(v,name)=>{const n=finite(v,name);if(Number.isInteger(n))return `${n}.`;let s=String(n);if(!/[.eE]/.test(s))s+='.';return s.replace('e','E')};
+
+function spfString(value){
+  const source=String(value??'');let out='';
+  for(const ch of source){const cp=ch.codePointAt(0);if(cp>=32&&cp<=126&&ch!=="'"&&ch!=='\\')out+=ch;else if(ch==="'")out+="''";else{const units=[];for(let i=0;i<ch.length;i++)units.push(ch.charCodeAt(i).toString(16).toUpperCase().padStart(4,'0'));out+=`\\X2\\${units.join('')}\\X0\\`;}}
+  return `'${out}'`;
+}
+
+function optionalString(value){return value==null||value===''?'$':spfString(value)}
+function getOrAdd(emitter,key,entityFactory){if(emitter.byKey.has(key))return emitter.id(key);return emitter.add(entityFactory(),key)}
+function relationGuid(map,entry){return map?.[entry.memberKey]??map?.[entry.memberId]??null}
+
+function emitMaterial(emitter,material){
+  return getOrAdd(emitter,material.key,()=>`IFCMATERIAL(${spfString(material.name)},$,${optionalString(material.category)})`);
+}
+
+function emitProfile(emitter,entry){
+  const p=entry.profile,key=`profile:${entry.section.sourceId}`;
+  if(p.position)throw new Error(`IFC STEP material: Position explícita de perfil ainda não suportada em ${entry.memberId}.`);
+  return getOrAdd(emitter,key,()=>{
+    const head=`${enumValue(p.profileType)},${optionalString(p.profileName)},$`;
+    if(p.ifcClass==='IfcRectangleProfileDef')return`IFCRECTANGLEPROFILEDEF(${head},${num(p.xDim,'xDim')},${num(p.yDim,'yDim')})`;
+    if(p.ifcClass==='IfcCircleProfileDef')return`IFCCIRCLEPROFILEDEF(${head},${num(p.radius,'radius')})`;
+    if(p.ifcClass==='IfcIShapeProfileDef')return`IFCISHAPEPROFILEDEF(${head},${num(p.overallWidth,'overallWidth')},${num(p.overallDepth,'overallDepth')},${num(p.webThickness,'webThickness')},${num(p.flangeThickness,'flangeThickness')},${p.filletRadius==null?'$':num(p.filletRadius,'filletRadius')},${p.flangeEdgeRadius==null?'$':num(p.flangeEdgeRadius,'flangeEdgeRadius')},${p.flangeSlope==null?'$':num(p.flangeSlope,'flangeSlope')})`;
+    throw new Error(`IFC STEP material: perfil não suportado ${p.ifcClass}.`);
+  });
+}
+
+function emitProfileUsage(emitter,entry,materialId){
+  const profileId=emitProfile(emitter,entry);
+  const materialProfileKey=`material-profile:${entry.memberId}`;
+  const materialProfileId=getOrAdd(emitter,materialProfileKey,()=>`IFCMATERIALPROFILE(${optionalString(entry.materialProfile.name)},$,${ref(materialId)},${ref(profileId)},$,'LoadBearing')`);
+  const setKey=`material-profile-set:${entry.memberId}`;
+  const setId=getOrAdd(emitter,setKey,()=>`IFCMATERIALPROFILESET(${optionalString(entry.materialProfileSet.name)},$,${refs([materialProfileId])},$)`);
+  const usageKey=`material-profile-usage:${entry.memberId}`;
+  return getOrAdd(emitter,usageKey,()=>`IFCMATERIALPROFILESETUSAGE(${ref(setId)},${entry.usage.cardinalPoint??'$'},${entry.usage.referenceExtent==null?'$':num(entry.usage.referenceExtent,'ReferenceExtent')})`);
+}
+
+export function validateIfcStepMaterialReadiness(model,{materialAssociationGlobalIds={},allowPendingMaterials=false}={}){
+  const mapping=createIfcMaterialMapping(model);validateIfcMaterialMapping(mapping);
+  const summary=summarizeIfcMaterialMapping(mapping),allGuids=new Set();
+  if(summary.pending&&!allowPendingMaterials){const pending=mapping.entries.filter(x=>x.status==='PENDING').map(x=>`${x.memberId}:${x.reason}`).join(', ');throw new Error(`IFC STEP material: mapeamentos PENDING impedem exportação: ${pending}.`)}
+  for(const entry of mapping.entries.filter(x=>x.status==='READY')){
+    if(entry.mode==='MATERIAL_PROFILE_SET'&&entry.profile?.position)throw new Error(`IFC STEP material: Position explícita de perfil ainda não suportada em ${entry.memberId}.`);
+    const guid=relationGuid(materialAssociationGlobalIds,entry);if(!validateIfcGuid(guid))throw new Error(`IFC STEP material: GlobalId de IfcRelAssociatesMaterial obrigatório para ${entry.memberId}.`);
+    if(allGuids.has(guid))throw new Error(`IFC STEP material: GlobalId duplicado ${guid}.`);allGuids.add(guid);
+  }
+  return{contract:IFC_STEP_MATERIAL_CONTRACT,version:IFC_STEP_MATERIAL_VERSION,mapping,summary,associationGlobalIds:[...allGuids]};
+}
+
+export function emitIfcStepMaterials(emitter,model,options={}){
+  const ready=validateIfcStepMaterialReadiness(model,options),relationIds=[];
+  for(const entry of ready.mapping.entries){
+    if(entry.status!=='READY')continue;
+    const materialId=emitMaterial(emitter,entry.material),relatingMaterialId=entry.mode==='DIRECT_MATERIAL'?materialId:emitProfileUsage(emitter,entry,materialId);
+    const memberId=emitter.id(entry.memberKey),guid=relationGuid(options.materialAssociationGlobalIds,entry);
+    relationIds.push(emitter.add(`IFCRELASSOCIATESMATERIAL(${spfString(guid)},$,$,$,(${ref(memberId)}),${ref(relatingMaterialId)})`,`step:material-rel:${entry.memberId}`));
+  }
+  return{...ready,relationIds};
+}

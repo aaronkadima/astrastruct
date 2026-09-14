@@ -24,6 +24,8 @@ jobs:
         run: npm run check
       - name: Run structural solver tests
         run: npm test
+      - name: Validate persistent IFC application exchange
+        run: node tests/ifc-exchange-ui-v045-smoke.mjs
       - name: Build React/Vite application
         env:
           ASTRA_BASE_PATH: ${{ github.ref == 'refs/heads/develop' && '/astrastruct/dev/' || '/astrastruct/' }}
@@ -71,5 +73,5 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run desktop, Android and tablet regression
         env:
-          ASTRA_BASE_PATH: /astrastruct/dev/
+          ASTRA_BASE_PATH: /astrasuct/dev/
         run: npm run test:e2e

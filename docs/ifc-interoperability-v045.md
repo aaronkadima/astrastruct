@@ -1,18 +1,20 @@
 # AstraStruct v0.45 — interoperabilidade BIM/IFC
 
-## Base normativa e arquitetura
+## Estado de fechamento
 
-A v0.45 adota como referência estável **IFC 4.3 ADD2 / IFC 4.3.2.0 (`IFC4X3_ADD2`)**, publicado como **ISO 16739-1:2024**. Schemas draft posteriores não são usados como contrato de produção.
+A v0.45 fecha, na branch `develop`, o primeiro fluxo IFC estrutural verificável de ponta a ponta do AstraStruct. A versão de desenvolvimento passa a declarar **PRODUCT_VERSION = 0.45.0** somente após o gate final. A publicação estável em `main` permanece separada e não é promovida automaticamente.
 
-A interoperabilidade permanece desacoplada do solver:
+A base normativa adotada é **IFC 4.3 ADD2 / IFC 4.3.2.0 (`IFC4X3_ADD2`)**, publicada como **ISO 16739-1:2024**.
 
-`AstraStruct project -> IFC canonical model -> STEP writer -> strict STEP parser/round-trip -> IfcOpenShell validation`
+Arquitetura validada:
 
-O modelo canônico é a camada intermediária auditável. Nenhuma regra de serialização STEP altera a mecânica estrutural, o schema persistido do projeto ou os resultados de análise.
+`AstraStruct project -> IFC canonical model -> STEP writer -> strict STEP parser/round-trip -> IfcOpenShell validation -> Intercâmbio IFC4X3 na interface`
+
+O solver e o contrato persistido do projeto permanecem desacoplados da camada BIM. A v0.45 mantém `PROJECT_SCHEMA_VERSION = 2` e `RESULT_CONTRACT_VERSION = 1.0`.
 
 ## Contratos v0.45
 
-O módulo `web/src/interop/` expõe:
+O diretório `web/src/interop/` consolida:
 
 - `ifc-interoperability/v1`;
 - `ifc-project-context/v1`;
@@ -22,99 +24,77 @@ O módulo `web/src/interop/` expõe:
 - `ifc-step-owner/v1`;
 - `ifc-step-writer/v1`;
 - `ifc-step-parser/v1`;
-- `IFC_INTEROP_VERSION = 0.45.0-exp`;
-- `IFC_STEP_WRITER_VERSION = 0.45.0-exp`;
-- `IFC_STEP_PARSER_VERSION = 0.45.0-exp`;
-- `IFC_SCHEMA = IFC4X3_ADD2`;
-- `IFC_STANDARD = ISO 16739-1:2024`.
+- `ifc-exchange-state/v1`.
 
-A implementação não altera `PROJECT_SCHEMA_VERSION`. Enquanto a v0.45 permanecer experimental, `main` continua sendo a publicação estável e o produto publicado não é promovido automaticamente.
+Os módulos IFC permanecem versionados como `0.45.0-exp` para deixar explícito que o suporte corresponde ao **subconjunto estrutural documentado**, mesmo quando o produto de desenvolvimento é fechado como `0.45.0`.
 
-## Mapeamento estrutural canônico
+## Mapeamento estrutural
 
-| AstraStruct | Conceito IFC 4.3 |
+| AstraStruct | IFC 4.3 |
 |---|---|
 | projeto | `IfcProject` |
 | modelo de análise | `IfcStructuralAnalysisModel` |
 | nó / apoio pontual | `IfcStructuralPointConnection` |
-| barra / viga / pilar / treliça | `IfcStructuralCurveMember` |
-| laje / parede / placa / casca | `IfcStructuralSurfaceMember` |
+| barra, viga, pilar ou treliça | `IfcStructuralCurveMember` |
+| laje, parede, placa ou casca | `IfcStructuralSurfaceMember` |
 | ligação membro–nó | `IfcRelConnectsStructuralMember` |
-| condição de apoio nodal | `IfcBoundaryNodeCondition` |
+| condição nodal | `IfcBoundaryNodeCondition` |
 | material | `IfcMaterial` |
-| seção linear explícita | `IfcProfileDef` + material profile set |
+| perfil linear explícito | `IfcProfileDef` + `IfcMaterialProfileSetUsage` |
 
-Shell/surface/plate/slab/membrane/wall são classificados como membros de superfície; os demais elementos lineares suportados seguem para membros de curva.
+O modelo canônico continua sendo uma representação intermediária auditável. O campo `exchange.stepWriterReady` desse objeto não é usado como certificação genérica do arquivo STEP; a prontidão real do STEP é decidida pelos gates específicos do writer, material/profile, round-trip e validação externa.
 
-## Identidade IFC persistente
+## GlobalIds persistentes
 
-`ifcGuid.js` implementa UUID de 128 bits ↔ `IfcGloballyUniqueId` de 22 caracteres. O fluxo não regenera identidade em cada exportação.
+`ifcGuid.js` implementa UUID de 128 bits ↔ `IfcGloballyUniqueId` de 22 caracteres. Os **GlobalIds persistentes** são criados uma vez e reaplicados nas exportações seguintes do mesmo projeto.
 
-`createIfcIdentityMap()` cria um mapa persistível e `assignIfcGlobalIds()` reaplica as identidades. São rejeitados:
+O fluxo rejeita:
 
-- GlobalId sintaticamente inválido;
-- valor que exceda o espaço de 128 bits;
+- GlobalId inválido;
+- valor fora do espaço de 128 bits;
 - duplicidade;
-- ausência de GlobalId em `IfcRoot` antes da emissão STEP.
+- ausência de identidade obrigatória em objetos `IfcRoot` emitidos.
 
-`IfcRelDeclares`, `IfcRelAssignsToGroup` e cada `IfcRelAssociatesMaterial` também recebem GlobalIds persistentes explícitos.
+A identidade persistida cobre projeto, modelo de análise, nós, membros, relações membro–nó, `IfcRelDeclares`, `IfcRelAssignsToGroup` e relações `IfcRelAssociatesMaterial`.
 
-## Unidades e contexto geométrico
+O estado da interface é armazenado por projeto sob o contrato `ifc-exchange-state/v1`, incluindo os GlobalIds e o `CreationDate`, evitando regeneração a cada download.
 
-O sistema atualmente suportado é `kN-m-MPa`. O `IfcUnitAssignment` declara unidades SI explícitas para comprimento, área, volume, ângulo, massa, tempo, força e pressão.
+## Unidades, contexto e condições de contorno
 
-O domínio estrutural também declara:
+O sistema de unidades suportado nesta etapa é `kN-m-MPa`. O writer declara unidades SI para comprimento, área, volume, ângulo, massa, tempo, força e pressão, além de:
 
 - `LINEARSTIFFNESSUNIT = FORCE / LENGTH`;
 - `ROTATIONALSTIFFNESSUNIT = FORCE · LENGTH / PLANEANGLE`.
 
-`IfcGeometricRepresentationContext` é tridimensional, com precisão explícita, `WorldCoordinateSystem` e `TrueNorth`. Sistemas de unidades ainda não suportados são rejeitados; não há conversão implícita.
+O contexto geométrico é tridimensional, com precisão explícita, `WorldCoordinateSystem`, `TrueNorth` e subcontextos Body/Axis.
 
-## Apoios e molas
+Apoios e molas seguem a semântica IFC4+ de `IfcBoundaryNodeCondition`:
 
-`ifcBoundary.js` traduz `supports` e `nodeSprings` para `IfcBoundaryNodeCondition` conforme a semântica IFC4+:
-
-- `TRUE` = grau de liberdade restringido / rigidez infinita;
-- `FALSE` = liberação / rigidez nula;
-- valor numérico = mola linear-elástica finita.
-
-No STEP, molas translacionais usam `IfcLinearStiffnessMeasure` e molas rotacionais usam `IfcRotationalStiffnessMeasure`.
+- `TRUE` = restrição rígida;
+- `FALSE` = liberação;
+- valor numérico = mola elástica finita.
 
 ## Materiais e perfis
 
-`ifcMaterial.js` possui um gate de readiness separado da geometria estrutural.
+A exportação não reconstrói geometria de seção a partir apenas de `A`, `Iy`, `Iz` ou `J`. Esses valores não identificam univocamente um perfil.
 
-### Superfícies homogêneas
-
-Uma superfície com material explícito é mapeada como `READY / DIRECT_MATERIAL` e associada por `IfcRelAssociatesMaterial`. A espessura continua no `IfcStructuralSurfaceMember`.
-
-### Membros lineares
-
-Membros lineares exigem geometria de perfil explícita em `section.ifcProfile`. O AstraStruct **não tenta reconstruir o perfil apenas a partir de A, Iy, Iz ou J**, pois essas propriedades não identificam uma geometria única.
-
-Perfis explicitamente suportados neste incremento:
+Perfis explicitamente suportados:
 
 - `IfcRectangleProfileDef`;
 - `IfcCircleProfileDef`;
 - `IfcIShapeProfileDef`.
 
-Para perfis I/H são verificados, entre outros requisitos geométricos:
+Seções AstraStruct das famílias geométricas reconhecidas (`rect`, `circle`, `i`) podem ser enriquecidas para `section.ifcProfile` usando suas dimensões explícitas. Se houver somente propriedades mecânicas, o membro permanece `PENDING / IFC_PROFILE_MISSING` e a exportação é bloqueada por padrão.
 
-- `WebThickness < OverallWidth`;
-- `2 × FlangeThickness < OverallDepth`;
-- `FilletRadius` dentro das dimensões disponíveis.
-
-O encadeamento STEP é:
+Para membros lineares, a cadeia material/perfil é:
 
 `IfcProfileDef -> IfcMaterialProfile -> IfcMaterialProfileSet -> IfcMaterialProfileSetUsage -> IfcRelAssociatesMaterial`
 
-`IfcMaterialProfileSetUsage.CardinalPoint = 10` representa inserção pelo centroide geométrico.
+O `CardinalPoint = 10` representa inserção no centroide geométrico. Superfícies homogêneas usam associação direta de `IfcMaterial`, mantendo a espessura no `IfcStructuralSurfaceMember`.
 
-Se o membro possuir apenas propriedades mecânicas da seção, o estado permanece `PENDING / IFC_PROFILE_MISSING` e, por padrão, a exportação STEP é bloqueada.
+## OwnerHistory e aplicação
 
-## Owner/Application metadata
-
-`ifcStepOwner.js` exige metadata explícita e não inventa responsável técnico. O writer emite:
+A interface exige metadata de pessoa e organização e não inventa responsável técnico. O STEP emite:
 
 - `IfcPerson`;
 - `IfcOrganization`;
@@ -122,16 +102,14 @@ Se o membro possuir apenas propriedades mecânicas da seção, o estado permanec
 - `IfcApplication`;
 - `IfcOwnerHistory`.
 
-O mesmo `IfcOwnerHistory` é referenciado pelos objetos `IfcRoot` emitidos no subconjunto suportado, incluindo relações de material. `CreationDate` é um `IfcTimeStamp` explícito ou derivado de timestamp ISO válido.
+O `IfcOwnerHistory` é reutilizado nos objetos raiz emitidos, inclusive relações de material. `IfcApplication` identifica o AstraStruct e sua versão do módulo de intercâmbio.
 
-## Writer STEP — curvas e superfícies planas
+## Writer STEP
 
-`ifcStep.js` emite ISO-10303-21 para o subconjunto estrutural validado.
-
-### Entidades principais
+`ifcStep.js` emite ISO-10303-21 para o subconjunto estrutural suportado. Entre as entidades principais estão:
 
 - `IfcProject`;
-- `IfcStructuralAnalysisModel` com placement compartilhado;
+- `IfcStructuralAnalysisModel`;
 - `IfcStructuralPointConnection`;
 - `IfcStructuralCurveMember`;
 - `IfcStructuralSurfaceMember`;
@@ -140,99 +118,104 @@ O mesmo `IfcOwnerHistory` é referenciado pelos objetos `IfcRoot` emitidos no su
 - `IfcRelDeclares`;
 - `IfcRelAssignsToGroup`;
 - `IfcRelAssociatesMaterial`;
-- unidades, contexto, owner/application e recursos de material/profile necessários.
+- contexto, unidades, owner/application e recursos de material/profile.
 
-### Membros lineares
+Barras usam topologia `IfcEdge` sobre vértices compartilhados. Superfícies usam `IfcPolyLoop`, `IfcFaceOuterBound`, `IfcPlane` e `IfcFaceSurface`.
 
-A topologia de referência usa `IfcEdge` compartilhando os `IfcVertexPoint` dos nós. O eixo local é calculado a partir de uma direção não paralela à tangente e ortogonalizado antes de criar `IfcDirection`.
+Superfícies são aceitas somente quando são planas dentro da precisão do contexto. Geometria degenerada/colinear, não planicidade e espessura não positiva são rejeitadas. Não existe triangulação, projeção ou ajuste silencioso.
 
-### Membros de superfície
+## Parser e round-trip
 
-A superfície é emitida somente quando os nós formam uma face plana válida:
+`ifcStepParse.js` é um parser estrito do **subconjunto STEP produzido pelo AstraStruct**, não um parser IFC universal.
 
-1. seleção de três pontos não colineares;
-2. cálculo da normal;
-3. teste de planicidade de todos os nós;
-4. `IfcPolyLoop` com os mesmos `IfcCartesianPoint` nodais;
-5. `IfcFaceOuterBound`;
-6. `IfcAxis2Placement3D` + `IfcPlane`;
-7. uma `IfcFaceSurface` de referência;
-8. `IfcStructuralSurfaceMember` com `PredefinedType` e espessura, quando disponível.
+Ele recupera:
 
-Mapeamento inicial de `PredefinedType`:
+- projeto e modelo de análise;
+- owner/application;
+- GlobalIds;
+- nós e coordenadas;
+- barras por `Edge`;
+- superfícies por `FaceSurface`/`PolyLoop`;
+- conectividade estrutural;
+- material direto ou `IfcMaterialProfileSetUsage`.
 
-- `membrane*` -> `MEMBRANE_ELEMENT`;
-- `plate*` / `slab*` -> `BENDING_ELEMENT`;
-- demais shell/surface/wall -> `SHELL`.
+O benchmark de round-trip executa:
 
-O writer rejeita face colinear/degenerada, face não planar além da tolerância e espessura informada menor ou igual a zero. Não há triangulação, projeção ou ajuste silencioso.
+`canonical model -> STEP -> parser -> comparação estrutural`
 
-## Parser STEP e round-trip estrutural
+com modelo misto barra + casca. Adulterações de coordenadas, referências STEP inexistentes e GlobalId duplicado são rejeitadas.
 
-`ifcStepParse.js` implementa um parser **estrito do subconjunto emitido pelo AstraStruct**; ele não é apresentado como parser IFC universal.
+## Validação externa
 
-O parser:
+O job `ifc-external-validation`, exclusivo de `develop`, usa **IfcOpenShell 0.8.5** e `pytest` fixados no CI.
 
-- indexa entidades STEP e verifica referências;
-- decodifica strings SPF, inclusive `\X2\...\X0\`;
-- valida GlobalIds dos `IfcRoot` suportados;
-- reconstrói owner/application;
-- recupera coordenadas dos nós por `Vertex`;
-- recupera barras por `Edge`;
-- recupera superfícies por `FaceSurface`/`PolyLoop`;
-- recupera `IfcRelConnectsStructuralMember`;
-- lê material direto ou `IfcMaterialProfileSetUsage`.
+O gate:
 
-`validateIfcStructuralRoundTrip()` verifica que projeto/modelo de análise, GlobalIds, coordenadas e conectividade do modelo canônico sobrevivem a:
+1. gera fixture IFC4X3 determinístico com barra e casca;
+2. valida a sintaxe física SPF;
+3. abre o arquivo por implementação independente;
+4. verifica entidades estruturais esperadas;
+5. executa validação de schema e regras EXPRESS;
+6. verifica application/owner metadata;
+7. verifica presença, sintaxe e unicidade dos GlobalIds.
 
-`canonical model -> STEP -> parser`
+O fixture validado contém quatro nós, um `IfcStructuralCurveMember`, um `IfcStructuralSurfaceMember`, duas associações de material e owner/application metadata. O gate conclui sem findings de schema/EXPRESS para o subconjunto coberto.
 
-O benchmark contém também adulterações controladas: coordenada modificada, referência STEP inexistente e GlobalId duplicado devem ser rejeitados.
+Essa aprovação não equivale a certificação buildingSMART e não deve ser apresentada como compatibilidade universal com qualquer ferramenta IFC.
 
-## Validação independente com IfcOpenShell
+## Intercâmbio IFC4X3 na aplicação
 
-O workflow `AstraStruct CI` possui, em `develop`, o job `ifc-external-validation`.
+A interface de desenvolvimento possui painel dedicado **Intercâmbio IFC4X3**. O fluxo JSON original permanece independente e não foi substituído.
 
-Ele usa **IfcOpenShell 0.8.5** e `pytest` fixados no ambiente de CI. O job:
+O painel:
 
-1. gera um fixture IFC4X3 determinístico com uma barra e uma casca;
-2. passa o arquivo por `ifcopenshell.simple_spf`;
-3. abre o arquivo de forma independente do parser AstraStruct;
-4. verifica a população esperada de entidades estruturais;
-5. executa validação de schema com regras EXPRESS;
-6. valida header/application metadata;
-7. valida presença, sintaxe e unicidade dos GlobalIds de `IfcRoot`.
+- lê o projeto persistido atual;
+- apresenta `READY` ou `PENDING` por membro;
+- mostra a estratégia de associação de material;
+- exige pessoa e organização para o `OwnerHistory`;
+- preserva identidades entre exportações;
+- gera download `.ifc`;
+- permite validar/inspecionar um arquivo IFC pelo parser AstraStruct;
+- não sobrescreve o projeto atual durante a inspeção.
 
-O fixture corrente contém quatro nós, um `IfcStructuralCurveMember`, um `IfcStructuralSurfaceMember`, duas associações de material e owner/application metadata. O gate externo concluiu com sucesso após a instalação explícita da dependência de validação `pytest`.
+Em telas móveis, o acesso IFC ocupa um slot próprio do dock, sem sobrepor os controles de modelagem, Canvas 3D ou o launcher Lab & Modelos.
 
-A aprovação desse fixture demonstra conformidade de schema/EXPRESS do **subconjunto atualmente coberto**. Ela não equivale a certificação buildingSMART nem garante interoperabilidade perfeita com todos os authoring/analysis tools.
+## Cobertura e release gate
 
-## Cobertura de testes v0.45
+A cadeia determinística da v0.45 inclui:
 
-A cadeia principal em `develop` inclui:
+- `tests/release-gate-v045-smoke.mjs`;
+- `tests/ifc-interop-v045-smoke.mjs`;
+- `tests/ifc-units-v045-smoke.mjs`;
+- `tests/ifc-material-v045-smoke.mjs`;
+- `tests/ifc-step-v045-smoke.mjs`;
+- `tests/ifc-step-roundtrip-v045-smoke.mjs`;
+- `tests/ifc-exchange-ui-v045-smoke.mjs`;
+- `tests/e2e/ifc-exchange-v045.spec.ts`;
+- fixture `scripts/generate-ifc-v045-validation-fixture.mjs`;
+- validação independente `scripts/validate-ifc-v045-ifcopenshell.py`.
 
-- `tests/ifc-interop-v045-smoke.mjs` — modelo canônico, contexto, identidade e conectividade;
-- `tests/ifc-units-v045-smoke.mjs` — unidades estruturais derivadas;
-- `tests/ifc-material-v045-smoke.mjs` — material direto, profiles explícitos e estados PENDING;
-- `tests/ifc-step-v045-smoke.mjs` — writer, owner/application, materiais, barras, superfícies, apoios e guards geométricos;
-- `tests/ifc-step-roundtrip-v045-smoke.mjs` — round-trip misto barra + casca, Unicode SPF e detecção de adulterações;
-- fixture independente `scripts/generate-ifc-v045-validation-fixture.mjs`;
-- validação externa `scripts/validate-ifc-v045-ifcopenshell.py`.
+A regressão integral continua cobrindo os gates estruturais anteriores e a aplicação em **desktop, Android e tablet**. O fechamento exige simultaneamente:
 
-Além dos testes IFC, a cadeia mantém todos os gates estruturais anteriores e o build React/Vite. Em `develop`, a regressão Playwright continua verificando desktop, Android e tablet.
+1. typecheck;
+2. todos os smoke/solver tests;
+3. smoke de persistência do intercâmbio IFC;
+4. build React/Vite;
+5. IfcOpenShell SPF + IFC4X3 schema/EXPRESS;
+6. regressão Playwright multidispositivo.
 
 ## Limitações remanescentes
 
-O campo canônico `exchange.stepWriterReady` permanece `false` até o fechamento formal da v0.45. As principais limitações restantes são:
+Mesmo com o fechamento v0.45, permanecem explicitamente fora do escopo atual:
 
-1. catálogo de perfis IFC ainda restrito a retangular, circular e I/H;
-2. superfícies compostas/multicamadas ainda não usam `IfcMaterialLayerSetUsage`;
-3. conexões de superfícies permanecem representadas pela conectividade membro–point connection do subconjunto atual; casos que exijam structural curve/surface connections dedicadas precisam de extensão;
-4. ausência, nesta etapa, de IDS/MVD específico para definir requisitos de troca além do schema IFC4X3;
-5. necessidade de testes de interoperabilidade de aplicação com arquivos abertos/salvos por ferramentas BIM/estruturais independentes, além da validação de schema pelo IfcOpenShell;
-6. integração completa do fluxo Importar/Exportar IFC na interface do aplicativo;
-7. gate final da v0.45 e atualização de `PRODUCT_VERSION` apenas após a página `develop` concluir todos os testes previstos.
+1. catálogo IFC de perfis além de retangular, circular e I/H;
+2. `IfcMaterialLayerSetUsage` para superfícies multicamadas/compostas;
+3. structural curve/surface connections dedicadas para topologias mais avançadas;
+4. IDS/MVD de troca específico do AstraStruct;
+5. importação IFC genérica e reconstrução completa de qualquer modelo BIM;
+6. testes de abrir/editar/salvar em múltiplos authoring/analysis tools independentes;
+7. certificação buildingSMART.
 
 ## Regra de publicação
 
-Toda a v0.45 permanece em `develop`. `main` continua sendo a publicação estável. Nenhuma promoção para `main` deve ocorrer somente porque o schema IFC passou: o gate final também exige regressão da aplicação de desenvolvimento e validação explícita do fluxo de interface.
+O fechamento da v0.45 ocorre primeiro em `develop`. **Nenhuma promoção para `main`** é automática. `main` continua sendo a publicação estável anterior até uma decisão explícita de promoção após o gate final da branch de desenvolvimento.

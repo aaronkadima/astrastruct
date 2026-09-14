@@ -2,7 +2,7 @@ import {mkdir,writeFile} from 'node:fs/promises';
 import {dirname,resolve} from 'node:path';
 import {
   createIfcInteroperabilityModel,createIfcIdentityMap,assignIfcGlobalIds,compressIfcGuid,
-  renderIfcStep,validateIfcStepEnvelope,parseIfcStructuralStep,validateIfcStructuralRoundTrip
+  createIfcStructuralLoadMapping,renderIfcStep,validateIfcStepEnvelope,parseIfcStructuralStep,validateIfcStructuralRoundTrip
 } from '../web/src/interop/index.js';
 import {PRODUCT_VERSION} from '../web/src/core/version.js';
 
@@ -28,13 +28,24 @@ const project={
   elements:[
     {id:'E1',type:'frame3d',n1:'N1',n2:'N2',materialId:'S355',sectionId:'I200'},
     {id:'S1',type:'shell4',n1:'N1',n2:'N2',n3:'N3',n4:'N4',materialId:'C30',sectionId:'SHELL180',thickness:.18}
-  ]
+  ],
+  loadCases:[{id:'G',name:'Permanent',type:'permanent'},{id:'Q',name:'Variable',type:'variable'}],
+  loads:[
+    {id:'LG',caseId:'G',nodeId:'N2',fx:12,fy:-8,fz:-25,mx:2,my:0,mz:1},
+    {id:'LQ',caseId:'Q',nodeId:'N3',fx:10,fy:0,fz:0,mx:0,my:0,mz:0}
+  ],
+  elementLoads:[{id:'EG',caseId:'G',elementId:'E1',kind:'uniform',qx:0,qy:-5,qz:-3}],
+  loadCombinations:[{id:'ULS',name:'ULS validation',type:'custom',terms:[{caseId:'G',factor:1.2},{caseId:'Q',factor:1.5}]}],
+  settlements:[]
 };
 
 const canonical=createIfcInteroperabilityModel(project,{analysisModelName:'AstraStruct IFC4X3 external validation model'});
 let sequence=0;
 const identityMap=createIfcIdentityMap(canonical,{uuidFactory:()=> (++sequence).toString(16).padStart(32,'0')});
 const model=assignIfcGlobalIds(canonical,{identityMap});
+const loadMapping=createIfcStructuralLoadMapping(project),loadGlobalIds={};
+let loadSequence=0x400;
+for(const record of [...loadMapping.cases,...loadMapping.combinations,...loadMapping.actions,...loadMapping.relationships.caseAssignments,...loadMapping.relationships.combinationFactors,...loadMapping.relationships.activityConnections])loadGlobalIds[record.key]=compressIfcGuid((loadSequence++).toString(16).padStart(32,'0'));
 const options={
   declarationGlobalId:compressIfcGuid('00000000-0000-0000-0000-0000000002fe'),
   groupGlobalId:compressIfcGuid('00000000-0000-0000-0000-0000000002ff'),
@@ -42,6 +53,7 @@ const options={
     E1:compressIfcGuid('00000000-0000-0000-0000-000000000300'),
     S1:compressIfcGuid('00000000-0000-0000-0000-000000000301')
   },
+  loadMapping,loadGlobalIds,
   ownerMetadata:{
     person:{identification:'astrastruct-ci',familyName:'CI',givenName:'AstraStruct'},
     organization:{identification:'ASTRASTRUCT',name:'AstraStruct',description:'IFC4X3 external validation fixture'},
@@ -52,9 +64,10 @@ const options={
 };
 
 const step=renderIfcStep(model,options),envelope=validateIfcStepEnvelope(step),parsed=parseIfcStructuralStep(step),roundTrip=validateIfcStructuralRoundTrip(model,parsed);
-if(!envelope.hasCurveMembers||!envelope.hasSurfaceMembers||!envelope.hasMaterialAssociations||!envelope.hasOwnerHistory)throw new Error('IFC validation fixture: envelope incompleto.');
+if(!envelope.hasCurveMembers||!envelope.hasSurfaceMembers||!envelope.hasMaterialAssociations||!envelope.hasOwnerHistory)throw new Error('IFC validation fixture: envelope estrutural incompleto.');
+if(!envelope.hasLoadCases||!envelope.hasLoadGroups||!envelope.hasPointActions||!envelope.hasLinearActions||!envelope.hasStructuralActivityConnections||!envelope.hasFactoredLoadGroups)throw new Error('IFC validation fixture: envelope de cargas v0.48 incompleto.');
 if(!step.includes("Pset_MaterialSteel")||!step.includes("Pset_MaterialConcrete"))throw new Error('IFC validation fixture: property sets resistentes v0.47 ausentes.');
-if(roundTrip.nodes!==4||roundTrip.members!==2||roundTrip.materialAssociations!==2)throw new Error('IFC validation fixture: round-trip interno incompleto.');
+if(roundTrip.nodes!==4||roundTrip.members!==2||roundTrip.materialAssociations!==2)throw new Error('IFC validation fixture: round-trip interno estrutural incompleto.');
 await mkdir(dirname(output),{recursive:true});
 await writeFile(output,step,'utf8');
-console.log(JSON.stringify({output,schema:envelope.schema,productVersion:PRODUCT_VERSION,entities:envelope.entities,nodes:roundTrip.nodes,members:roundTrip.members,materialAssociations:roundTrip.materialAssociations,materialStrengthPsets:true},null,2));
+console.log(JSON.stringify({output,schema:envelope.schema,productVersion:PRODUCT_VERSION,entities:envelope.entities,nodes:roundTrip.nodes,members:roundTrip.members,materialAssociations:roundTrip.materialAssociations,materialStrengthPsets:true,loadCases:loadMapping.cases.length,loadCombinations:loadMapping.combinations.length,loadActions:loadMapping.actions.length,loadRootIds:Object.keys(loadGlobalIds).length},null,2));

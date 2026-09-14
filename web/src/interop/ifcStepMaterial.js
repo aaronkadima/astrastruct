@@ -59,12 +59,12 @@ export function validateIfcStepMaterialReadiness(model,{materialAssociationGloba
 }
 
 export function emitIfcStepMaterials(emitter,model,options={}){
-  const ready=validateIfcStepMaterialReadiness(model,options),relationIds=[];
+  const ready=validateIfcStepMaterialReadiness(model,options),relationIds=[],ownerHistory=options.ownerHistoryId?ref(options.ownerHistoryId):'$';
   for(const entry of ready.mapping.entries){
     if(entry.status!=='READY')continue;
     const materialId=emitMaterial(emitter,entry.material),relatingMaterialId=entry.mode==='DIRECT_MATERIAL'?materialId:emitProfileUsage(emitter,entry,materialId);
     const memberId=emitter.id(entry.memberKey),guid=relationGuid(options.materialAssociationGlobalIds,entry);
-    relationIds.push(emitter.add(`IFCRELASSOCIATESMATERIAL(${spfString(guid)},$,$,$,(${ref(memberId)}),${ref(relatingMaterialId)})`,`step:material-rel:${entry.memberId}`));
+    relationIds.push(emitter.add(`IFCRELASSOCIATESMATERIAL(${spfString(guid)},${ownerHistory},$,$,(${ref(memberId)}),${ref(relatingMaterialId)})`,`step:material-rel:${entry.memberId}`));
   }
   return{...ready,relationIds};
 }

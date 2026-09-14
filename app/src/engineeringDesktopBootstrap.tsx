@@ -11,7 +11,7 @@ import{currentAnalysisResult,subscribeAnalysisResult}from'./analysisResultBridge
 
 const STORAGE_KEY='astrastruct.project',PREVIEW_KEY='astrastruct.engineeringDesktopPreview';
 const roots=new Map<string,Root>();let project:any=null,result:any=null,started=false;
-function previewEnabled(){try{return new URLSearchParams(location.search).get('engineeringDesktop')==='1'||localStorage.getItem(PREVIEW_KEY)==='true'}catch{return false}}
+function previewEnabled(){try{return new URLSearchParams(location.search).get('engineeringDesktop')!=='0'&&localStorage.getItem(PREVIEW_KEY)!=='false'}catch{return true}}
 function readProject(){try{return withNBR6118Baseline(normalizeProject(JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}')))}catch{return withNBR6118Baseline(normalizeProject({}))}}
 function commitProject(next:any){project=withNBR6118Baseline(normalizeProject(next));localStorage.setItem(STORAGE_KEY,JSON.stringify(project));window.dispatchEvent(new CustomEvent('astrastruct:project-external-commit',{detail:{project,source:'engineering-desktop'}}));renderAll()}
 function clickAria(label:string){const b=[...document.querySelectorAll<HTMLButtonElement>('button[aria-label]')].find(x=>x.getAttribute('aria-label')===label);b?.click()}

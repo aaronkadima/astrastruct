@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {compressIfcGuid,prepareIfcExchange,createIfcImportStaging,validateIfcImportStaging,summarizeIfcImportStaging,IFC_IMPORT_STAGING_CONTRACT,IFC_IMPORT_STAGING_VERSION} from '../web/src/interop/index.js';
+import {solve} from '../web/src/solver/index.js';
 
 const project={
   id:'IFC-IMPORT-V046',name:'Importação IFC v0.46',units:'kN-m-MPa',schemaVersion:2,meta:{productVersion:'0.45.0'},
@@ -41,6 +42,7 @@ assert.ok(conservative.readiness.analysisIssues.some(x=>x.code==='YOUNG_MODULUS_
 assert.ok(conservative.readiness.analysisIssues.some(x=>x.code==='SHEAR_MODULUS_MISSING'));
 assert.ok(conservative.readiness.analysisIssues.some(x=>x.code==='POISSON_RATIO_MISSING'));
 assert.throws(()=>validateIfcImportStaging(conservative,{requireAnalysisReady:true}),/análise possui/);
+assert.throws(()=>solve(conservative.project),/Importação IFC: análise bloqueada/,'solver deve bloquear IFC geometry-only mesmo fora da UI');
 
 const unsupportedUnits=exported.step.replace('IFCSIUNIT(*,.PRESSUREUNIT.,.MEGA.,.PASCAL.)','IFCSIUNIT(*,.PRESSUREUNIT.,.KILO.,.PASCAL.)');
 assert.throws(()=>createIfcImportStaging(unsupportedUnits),/PRESSUREUNIT não suportado/,'unidades incompatíveis não podem ser interpretadas silenciosamente');
@@ -57,4 +59,4 @@ const unsupported=createIfcImportStaging(unsupportedStep);
 assert.equal(unsupported.readiness.geometryReady,false);assert.ok(unsupported.readiness.geometryIssues.some(x=>x.code==='CURVE_PREDEFINED_TYPE_UNSUPPORTED'));
 assert.throws(()=>validateIfcImportStaging(unsupported),/geometria possui/);
 
-console.log('AstraStruct v0.46 IFC import staging smoke: geometry, mechanics, units, GlobalIds, supports/springs and frame/truss semantics coherent.');
+console.log('AstraStruct v0.46 IFC import staging smoke: geometry, mechanics, units, solver guard, GlobalIds, supports/springs and frame/truss semantics coherent.');

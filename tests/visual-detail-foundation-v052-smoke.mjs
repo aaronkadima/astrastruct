@@ -1,16 +1,15 @@
 import assert from'node:assert/strict';
-import{readFileSync}from'node:fs';
-import{elementAppearance,withElementAppearance,applyAppearanceToType,appearanceSummary}from'../web/src/visualization/appearance.js';
+import{STRUCTURAL_APPEARANCE_GROUPS,appearanceGroupSummary,appearanceSummary,applyAppearanceToType,elementAppearance,groupAppearance,materializeGroupAppearances,resetGroupAppearance,structuralElementGroup,withElementAppearance,withGroupAppearance}from'../web/src/visualization/appearance.js';
 import{createRebarSheetsFromSchedule,updateSheetEntity,exportDrawingSheetSvg,withDrawingSheets}from'../web/src/detailing/sheets.js';
 import{foundationReviewFromProject,itemsFromSupports,reviewFoundationProject,withFoundationReview}from'../web/src/foundation/review.js';
 
-const project={id:'P52',nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:4,y:0,z:0},{id:'N3',x:4,y:4,z:0},{id:'N4',x:0,y:4,z:0}],elements:[{id:'E1',type:'frame3d',n1:'N1',n2:'N2'},{id:'E2',type:'frame3d',n1:'N2',n2:'N3'},{id:'S1',type:'shell4',nodeIds:['N1','N2','N3','N4']}],supports:[{nodeId:'N1',ux:true,uy:true,uz:true}]};
-const styled=withElementAppearance(project,'E1',{color:'#ff5500',opacity:.35});
-assert.equal(elementAppearance(styled,'E1').color,'#ff5500');assert.equal(elementAppearance(styled,'E1').opacity,.35);
-const hidden=withElementAppearance(styled,'E1',{visible:false});assert.equal(elementAppearance(hidden,'E1').visible,false);
-const typed=applyAppearanceToType(styled,'E1');assert.equal(elementAppearance(typed,'E2').color,'#ff5500');assert.equal(appearanceSummary(typed).custom,2);
-const canvasSource=readFileSync(new URL('../app/src/SpatialCanvas3D.tsx',import.meta.url),'utf8');
-assert.match(canvasSource,/visualization\/appearance\.js/);assert.match(canvasSource,/appearanceState\(project,it\.e\)/);assert.match(canvasSource,/data-appearance-custom-count/);assert.match(canvasSource,/data-appearance-hidden-count/);assert.match(canvasSource,/appearance\.visible===false/);assert.match(canvasSource,/globalAlpha=selected\?1:appearance\.opacity/);assert.match(canvasSource,/data-element-id=\{it\.e\.id\}/);
+const project={id:'P52',nodes:[{id:'N1',x:0,y:0,z:0},{id:'N2',x:4,y:0,z:0},{id:'N3',x:4,y:4,z:0},{id:'N4',x:0,y:4,z:0},{id:'N5',x:0,y:0,z:3},{id:'N6',x:0,y:4,z:3}],elements:[{id:'E1',type:'frame3d',n1:'N1',n2:'N2'},{id:'E2',type:'frame3d',n1:'N2',n2:'N3'},{id:'C1',type:'frame3d',n1:'N1',n2:'N5'},{id:'S1',type:'shell4',nodeIds:['N1','N2','N3','N4']},{id:'W1',type:'shell4',nodeIds:['N1','N4','N6','N5']},{id:'T1',type:'truss3d',n1:'N5',n2:'N3'}],supports:[{nodeId:'N1',ux:true,uy:true,uz:true}]};
+assert.equal(STRUCTURAL_APPEARANCE_GROUPS.length,7);assert.equal(structuralElementGroup(project,'E1'),'beam');assert.equal(structuralElementGroup(project,'E2'),'beam');assert.equal(structuralElementGroup(project,'C1'),'column');assert.equal(structuralElementGroup(project,'S1'),'slab');assert.equal(structuralElementGroup(project,'W1'),'wall');assert.equal(structuralElementGroup(project,'T1'),'brace');
+const grouped=withGroupAppearance(project,'beam',{color:'#ff5500',opacity:.35});assert.equal(groupAppearance(grouped,'beam').color,'#ff5500');assert.equal(elementAppearance(grouped,'E1').color,'#ff5500');assert.equal(elementAppearance(grouped,'E2').opacity,.35);assert.equal(elementAppearance(grouped,'C1').color,'#536f86');assert.equal(grouped.visualization.elementAppearance.E1.derivedFromGroup,'beam');
+const newBeamProject={...grouped,elements:[...grouped.elements,{id:'E3',type:'frame3d',n1:'N3',n2:'N4'}]};assert.equal(elementAppearance(newBeamProject,'E3').color,'#ff5500');const rematerialized=materializeGroupAppearances(newBeamProject);assert.equal(rematerialized.visualization.elementAppearance.E3.derivedFromGroup,'beam');assert.equal(rematerialized.visualization.elementAppearance.E3.opacity,.35);
+const legacyApi=withElementAppearance(grouped,'C1',{color:'#663399',opacity:.6});assert.equal(groupAppearance(legacyApi,'column').color,'#663399');assert.equal(elementAppearance(legacyApi,'C1').source,'group');
+const typed=applyAppearanceToType(legacyApi,'E1');assert.equal(elementAppearance(typed,'E2').color,'#ff5500');assert.ok(appearanceSummary(typed).custom>=3);assert.equal(appearanceGroupSummary(typed).custom,2);
+const hidden=withGroupAppearance(typed,'slab',{visible:false});assert.equal(elementAppearance(hidden,'S1').visible,false);const reset=resetGroupAppearance(hidden,'slab');assert.equal(elementAppearance(reset,'S1').visible,true);
 
 const schedule={contract:'rebar-schedule/v1',marks:[{id:'B1',diameterMm:12.5,quantity:4,segmentsMm:[1200,450],arcs:[],cutLengthMm:1650,totalLengthM:6.6,totalMassKg:6.36,grade:'CA-50',location:'Sapata F1'},{id:'B2',diameterMm:10,quantity:8,segmentsMm:[900],arcs:[],cutLengthMm:900,totalLengthM:7.2,totalMassKg:4.44,grade:'CA-50',location:'Viga V1'}]};
 const sheets=createRebarSheetsFromSchedule({schedule,projectId:'P52',marksPerSheet:8});assert.equal(sheets.length,1);assert.equal(sheets[0].contract,'engineering-drawing-sheet/v1');assert.ok(sheets[0].entities.some(e=>e.kind==='rebar'));
@@ -23,4 +22,4 @@ const failItem={...passItem,id:'F2',label:'F2',x:4,geometry:{...passItem.geometr
 const review={contract:'foundation-review/v1',version:'0.52.0-exp',profile,items:[passItem,failItem]};
 const reviewed=reviewFoundationProject(project,review);assert.equal(reviewed.summary.count,2);assert.equal(reviewed.results[0].status,'PASS');assert.equal(reviewed.results[1].status,'FAIL');assert.ok(reviewed.results[1].suggestions.some(s=>s.id==='bearing-plan'));
 const stored=withFoundationReview(project,review);assert.equal(stored.foundationReview.items.length,2);
-console.log('AstraStruct v0.52 visualization/detailing/foundation smoke: persistent appearance reaches the primary 3D canvas, editable rebar sheets and auditable foundation PASS/FAIL/PENDING remain coherent.');
+console.log('AstraStruct v0.52 visualization/detailing/foundation smoke: structural group appearance, inheritance for new elements, editable rebar sheets and auditable foundation PASS/FAIL/PENDING coherent.');

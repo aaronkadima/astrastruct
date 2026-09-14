@@ -4,6 +4,7 @@ const finite=(v,name)=>{const n=Number(v);if(!Number.isFinite(n))throw new Error
 export const IFC_CONTEXT_CONTRACT='ifc-project-context/v1';
 
 function siUnit(key,unitType,name,prefix=null){return{key,ifcClass:'IfcSIUnit',unitType,name,prefix};}
+function derivedUnit(key,unitType,elements){return{key,ifcClass:'IfcDerivedUnit',unitType,userDefinedType:null,elements:elements.map(([unitRef,exponent])=>({ifcClass:'IfcDerivedUnitElement',unitRef,exponent}))};}
 
 export function unitsForAstraStruct(unitSystem='kN-m-MPa'){
   const source=String(unitSystem||'').trim();
@@ -18,7 +19,9 @@ export function unitsForAstraStruct(unitSystem='kN-m-MPa'){
       siUnit('unit:mass','MASSUNIT','GRAM','KILO'),
       siUnit('unit:time','TIMEUNIT','SECOND'),
       siUnit('unit:force','FORCEUNIT','NEWTON','KILO'),
-      siUnit('unit:pressure','PRESSUREUNIT','PASCAL','MEGA')
+      siUnit('unit:pressure','PRESSUREUNIT','PASCAL','MEGA'),
+      derivedUnit('unit:linear-stiffness','LINEARSTIFFNESSUNIT',[["unit:force",1],["unit:length",-1]]),
+      derivedUnit('unit:rotational-stiffness','ROTATIONALSTIFFNESSUNIT',[["unit:force",1],["unit:length",1],["unit:angle",-1]])
     ]
   };
 }
@@ -48,12 +51,22 @@ export function createIfcProjectContext({unitSystem='kN-m-MPa',precision=1e-6,or
 export function validateIfcProjectContext(context){
   if(context?.contract!==IFC_CONTEXT_CONTRACT)throw new Error('IFC context: contrato inválido.');
   if(context?.units?.ifcClass!=='IfcUnitAssignment')throw new Error('IFC context: IfcUnitAssignment ausente.');
-  const unitTypes=new Set();
+  const unitTypes=new Set(),unitKeys=new Set();
   for(const unit of context.units.units||[]){
-    if(unit.ifcClass!=='IfcSIUnit'||!unit.unitType||!unit.name)throw new Error('IFC context: unidade SI inválida.');
+    if(!unit?.key||!unit.unitType)throw new Error('IFC context: unidade sem key/UnitType.');
+    if(unitKeys.has(unit.key))throw new Error(`IFC context: chave de unidade duplicada ${unit.key}.`);unitKeys.add(unit.key);
     if(unitTypes.has(unit.unitType))throw new Error(`IFC context: UnitType duplicado ${unit.unitType}.`);unitTypes.add(unit.unitType);
+    if(unit.ifcClass==='IfcSIUnit'){
+      if(!unit.name)throw new Error(`IFC context: IfcSIUnit ${unit.key} sem Name.`);
+    }else if(unit.ifcClass==='IfcDerivedUnit'){
+      if(!Array.isArray(unit.elements)||!unit.elements.length)throw new Error(`IFC context: IfcDerivedUnit ${unit.key} sem elementos.`);
+      for(const element of unit.elements){
+        if(element?.ifcClass!=='IfcDerivedUnitElement'||!element.unitRef||!Number.isInteger(Number(element.exponent)))throw new Error(`IFC context: elemento derivado inválido em ${unit.key}.`);
+      }
+    }else throw new Error(`IFC context: classe de unidade não suportada ${unit.ifcClass}.`);
   }
-  for(const required of ['LENGTHUNIT','AREAUNIT','VOLUMEUNIT','PLANEANGLEUNIT'])if(!unitTypes.has(required))throw new Error(`IFC context: unidade geométrica obrigatória ausente: ${required}.`);
+  for(const unit of context.units.units||[])if(unit.ifcClass==='IfcDerivedUnit')for(const element of unit.elements)if(!unitKeys.has(element.unitRef))throw new Error(`IFC context: unidade derivada ${unit.key} referencia ${element.unitRef} inexistente.`);
+  for(const required of ['LENGTHUNIT','AREAUNIT','VOLUMEUNIT','PLANEANGLEUNIT','LINEARSTIFFNESSUNIT','ROTATIONALSTIFFNESSUNIT'])if(!unitTypes.has(required))throw new Error(`IFC context: unidade obrigatória ausente: ${required}.`);
   const contexts=context.representationContexts||[];
   if(contexts.length!==1)throw new Error('IFC context: deve existir exatamente um contexto geométrico 3D principal nesta etapa.');
   const main=contexts[0];

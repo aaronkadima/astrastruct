@@ -163,8 +163,8 @@ export function EngineeringRightRail({project,result}:Pick<Props,'project'|'resu
   const analysisReady=!!vis?.detailReadiness?.analysisComplete;
   const foundationCount=vis?.foundation?.foundationCount||project.supports?.length||0;
   return <div className="eng-right-rail" data-testid="engineering-right-rail">
-    <section><header>Vista lateral · deformada global</header><LateralDiagram result={result}/></section>
-    <section><header>Vista inferior · Fundação</header><FoundationDiagram project={project}/></section>
+    <section><header>Vista Lateral - Deslocamento Global (Direção X)<button aria-label="Fechar vista lateral">×</button></header><LateralDiagram result={result}/></section>
+    <section><header>Vista Inferior - Fundação<button aria-label="Fechar vista inferior">×</button></header><div className="eng-foundation-tools"><button aria-label="Ampliar">＋</button><button aria-label="Rotacionar">↻</button><button aria-label="Reduzir">−</button><button aria-label="Vista inicial">⌂</button></div><FoundationDiagram project={project}/></section>
     <section className="eng-legend">
       <header>Legenda de resultados</header>
       <select aria-label="Campo visual rápido" onChange={e=>{

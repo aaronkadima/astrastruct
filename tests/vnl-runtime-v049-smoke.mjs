@@ -6,7 +6,7 @@ import {
   VNL_EXECUTION_CONTRACT,
   createVnlNode,
   createVnlEdge,
-  defaultGraph,
+  defaultVnlGraph,
   validateGraph,
   compileVnlGraph,
   executeVnlGraph,
@@ -16,7 +16,7 @@ import {
 
 const project = demoFrame();
 
-const graph = defaultGraph({ id: 'smoke-linear', name: 'Linear smoke' });
+const graph = defaultVnlGraph({ id: 'smoke-linear', name: 'Linear smoke' });
 assert.equal(graph.contract, VNL_CONTRACT);
 assert.equal(graph.version, VNL_VERSION);
 const validation = validateGraph(graph);

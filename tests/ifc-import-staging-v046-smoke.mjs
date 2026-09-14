@@ -19,9 +19,9 @@ assert.match(exported.step,/IFCMODULUSOFELASTICITYMEASURE\(200000\.\)/,'E=200e6 
 const stage=createIfcImportStaging(exported.step);
 
 assert.equal(stage.contract,IFC_IMPORT_STAGING_CONTRACT);assert.equal(stage.version,IFC_IMPORT_STAGING_VERSION);assert.equal(stage.schema,'IFC4X3_ADD2');
-assert.equal(stage.readiness.geometryReady,true);assert.equal(stage.readiness.analysisReady,true,'IFC AstraStruct com propriedades mecânicas suficientes deve retornar pronto para análise');
+assert.equal(stage.readiness.geometryReady,true);assert.equal(stage.readiness.loadReady,true);assert.equal(stage.readiness.commitReady,true);assert.equal(stage.readiness.analysisReady,true,'IFC AstraStruct com propriedades mecânicas suficientes deve retornar pronto para análise');
 assert.equal(validateIfcImportStaging(stage,{requireAnalysisReady:true}),true);
-assert.deepEqual(summarizeIfcImportStaging(stage),{nodes:4,elements:2,curves:1,surfaces:1,materials:2,sections:2,supports:1,nodeSprings:1,geometryBlocking:0,analysisBlocking:0,schema:'IFC4X3_ADD2',geometryReady:true,analysisReady:true});
+assert.deepEqual(summarizeIfcImportStaging(stage),{nodes:4,elements:2,curves:1,surfaces:1,materials:2,sections:2,supports:1,nodeSprings:1,loadCases:0,loadCombinations:0,nodalLoads:0,elementLoads:0,loadBlocking:0,geometryBlocking:0,analysisBlocking:0,schema:'IFC4X3_ADD2',geometryReady:true,loadReady:true,commitReady:true,analysisReady:true});
 assert.equal(stage.project.nodes.find(x=>x.id==='N1').ifcGlobalId,exported.canonical.nodes.find(x=>x.sourceId==='N1').globalId);
 assert.equal(stage.project.elements.find(x=>x.id==='E_FRAME').type,'frame3d');
 assert.equal(stage.project.elements.find(x=>x.id==='E_SHELL').type,'shell4');
@@ -33,10 +33,11 @@ assert.equal(stage.project.materials.find(x=>x.id==='Steel_S355').E,200e6,'Young
 assert.equal(stage.project.materials.find(x=>x.id==='Steel_S355').nu,.3);
 assert.equal(stage.project.materials.find(x=>x.id==='Concrete_C30').E,30e6);
 assert.equal(stage.project.materials.find(x=>x.id==='Concrete_C30').nu,.2);
+assert.equal(stage.project.ifcImport.exchangeStateSeed.ids[`project:${stage.project.id}`],exported.canonical.project.globalId,'staging v0.48 deve preparar identidade para reexportação');
 
 const withoutMechanicalStep=exported.step.split('\n').filter(line=>!line.includes('IFCMATERIALPROPERTIES(')&&!line.includes('IFCPROPERTYSINGLEVALUE(')).join('\n');
 const conservative=createIfcImportStaging(withoutMechanicalStep);
-assert.equal(conservative.readiness.geometryReady,true);assert.equal(conservative.readiness.analysisReady,false,'arquivo sem propriedades mecânicas deve permanecer apenas geometricamente pronto');
+assert.equal(conservative.readiness.geometryReady,true);assert.equal(conservative.readiness.loadReady,true);assert.equal(conservative.readiness.commitReady,true);assert.equal(conservative.readiness.analysisReady,false,'arquivo sem propriedades mecânicas deve permanecer apenas geometricamente pronto');
 assert.equal(conservative.summary.analysisBlocking,4);
 assert.ok(conservative.readiness.analysisIssues.some(x=>x.code==='YOUNG_MODULUS_MISSING'));
 assert.ok(conservative.readiness.analysisIssues.some(x=>x.code==='SHEAR_MODULUS_MISSING'));
@@ -52,11 +53,11 @@ const trussExport=prepareIfcExchange(trussProject,{guidFactory,ownerMetadata,tim
 assert.match(trussExport.step,/\.PIN_JOINED_MEMBER\./,'truss3d deve ser serializado como PIN_JOINED_MEMBER');
 assert.doesNotMatch(trussExport.step,/IFCSTRUCTURALCURVEMEMBER\([^\n]+\.RIGID_JOINED_MEMBER\./,'treliça não pode ser promovida silenciosamente a membro rígido');
 const trussStage=createIfcImportStaging(trussExport.step);
-assert.equal(trussStage.readiness.geometryReady,true);assert.equal(trussStage.readiness.analysisReady,true);assert.equal(trussStage.project.elements.find(x=>x.id==='E_TRUSS').type,'truss3d','PIN_JOINED_MEMBER deve importar como barra axial');
+assert.equal(trussStage.readiness.geometryReady,true);assert.equal(trussStage.readiness.loadReady,true);assert.equal(trussStage.readiness.commitReady,true);assert.equal(trussStage.readiness.analysisReady,true);assert.equal(trussStage.project.elements.find(x=>x.id==='E_TRUSS').type,'truss3d','PIN_JOINED_MEMBER deve importar como barra axial');
 
 const unsupportedStep=exported.step.replace('.RIGID_JOINED_MEMBER.','.CABLE.');
 const unsupported=createIfcImportStaging(unsupportedStep);
 assert.equal(unsupported.readiness.geometryReady,false);assert.ok(unsupported.readiness.geometryIssues.some(x=>x.code==='CURVE_PREDEFINED_TYPE_UNSUPPORTED'));
 assert.throws(()=>validateIfcImportStaging(unsupported),/geometria possui/);
 
-console.log('AstraStruct v0.46 IFC import staging smoke: geometry, mechanics, units, solver guard, GlobalIds, supports/springs and frame/truss semantics coherent.');
+console.log('AstraStruct v0.46 IFC import staging smoke: geometry, mechanics, units, solver guard, identities, supports/springs and frame/truss semantics remain coherent under v0.48 staging.');

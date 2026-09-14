@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('VNL v0.49 executes, branches and persists with the project', async ({ page }) => {
+test('VNL v0.49 executes, branches, reuses Results and persists with the project', async ({ page }) => {
   await page.goto('./');
   const launcher = page.getByTestId('vnl-v049-launcher');
   await expect(launcher).toBeVisible();
@@ -22,6 +22,13 @@ test('VNL v0.49 executes, branches and persists with the project', async ({ page
   await run.click();
   await expect(workbench.locator('.vnl-execution')).toContainText('Ramo paralelo');
 
+  await page.getByTestId('vnl-show-main-result').click();
+  const mainResult = page.getByTestId('vnl-main-result');
+  await expect(mainResult).toBeVisible();
+  await expect(mainResult).toContainText('Resultado VNL');
+  await expect(mainResult).toContainText('linear');
+
+  await page.getByTestId('vnl-v049-launcher').click();
   await workbench.getByRole('button', { name: 'Salvar no projeto' }).click();
   const persisted = await page.evaluate(() => {
     const raw = localStorage.getItem('astrastruct.project');

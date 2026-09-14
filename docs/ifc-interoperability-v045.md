@@ -4,26 +4,28 @@
 
 A v0.45 adota como referência estável **IFC 4.3 ADD2 / IFC 4.3.2.0 (`IFC4X3_ADD2`)**, publicado como **ISO 16739-1:2024**. Schemas draft posteriores não são usados como contrato de produção.
 
-A implementação é dividida em duas camadas para impedir que detalhes de serialização contaminem o solver:
+A implementação permanece desacoplada do solver:
 
-`AstraStruct project -> IFC canonical interoperability model -> IFC serializer/parser -> external validation`
+`AstraStruct project -> IFC canonical interoperability model -> guarded IFC STEP writer -> external validation`
 
-O primeiro incremento desta versão implementa o **modelo canônico**. A serialização STEP `.ifc` somente será ativada após a implementação e validação dos requisitos de identidade, contexto geométrico, unidades, relações e subconjunto de entidades suportado.
+O modelo canônico continua sendo a fonte intermediária auditável. O writer STEP é habilitado somente para o subconjunto cuja topologia e semântica já possuem gate próprio.
 
-## Contrato
+## Contratos v0.45
 
-O módulo `web/src/interop/` expõe:
+O módulo `web/src/interop/` expõe atualmente:
 
 - `ifc-interoperability/v1`;
+- `ifc-project-context/v1`;
+- `ifc-identity-map/v1` / `ifc-identity/v1`;
+- `ifc-step-writer/v1`;
 - `IFC_INTEROP_VERSION = 0.45.0-exp`;
+- `IFC_STEP_WRITER_VERSION = 0.45.0-exp`;
 - `IFC_SCHEMA = IFC4X3_ADD2`;
 - `IFC_STANDARD = ISO 16739-1:2024`.
 
-O contrato não altera `PROJECT_SCHEMA_VERSION` e não modifica o solver. Ele é uma projeção rastreável do modelo estrutural existente para conceitos IFC.
+A v0.45 ainda não altera `PROJECT_SCHEMA_VERSION`, não modifica o solver e não promove automaticamente a versão de produto. O pacote permanece em `0.44.0` enquanto a interoperabilidade IFC estiver experimental.
 
-## Mapeamento estrutural inicial
-
-A camada canônica adota o domínio de análise estrutural do IFC:
+## Mapeamento estrutural canônico
 
 | AstraStruct | Conceito IFC 4.3 |
 |---|---|
@@ -37,90 +39,111 @@ A camada canônica adota o domínio de análise estrutural do IFC:
 | material | `IfcMaterial` |
 | seção | conceito `IfcProfileDef`, a especializar no writer |
 
-O classificador de elemento é deliberadamente conservador: tipos reconhecidos como shell/surface/plate/slab/membrane/wall são mapeados como membros de superfície; os demais elementos lineares seguem para membro de curva.
+O classificador de elemento é conservador: shell/surface/plate/slab/membrane/wall são membros de superfície; os demais elementos lineares seguem para membro de curva.
 
-## Identidade e provenance
+## GlobalId IFC persistente
 
-Cada registro preserva:
+`web/src/interop/ifcGuid.js` implementa o codec UUID de 128 bits ↔ `IfcGloballyUniqueId` de 22 caracteres usando o alfabeto IFC oficial.
 
-- `sourceId` original do AstraStruct;
-- chave interna estável por domínio (`node:`, `member:`, `material:`, `section:` etc.);
-- propriedades de origem necessárias ao round-trip do núcleo estrutural;
-- versão do contrato de interoperabilidade;
-- schema IFC alvo;
-- provenance da geração.
+O fluxo não regenera IDs a cada exportação. `createIfcIdentityMap()` cria um mapa persistível e `assignIfcGlobalIds()` reaplica as mesmas identidades aos objetos `IfcRoot` canônicos. O gate rejeita:
 
-As chaves internas **não são apresentadas como `IfcGloballyUniqueId`**. O codec de GlobalId IFC será responsabilidade do writer STEP e deverá possuir benchmark próprio antes de qualquer emissão `.ifc`.
+- GlobalId inválido;
+- valor fora do espaço de 128 bits;
+- duplicidade;
+- ausência de identidade quando o writer exigir persistência.
 
-## Conectividade
+As relações adicionais criadas pelo writer (`IfcRelDeclares` e `IfcRelAssignsToGroup`) também recebem GlobalIds persistentes fornecidos explicitamente pelo chamador.
 
-Para cada membro são obtidas referências aos nós do modelo. O exportador rejeita:
+## Unidades e contexto geométrico
 
-- IDs duplicados;
-- elementos com menos de dois nós;
-- referências a nós inexistentes;
-- referências a materiais inexistentes;
-- referências a seções inexistentes;
-- relações estruturais com endpoints inválidos.
+Para o sistema atualmente suportado `kN-m-MPa`, `IfcUnitAssignment` contém unidades SI explícitas para comprimento, área, volume, ângulo, massa, tempo, força e pressão.
 
-As relações canônicas são representadas como `IfcRelConnectsStructuralMember`, preservando a posição do nó no elemento de origem.
+O domínio estrutural inclui ainda:
 
-## Apoios
+- `LINEARSTIFFNESSUNIT = FORCE / LENGTH`;
+- `ROTATIONALSTIFFNESSUNIT = FORCE · LENGTH / PLANEANGLE`.
 
-Quando o projeto contém um apoio associado ao nó, o registro `IfcStructuralPointConnection` recebe uma condição canônica `IfcBoundaryNodeCondition` com os dados de origem preservados. A tradução exata de graus de liberdade translacionais/rotacionais para os tipos IFC será materializada pelo writer.
+Essas grandezas são materializadas com `IfcDerivedUnit` + `IfcDerivedUnitElement` e são necessárias para molas nodais.
 
-## Round-trip canônico
+`IfcGeometricRepresentationContext` é tridimensional, possui precisão explícita, `WorldCoordinateSystem`, `TrueNorth` e subcontextos canônicos `Body`/`Axis`. Sistemas de unidades ainda não suportados são rejeitados; não há conversão implícita.
 
-`renderIfcInteroperabilityJson()` gera JSON determinístico e auditável do contrato canônico.
+## Apoios e molas
 
-`parseIfcInteroperabilityJson()` valida novamente o contrato na leitura.
+`web/src/interop/ifcBoundary.js` traduz `supports` e `nodeSprings` para `IfcBoundaryNodeCondition` seguindo a semântica IFC4+:
 
-`restoreStructuralCoreFromIfcModel()` reconstrói o núcleo composto por:
+- `TRUE` = rigidez infinita / grau de liberdade restringido;
+- `FALSE` = liberação / rigidez nula;
+- valor numérico = mola linear-elástica finita.
 
-- projeto/identificação;
-- unidades e schema do AstraStruct;
-- nós e coordenadas;
-- elementos e topologia;
-- materiais;
-- seções.
+A antiga convenção IFC2x3 de representar apoio fixo por `-1` não é usada.
 
-Esse round-trip é um mecanismo de teste do mapeamento, não um importador genérico de arquivos IFC externos.
+No STEP, valores numéricos translacionais são escritos como `IfcLinearStiffnessMeasure` e valores rotacionais como `IfcRotationalStiffnessMeasure`.
 
-## Validação da etapa
+## Conectividade e round-trip canônico
 
-`tests/ifc-interop-v045-smoke.mjs` cobre um benchmark com uma barra `frame3d` e uma casca `shell4`, verificando:
+O modelo rejeita IDs duplicados, conectividade insuficiente, nós inexistentes e referências inexistentes a material/seção. `IfcRelConnectsStructuralMember` preserva a conexão membro–nó.
 
-- identificação de IFC 4.3 ADD2 / ISO 16739-1:2024;
-- classes `IfcProject` e `IfcStructuralAnalysisModel`;
-- quatro `IfcStructuralPointConnection`;
-- um `IfcStructuralCurveMember`;
-- um `IfcStructuralSurfaceMember`;
-- seis relações `IfcRelConnectsStructuralMember`;
-- material e seção associados;
-- `IfcBoundaryNodeCondition` no nó apoiado;
-- serialização/parsing JSON;
-- round-trip de IDs, topologia, material e seção;
-- rejeição de nó ou material inexistente.
+`renderIfcInteroperabilityJson()` e `parseIfcInteroperabilityJson()` fornecem serialização determinística do contrato canônico. `restoreStructuralCoreFromIfcModel()` reconstrói identificação, unidades, nós, elementos, materiais e seções para validar o round-trip do núcleo estrutural.
 
-## Estado do writer STEP
+Esse mecanismo não é apresentado como importador genérico de qualquer IFC externo.
 
-Neste incremento:
+## Writer STEP curve-only
 
-`stepWriterReady = false`
+`web/src/interop/ifcStep.js` implementa o primeiro writer ISO-10303-21 protegido. O subconjunto atual serializa:
 
-Isso é um gate de segurança. Um arquivo com extensão `.ifc` não será emitido enquanto não existirem, no mínimo:
+- `IfcProject`;
+- `IfcUnitAssignment`, `IfcSIUnit` e `IfcDerivedUnit`;
+- `IfcGeometricRepresentationContext`;
+- `IfcStructuralAnalysisModel` e `IfcLocalPlacement` compartilhado;
+- `IfcCartesianPoint`, `IfcVertexPoint` e topologia `Vertex`;
+- `IfcEdge` e topologia `Edge`;
+- `IfcStructuralPointConnection`;
+- `IfcBoundaryNodeCondition`;
+- `IfcStructuralCurveMember`;
+- `IfcRelConnectsStructuralMember`;
+- `IfcRelDeclares`;
+- `IfcRelAssignsToGroup`.
 
-1. codec testado para `IfcGloballyUniqueId`;
-2. `IfcProject` com owner/application metadata apropriados;
-3. `IfcUnitAssignment` coerente com as unidades do projeto;
-4. `IfcGeometricRepresentationContext` e placements;
-5. topologia/representação para pontos, curvas e superfícies;
-6. material/profile associations;
-7. `IfcStructuralAnalysisModel` e assignments;
-8. condições de contorno e conectividade;
-9. parser/round-trip do subconjunto suportado;
-10. validação externa contra schema/serviço buildingSMART antes de declarar conformidade.
+A representação dos membros lineares usa `IfcEdge` compartilhando os `IfcVertexPoint` dos nós. O eixo local é derivado de uma direção não paralela à tangente e ortogonalizado antes de criar `IfcDirection`.
+
+### Gate de segurança do writer
+
+`validateIfcStepReadiness()` recusa a exportação quando:
+
+- o contrato canônico é inválido;
+- GlobalIds persistentes estão ausentes ou duplicados;
+- o schema não é `IFC4X3_ADD2`;
+- há `IfcStructuralSurfaceMember` ou qualquer membro fora do subconjunto curve-only;
+- os GlobalIds persistentes de `IfcRelDeclares` e `IfcRelAssignsToGroup` não foram fornecidos.
+
+Portanto, uma malha com laje/casca **não gera um arquivo parcial silenciosamente**. Ela permanece no modelo canônico até o writer de superfície estar implementado.
+
+`validateIfcStepEnvelope()` verifica o envelope ISO-10303-21, schema declarado, entidades emitidas e referências STEP não resolvidas. Essa verificação interna não substitui um validador IFC externo.
+
+## Cobertura de testes
+
+A cadeia de `npm test` em `develop` inclui:
+
+- `tests/ifc-interop-v045-smoke.mjs` — mapeamento canônico, conectividade, GlobalId, contexto e round-trip;
+- `tests/ifc-units-v045-smoke.mjs` — unidades derivadas de rigidez;
+- `tests/ifc-step-v045-smoke.mjs` — emissão STEP curve-only, topologia Vertex/Edge, apoio fixo, molas, relações e rejeição de superfícies.
+
+O benchmark STEP usa timestamp controlado para manter os testes determinísticos.
+
+## Limitações ainda abertas antes do writer de produção
+
+Apesar de existir um writer STEP executável, o campo canônico `exchange.stepWriterReady` permanece `false`. Isso é intencional: `false` significa **não promover o writer experimental como exportador IFC de produção**.
+
+Ainda são necessários:
+
+1. writer de `IfcStructuralSurfaceMember` com topologia `IfcFaceSurface` e teste de planicidade/orientação;
+2. associações completas de materiais e perfis/seções;
+3. owner/application metadata e política de revisão;
+4. parser/round-trip STEP do subconjunto suportado;
+5. validação externa automatizada contra schema IFC4X3 e/ou IfcOpenShell;
+6. testes com arquivos de referência e intercâmbio com ferramentas BIM/estruturais;
+7. gate final v0.45 antes de qualquer atualização de `PRODUCT_VERSION`.
 
 ## Regra de publicação
 
-Toda implementação v0.45 permanece exclusivamente em `develop`. A branch `main` continua sendo a publicação estável e não deve receber esta versão enquanto o gate da v0.45 e a validação da página de desenvolvimento não estiverem verdes e aprovados.
+Toda implementação v0.45 permanece exclusivamente em `develop`. A branch `main` continua sendo a publicação estável e não deve receber esta versão enquanto o gate da v0.45, a validação IFC externa e a página de desenvolvimento não estiverem verdes e aprovados.

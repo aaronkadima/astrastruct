@@ -1,5 +1,6 @@
 import {emptyProject} from '../core/model.js';
 import {parseIfcStepEntities,parseIfcStructuralStep} from './ifcStepParse.js';
+import {extractIfcMechanicalMaterialProperties} from './ifcMechanical.js';
 
 export const IFC_IMPORT_STAGING_CONTRACT='ifc-import-staging/v1';
 export const IFC_IMPORT_STAGING_VERSION='0.46.0-exp';
@@ -18,10 +19,6 @@ function entity(parsed,id,expectedType=null){
 
 function refId(token){return token&&Number.isInteger(token.ref)?token.ref:null}
 function enumValue(token){return token&&typeof token==='object'&&typeof token.enum==='string'?token.enum:null}
-function typedValue(token,expectedType){
-  if(!token||typeof token!=='object'||token.type!==expectedType)throw new Error(`IFC import: esperado ${expectedType}.`);
-  return token.value;
-}
 
 function boolSelect(token){
   if(token==null)return false;
@@ -95,13 +92,14 @@ function surfaceElementType(member,issues){
   return null;
 }
 
-function materialAndSectionMaps(parsed,usedMaterialIds,usedSectionIds,issues){
+function materialAndSectionMaps(parsed,usedMaterialIds,usedSectionIds,issues,mechanicalByMaterialEntityId=new Map()){
   const materialByEntity=new Map(),sectionByProfileEntity=new Map(),relationByMemberEntity=new Map(),materials=[],sections=[];
   for(const rel of parsed.materials||[]){
     let materialId=materialByEntity.get(rel.material.entityId);
     if(!materialId){
       materialId=uniqueId(rel.material.name,'MAT',materials.length,usedMaterialIds);materialByEntity.set(rel.material.entityId,materialId);
-      materials.push({id:materialId,name:text(rel.material.name)||materialId,type:normalizeMaterialType(rel.material.category),E:null,nu:null,G:null,density:null,alpha:null,verified:false,analysisReady:false,ifc:{entityId:rel.material.entityId,category:rel.material.category??null}});
+      const mechanical=mechanicalByMaterialEntityId.get(rel.material.entityId)||{};
+      materials.push({id:materialId,name:text(rel.material.name)||materialId,type:normalizeMaterialType(rel.material.category),E:mechanical.E??null,nu:mechanical.nu??null,G:mechanical.G??null,density:null,alpha:mechanical.alpha??null,verified:false,analysisReady:false,ifc:{entityId:rel.material.entityId,category:rel.material.category??null,mechanicalPropertySetEntityId:mechanical.propertySetEntityId??null}});
     }
     let sectionId=null;
     if(rel.mode==='MATERIAL_PROFILE_SET'&&rel.profile){
@@ -134,7 +132,7 @@ function mechanicalIssues(project){
 }
 
 export function createIfcImportStaging(step,{projectId=null,projectName=null}={}){
-  const parsed=parseIfcStructuralStep(step),generic=parseIfcStepEntities(step),issues=[],usedNodeIds=new Set(),usedElementIds=new Set(),usedMaterialIds=new Set(),usedSectionIds=new Set();
+  const parsed=parseIfcStructuralStep(step),generic=parseIfcStepEntities(step),mechanical=extractIfcMechanicalMaterialProperties(generic),issues=[],usedNodeIds=new Set(),usedElementIds=new Set(),usedMaterialIds=new Set(),usedSectionIds=new Set();
   const project=emptyProject();
   project.id=text(projectId)||`IFC_${parsed.project.globalId}`;project.name=text(projectName)||text(parsed.project.name)||'Projeto importado IFC';
   project.nodes=[];project.elements=[];project.materials=[];project.sections=[];project.supports=[];project.nodeSprings=[];project.loads=[];project.elementLoads=[];project.settlements=[];project.nodalMasses=[];project.results=null;
@@ -154,7 +152,7 @@ export function createIfcImportStaging(step,{projectId=null,projectName=null}={}
     }
   }
 
-  const mapped=materialAndSectionMaps(parsed,usedMaterialIds,usedSectionIds,issues);project.materials=mapped.materials;project.sections=mapped.sections;
+  const mapped=materialAndSectionMaps(parsed,usedMaterialIds,usedSectionIds,issues,mechanical.byMaterialEntityId);project.materials=mapped.materials;project.sections=mapped.sections;
   for(const [i,m] of parsed.members.entries()){
     const id=uniqueId(m.name,'E',i,usedElementIds),nodeIds=(m.nodeGlobalIds||[]).map(g=>nodeIdByGuid.get(g));
     if(nodeIds.some(x=>!x)){issues.push({severity:'BLOCKING',code:'MEMBER_NODE_UNRESOLVED',entityId:m.entityId,message:`Membro #${m.entityId} referencia nó não resolvido.`});continue}
@@ -174,8 +172,9 @@ export function createIfcImportStaging(step,{projectId=null,projectName=null}={}
 
   const geometryIssues=issues.filter(x=>x.severity==='BLOCKING'),analysisIssues=[...geometryIssues,...mechanicalIssues(project)];
   const geometryReady=geometryIssues.length===0,analysisReady=analysisIssues.length===0;
-  project.meta={...project.meta,importedFrom:{format:'IFC',schema:parsed.schema,contract:IFC_IMPORT_STAGING_CONTRACT,parserVersion:parsed.parserVersion,projectGlobalId:parsed.project.globalId,analysisModelGlobalId:parsed.analysisModel.globalId},analysisReady,importStatus:analysisReady?'READY':'PENDING'};
-  project.ifcImport={contract:IFC_IMPORT_STAGING_CONTRACT,version:IFC_IMPORT_STAGING_VERSION,projectGlobalId:parsed.project.globalId,analysisModelGlobalId:parsed.analysisModel.globalId,owner:copy(parsed.owner),geometryReady,analysisReady};
+  for(const material of project.materials)material.analysisReady=analysisIssues.every(x=>x.materialId!==material.id);
+  project.meta={...project.meta,importedFrom:{format:'IFC',schema:parsed.schema,contract:IFC_IMPORT_STAGING_CONTRACT,parserVersion:parsed.parserVersion,projectGlobalId:parsed.project.globalId,analysisModelGlobalId:parsed.analysisModel.globalId,unitSystem:mechanical.unitSystem},analysisReady,importStatus:analysisReady?'READY':'PENDING'};
+  project.ifcImport={contract:IFC_IMPORT_STAGING_CONTRACT,version:IFC_IMPORT_STAGING_VERSION,projectGlobalId:parsed.project.globalId,analysisModelGlobalId:parsed.analysisModel.globalId,owner:copy(parsed.owner),unitSystem:mechanical.unitSystem,geometryReady,analysisReady};
   return{contract:IFC_IMPORT_STAGING_CONTRACT,version:IFC_IMPORT_STAGING_VERSION,schema:parsed.schema,project,parsed,readiness:{geometryReady,analysisReady,geometryIssues,analysisIssues},summary:{nodes:project.nodes.length,elements:project.elements.length,curves:project.elements.filter(x=>x.type==='frame3d'||x.type==='truss3d').length,surfaces:project.elements.filter(x=>x.type==='shell4').length,materials:project.materials.length,sections:project.sections.length,supports:project.supports.length,nodeSprings:project.nodeSprings.length,geometryBlocking:geometryIssues.length,analysisBlocking:analysisIssues.length}};
 }
 

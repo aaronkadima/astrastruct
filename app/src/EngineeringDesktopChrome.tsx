@@ -23,18 +23,32 @@ const projectLevels=(p:any)=>{
 };
 const countType=(p:any,type:string)=>(p.elements||[]).filter((e:any)=>e.type===type).length;
 
+const RibbonIcon=({name}:{name:string})=>{
+  const common={stroke:'#1565c0',strokeWidth:1.5,fill:'none'};
+  return <svg className="eng-ribbon-icon" width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+    {name==='launch'&&<><rect x="3" y="3" width="7" height="7" rx="1" {...common}/><rect x="12" y="3" width="7" height="7" rx="1" {...common}/><rect x="3" y="12" width="7" height="7" rx="1" {...common}/><path d="M10 6.5h2M6.5 10v2M15.5 10v9M12 15.5h7" {...common} strokeDasharray="1.5 1.5"/></>}
+    {name==='analysis'&&<><polyline points="2,18 7,10 11,14 15,6 20,9" stroke="#1565c0" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" fill="none"/><circle cx="20" cy="9" r="2" fill="#1565c0"/><line x1="2" y1="18" x2="20" y2="18" stroke="#1565c0" strokeWidth="1.2" opacity=".4"/></>}
+    {name==='combinations'&&<><rect x="2" y="2" width="18" height="18" rx="2" {...common}/><path d="M2 8h18M2 14h18M8 2v18M14 2v18" stroke="#1565c0"/></>}
+    {name==='results'&&<><rect x="2" y="12" width="4" height="8" rx="1" fill="#1565c0" opacity=".7"/><rect x="8" y="7" width="4" height="13" rx="1" fill="#1565c0"/><rect x="14" y="4" width="4" height="16" rx="1" fill="#1565c0" opacity=".85"/><line x1="1" y1="20.5" x2="21" y2="20.5" stroke="#1565c0" strokeWidth="1.2"/></>}
+    {name==='detail'&&<><rect x="4" y="4" width="14" height="14" rx="1" {...common}/><path d="M7 4v14M11 4v14M15 4v14" stroke="#1565c0"/><path d="M4 7h14M4 11h14M4 15h14" stroke="#e53935" strokeWidth="1.5"/></>}
+    {name==='foundation'&&<><rect x="2" y="14" width="18" height="4" rx="1" fill="#1565c0" opacity=".8"/><path d="M6 14v6M11 14v6M16 14v6" stroke="#1565c0" strokeWidth="1.5"/><rect x="7" y="5" width="8" height="9" rx="1" {...common}/></>}
+    {name==='view'&&<><path d="M2 11s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z" {...common}/><circle cx="11" cy="11" r="3" {...common}/><circle cx="11" cy="11" r="1.5" fill="#1565c0"/></>}
+    {name==='norm'&&<><rect x="3" y="2" width="13" height="18" rx="1.5" {...common}/><path d="M6 7h7M6 10h7M6 13h4" stroke="#1565c0" strokeWidth="1.2"/><circle cx="16" cy="16" r="4" fill="#fff" stroke="#1565c0" strokeWidth="1.5"/><path d="M16 13.5v3" stroke="#1565c0" strokeWidth="1.5" strokeLinecap="round"/><circle cx="16" cy="18" r=".8" fill="#1565c0"/></>}
+  </svg>;
+};
+
 function Ribbon({project,result,activeScenario,onScenarioChange,onAnalyze,onOpenPanel}:Props){
   const scenarios=[...(project.loadCases||[]),...(project.loadCombinations||[])];
   return <div className="eng-ribbon" data-testid="engineering-ribbon">
     <div className="eng-ribbon-group">
-      <button onClick={()=>onOpenPanel('properties')}><b>▱</b><span>Lançamento<small>Modelagem</small></span></button>
-      <button data-testid="engineering-ribbon-analyze" onClick={onAnalyze}><b>▷</b><span>Análise<small>Processar</small></span></button>
-      <button onClick={()=>onOpenPanel('actions')}><b>▦</b><span>Combinações<small>ELU / ELS</small></span></button>
-      <button onClick={()=>onOpenPanel('postprocess')}><b>▥</b><span>Resultados<small>Diagramas / Mapas</small></span></button>
-      <button onClick={()=>window.dispatchEvent(new CustomEvent('astrastruct:engineering-review-open',{detail:{tab:'foundation',source:'engineering-ribbon'}}))}><b>⌗</b><span>Detalhamento<small>Armaduras</small></span></button>
-      <button onClick={()=>window.dispatchEvent(new CustomEvent('astrastruct:foundation-dashboard-open',{detail:{source:'engineering-ribbon'}}))}><b>⌂</b><span>Fundação<small>Sapatas / Estacas</small></span></button>
-      <button onClick={()=>document.querySelector<HTMLElement>('[data-testid="spatial3d-display-mode"]')?.focus()}><b>▣</b><span>Visualização<small>Vistas / Filtros</small></span></button>
-      <button onClick={()=>onOpenPanel('properties')}><b>⚙</b><span>NBR 6118<small>Parâmetros</small></span></button>
+      <button onClick={()=>onOpenPanel('properties')}><RibbonIcon name="launch"/><span>Lançamento<small>Modelagem</small></span></button>
+      <button data-testid="engineering-ribbon-analyze" onClick={onAnalyze}><RibbonIcon name="analysis"/><span>Análise<small>Processar</small></span></button>
+      <button onClick={()=>onOpenPanel('actions')}><RibbonIcon name="combinations"/><span>Combinações<small>ELU / ELS</small></span></button>
+      <button className="active" onClick={()=>onOpenPanel('postprocess')}><RibbonIcon name="results"/><span>Resultados<small>Diagramas / Mapas</small></span></button>
+      <button onClick={()=>window.dispatchEvent(new CustomEvent('astrastruct:engineering-review-open',{detail:{tab:'foundation',source:'engineering-ribbon'}}))}><RibbonIcon name="detail"/><span>Detalhamento<small>Armaduras</small></span></button>
+      <button onClick={()=>window.dispatchEvent(new CustomEvent('astrastruct:foundation-dashboard-open',{detail:{source:'engineering-ribbon'}}))}><RibbonIcon name="foundation"/><span>Fundação<small>Sapatas / Estacas</small></span></button>
+      <button onClick={()=>document.querySelector<HTMLElement>('[data-testid="spatial3d-display-mode"]')?.focus()}><RibbonIcon name="view"/><span>Visualização<small>Vistas / Filtros</small></span></button>
+      <button onClick={()=>onOpenPanel('properties')}><RibbonIcon name="norm"/><span>NBR 6118<small>Parâmetros</small></span></button>
     </div>
     <div className="eng-ribbon-scenario">
       <label>Combinação

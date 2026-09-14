@@ -33,3 +33,6 @@ export {
   IFC_EXCHANGE_STATE_CONTRACT,IFC_EXCHANGE_VERSION,explicitIfcProfileFromSection,enrichProjectSectionsForIfc,
   inspectIfcExchangeReadiness,normalizeIfcExchangeState,prepareIfcExchange,safeIfcFilename
 } from './ifcExchange.js';
+export {
+  IFC_IMPORT_STAGING_CONTRACT,IFC_IMPORT_STAGING_VERSION,createIfcImportStaging,validateIfcImportStaging,summarizeIfcImportStaging
+} from './ifcImport.js';

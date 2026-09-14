@@ -43,8 +43,8 @@ jobs:
           python-version: '3.12'
       - name: Install JavaScript dependencies
         run: npm install --no-audit --no-fund
-      - name: Install IfcOpenShell
-        run: python -m pip install --disable-pip-version-check --no-cache-dir ifcopenshell==0.8.5
+      - name: Install IfcOpenShell validation dependencies
+        run: python -m pip install --disable-pip-version-check --no-cache-dir ifcopenshell==0.8.5 pytest==8.4.2
       - name: Generate deterministic IFC4X3 validation fixture
         run: node scripts/generate-ifc-v045-validation-fixture.mjs artifacts/ifc/astrastruct-v045-validation.ifc
       - name: Validate STEP physical file syntax

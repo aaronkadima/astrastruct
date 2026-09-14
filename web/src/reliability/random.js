@@ -21,17 +21,21 @@ export function inverseNormalCdf(p){
   if(p>phigh){q=Math.sqrt(-2*Math.log(1-p));return-(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
   q=p-0.5;r=q*q;return(((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
 }
+export function quantileRandomVariable(variable,p){
+  const distribution=variable.distribution||'deterministic',mean=Number(variable.mean??variable.value),sd=Number(variable.standardDeviation??variable.sd??0),q=Math.min(1-Number.EPSILON,Math.max(Number.EPSILON,Number(p)));
+  if(distribution==='deterministic'){if(!Number.isFinite(mean))throw new Error(`Variável ${variable.id||''}: valor determinístico inválido.`);return mean;}
+  if(distribution==='normal'){if(!Number.isFinite(mean)||!(sd>=0))throw new Error(`Variável ${variable.id||''}: parâmetros normais inválidos.`);return mean+sd*inverseNormalCdf(q);}
+  if(distribution==='lognormal'){if(!(mean>0)||!(sd>=0))throw new Error(`Variável ${variable.id||''}: lognormal exige média positiva e desvio não negativo.`);if(sd===0)return mean;const sigma2=Math.log(1+(sd*sd)/(mean*mean)),mu=Math.log(mean)-sigma2/2;return Math.exp(mu+Math.sqrt(sigma2)*inverseNormalCdf(q));}
+  if(distribution==='uniform'){const min=Number(variable.min),max=Number(variable.max);if(!Number.isFinite(min)||!Number.isFinite(max)||!(max>min))throw new Error(`Variável ${variable.id||''}: limites uniformes inválidos.`);return min+(max-min)*q;}
+  throw new Error(`Distribuição não suportada: ${distribution}.`);
+}
 export function sampleRandomVariable(variable,rng){
   const distribution=variable.distribution||'deterministic';
-  const mean=Number(variable.mean??variable.value),sd=Number(variable.standardDeviation??variable.sd??0);
-  if(distribution==='deterministic'){if(!Number.isFinite(mean))throw new Error(`Variável ${variable.id||''}: valor determinístico inválido.`);return mean;}
-  if(distribution==='normal'){if(!Number.isFinite(mean)||!(sd>=0))throw new Error(`Variável ${variable.id||''}: parâmetros normais inválidos.`);return mean+sd*sampleStandardNormal(rng);}
+  if(distribution==='normal'){
+    const mean=Number(variable.mean??variable.value),sd=Number(variable.standardDeviation??variable.sd??0);if(!Number.isFinite(mean)||!(sd>=0))throw new Error(`Variável ${variable.id||''}: parâmetros normais inválidos.`);return mean+sd*sampleStandardNormal(rng);
+  }
   if(distribution==='lognormal'){
-    if(!(mean>0)||!(sd>=0))throw new Error(`Variável ${variable.id||''}: lognormal exige média positiva e desvio não negativo.`);
-    if(sd===0)return mean;const sigma2=Math.log(1+(sd*sd)/(mean*mean)),mu=Math.log(mean)-sigma2/2;return Math.exp(mu+Math.sqrt(sigma2)*sampleStandardNormal(rng));
+    const mean=Number(variable.mean??variable.value),sd=Number(variable.standardDeviation??variable.sd??0);if(!(mean>0)||!(sd>=0))throw new Error(`Variável ${variable.id||''}: lognormal exige média positiva e desvio não negativo.`);if(sd===0)return mean;const sigma2=Math.log(1+(sd*sd)/(mean*mean)),mu=Math.log(mean)-sigma2/2;return Math.exp(mu+Math.sqrt(sigma2)*sampleStandardNormal(rng));
   }
-  if(distribution==='uniform'){
-    const min=Number(variable.min),max=Number(variable.max);if(!Number.isFinite(min)||!Number.isFinite(max)||!(max>min))throw new Error(`Variável ${variable.id||''}: limites uniformes inválidos.`);return min+(max-min)*rng();
-  }
-  throw new Error(`Distribuição não suportada: ${distribution}.`);
+  return quantileRandomVariable(variable,rng());
 }

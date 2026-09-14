@@ -4,9 +4,9 @@
 A v0.50 é desenvolvida exclusivamente em `develop` como **0.50.0-exp**. O produto fechado continua em `PRODUCT_VERSION = 0.49.0`; `PROJECT_SCHEMA_VERSION = 2` e `RESULT_CONTRACT_VERSION = 1.0` permanecem inalterados. `main` permanece intocada.
 
 ## Arquitetura
-A camada probabilística reutiliza o `solve()` público: cada amostra/candidato clona o projeto, aplica somente targets explicitamente declarados e executa o mesmo kernel estrutural. Não existe segundo solver nem criação silenciosa de propriedades.
+A camada probabilística e de otimização reutiliza o `solve()` público: cada amostra/candidato clona o projeto, aplica somente targets explicitamente declarados e executa o mesmo kernel estrutural. Não existe segundo solver nem criação silenciosa de propriedades.
 
-Contratos experimentais: `structural-reliability/v1`, `structural-optimization/v1` e `project-reliability-study/v1`, todos em `0.50.0-exp` quando aplicável.
+Contratos experimentais: `structural-reliability/v1`, `structural-optimization/v1`, `structural-multiobjective-optimization/v1`, `project-reliability-study/v1` e `project-optimization-study/v1`, todos em `0.50.0-exp` quando aplicável.
 
 ## Métodos de confiabilidade
 `runMonteCarloReliability()` usa seed reproduzível, retorna `Pf`, `beta`, intervalo de Wilson e estatísticas da demanda. Distribuições explícitas: deterministic, normal, lognormal e uniform. `runMvfosmReliability()` implementa MVFOSM no ponto médio por diferenças finitas e não é apresentado como FORM.
@@ -23,16 +23,28 @@ Contratos experimentais: `structural-reliability/v1`, `structural-optimization/v
 ## Respostas e estados limite
 Seletores suportados: deslocamento nodal, deslocamento máximo, reação, força de elemento, força máxima de elemento e tensão extrema. O sentido padrão é `demand <= capacity`, com `g = capacity - demand`; `g=0` é falha.
 
-## Otimização
-`optimizeProject()` usa `bounded-coordinate-search`, com limites explícitos, objetivo por soma de variáveis ou resposta estrutural e constraints avaliadas pelo solver. Factibilidade precede o objetivo; entre soluções inviáveis reduz-se primeiro a violação normalizada.
+## Otimização determinística
+`optimizeProject()` usa `bounded-coordinate-search`, com limites explícitos, objetivo por soma de variáveis, resposta estrutural ou soma ponderada, e constraints avaliadas pelo solver. Factibilidade precede o objetivo; entre soluções inviáveis reduz-se primeiro a violação normalizada.
 
-## Persistência e workbench React
-A configuração é persistida aditivamente em `project.reliabilityStudy` sob `project-reliability-study/v1`, sem alterar o schema 2. O projeto salva variáveis, targets, estados limite, método, seed, correlação e apenas um **resumo compacto** do último resultado; amostras brutas não são incorporadas ao projeto.
+### RBDO
+Constraints com `kind: "reliability"` executam confiabilidade dentro da busca. O usuário deve declarar `method` (`form` ou `mvfosm`), variáveis aleatórias, estado limite e `minBeta` e/ou `maxPf`. Não convergência do FORM invalida a constraint; não é tratada como ponto seguro. O smoke analítico da barra axial exige `beta >= 3` e converge para `A ≈ 0.0065 m²`.
 
-O workbench React é aberto por comandos nativos inseridos na Biblioteca e em Mais comandos através de React Portal. Não existe launcher fixo sobre o canvas. Salvar o estudo dispara um commit externo consumido pelo `useProjectHistory`, portanto a alteração entra no mesmo estado React/histórico e permanece disponível para exportação do projeto.
+### Pareto
+`optimizeParetoProject()` usa scalarização weighted-sum declarada pelo usuário e retorna candidatos e front não dominado. Cada objetivo precisa declarar direção e `scale` positivo; cada execução precisa declarar `weightSets`. Não há normalização implícita de custo, massa, deslocamento, carbono ou confiabilidade. O contrato é `structural-multiobjective-optimization/v1`.
+
+## Persistência e workbenches React
+A confiabilidade é persistida aditivamente em `project.reliabilityStudy` sob `project-reliability-study/v1`; a otimização é persistida em `project.optimizationStudy` sob `project-optimization-study/v1`. O schema do projeto permanece 2.
+
+Os dois estudos salvam configuração e somente um **resumo compacto** do último resultado. Amostras Monte Carlo, histórico completo de avaliações e cópias integrais do melhor projeto não são persistidos dentro do estudo.
+
+Os workbenches React são abertos por comandos nativos inseridos na Biblioteca e em Mais comandos através de React Portal. Não existe launcher fixo sobre o canvas. Salvar um estudo dispara um commit externo consumido pelo `useProjectHistory`, portanto a alteração entra no mesmo estado React/histórico e permanece disponível para exportação do projeto.
+
+No workbench de otimização, `Executar otimização` não modifica o projeto. `Salvar estudo` persiste configuração + resumo. `Aplicar melhor solução` é uma ação explícita separada e somente fica habilitada quando existe solução factível.
 
 ## Verificações do gate
-Os smokes cobrem: Monte Carlo reproduzível; MVFOSM e FORM com `beta≈2`; FORM correlacionado `rho=0.5`; otimização analítica `A≈0.005 m²`; confiabilidade série/paralelo; importance sampling `beta=4`; round-trip `project.reliabilityStudy`; e regressões VNL/estruturais. O E2E do workbench é executado em desktop, Android e tablet.
+Os smokes cobrem: Monte Carlo reproduzível; MVFOSM e FORM com `beta≈2`; FORM correlacionado `rho=0.5`; confiabilidade série/paralelo; importance sampling `beta=4`; otimização determinística analítica `A≈0.005 m²`; round-trip de `project.reliabilityStudy` e `project.optimizationStudy`; RBDO analítico `A≈0.0065 m²`; front Pareto explícito; e regressões VNL/estruturais.
+
+Os E2E verificam os workbenches React em desktop, Android e tablet, incluindo persistência compacta e aplicação explícita da melhor solução de otimização.
 
 ## Antes do fechamento
-Ainda faltam editor React de otimização, integração de resultados de otimização no projeto, validação browser final e release gate dedicado v0.50. Não iniciar v0.51 antes do fechamento. Nenhuma promoção para `main` será feita sem solicitação explícita.
+Antes do release gate dedicado v0.50 ainda será avaliada a inclusão de Latin Hypercube Sampling como alternativa ao Monte Carlo simples, além da validação browser final do HEAD completo. RBDO e Pareto já estão disponíveis no núcleo; sua edição visual avançada poderá evoluir sem alterar os contratos fechados. Não iniciar v0.51 antes do fechamento. Nenhuma promoção para `main` será feita sem solicitação explícita.

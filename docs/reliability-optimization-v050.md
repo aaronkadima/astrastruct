@@ -1,7 +1,7 @@
 # AstraStruct v0.50 — Reliability + Optimization
 
 ## Estado
-A v0.50 é desenvolvida exclusivamente em `develop` como **0.50.0-exp**. O produto fechado continua em `PRODUCT_VERSION = 0.49.0`; `PROJECT_SCHEMA_VERSION = 2` e `RESULT_CONTRACT_VERSION = 1.0` permanecem inalterados. `main` permanece intocada.
+A v0.50 está formalmente fechada no branch `develop` como versão 0.50.0. `PRODUCT_VERSION = 0.50.0`; `PROJECT_SCHEMA_VERSION = 2` e `RESULT_CONTRACT_VERSION = 1.0` permanecem inalterados. O fechamento foi realizado apenas no canal de desenvolvimento; `main` permanece intocada e continua sendo a publicação estável.
 
 ## Arquitetura
 A camada probabilística e de otimização reutiliza o `solve()` público: cada amostra/candidato clona o projeto, aplica somente targets explicitamente declarados e executa o mesmo kernel estrutural. Não existe segundo solver nem criação silenciosa de propriedades.
@@ -51,5 +51,9 @@ Os smokes cobrem: Monte Carlo reproduzível; Latin Hypercube reproduzível e pr�
 
 Os E2E verificam os workbenches React em desktop, Android e tablet, incluindo persistência compacta e aplicação explícita da melhor solução de otimização.
 
-## Antes do fechamento
-O escopo funcional planejado para a v0.50 está implementado no `develop`: amostragem Monte Carlo e Latin Hypercube, MVFOSM, FORM/correlação normal, confiabilidade de sistema, importance sampling, workbench persistente, otimização determinística, RBDO e Pareto explícito. Resta executar a validação completa do HEAD funcional, criar o release gate dedicado, subir `package.json`/`PRODUCT_VERSION` para 0.50.0 e repetir CI + Pages no commit final. Não iniciar v0.51 antes do fechamento. Nenhuma promoção para `main` será feita sem solicitação explícita.
+## Fechamento da v0.50
+O release gate dedicado passa a ser o primeiro teste da cadeia oficial e verifica coerência de versão, contratos, métodos, persistência, regressões históricas e documentação. A v0.50 fecha o ciclo Reliability + Optimization sem alterar `PROJECT_SCHEMA_VERSION` nem `RESULT_CONTRACT_VERSION`.
+
+O próximo ciclo de desenvolvimento é **v0.51+ — IA/Automation/Digital Engineering**, que deverá permanecer exclusivamente em `develop` até possuir gate próprio, regressões e validação de navegador equivalentes às versões anteriores.
+
+Nenhuma promoção para `main` será feita sem solicitação explícita. A publicação estável continua isolada da página de desenvolvimento em `/astrastruct/`, enquanto o canal de desenvolvimento permanece em `/astrastruct/dev/`.

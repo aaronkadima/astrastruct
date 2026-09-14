@@ -3,7 +3,8 @@ import {
   IFC_INTEROP_CONTRACT,IFC_INTEROP_VERSION,IFC_SCHEMA,IFC_STANDARD,
   ifcClassForElement,createIfcInteroperabilityModel,validateIfcInteroperabilityModel,
   renderIfcInteroperabilityJson,parseIfcInteroperabilityJson,restoreStructuralCoreFromIfcModel,summarizeIfcInteroperability,
-  IFC_GUID_ALPHABET,validateIfcGuid,compressIfcGuid,expandIfcGuid,createIfcIdentityMap,assignIfcGlobalIds,validateIfcGlobalIds
+  IFC_GUID_ALPHABET,validateIfcGuid,compressIfcGuid,expandIfcGuid,createIfcIdentityMap,assignIfcGlobalIds,validateIfcGlobalIds,
+  IFC_CONTEXT_CONTRACT,unitsForAstraStruct,createIfcProjectContext,validateIfcProjectContext
 } from '../web/src/interop/index.js';
 
 assert.equal(IFC_INTEROP_CONTRACT,'ifc-interoperability/v1');
@@ -11,6 +12,7 @@ assert.equal(IFC_INTEROP_VERSION,'0.45.0-exp');
 assert.equal(IFC_SCHEMA,'IFC4X3_ADD2');
 assert.equal(IFC_STANDARD,'ISO 16739-1:2024');
 assert.equal(IFC_GUID_ALPHABET,'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$');
+assert.equal(IFC_CONTEXT_CONTRACT,'ifc-project-context/v1');
 assert.equal(ifcClassForElement({type:'frame3d'}),'IfcStructuralCurveMember');
 assert.equal(ifcClassForElement({type:'shell4'}),'IfcStructuralSurfaceMember');
 
@@ -23,6 +25,19 @@ assert.equal(validateIfcGuid(referenceGuid),true);
 assert.equal(validateIfcGuid(`4${referenceGuid.slice(1)}`),false,'primeiro dígito não pode exceder os 128 bits disponíveis');
 assert.throws(()=>compressIfcGuid('not-a-uuid'),/128 bits/);
 assert.throws(()=>expandIfcGuid('short'),/inválido/);
+
+const units=unitsForAstraStruct('kN-m-MPa');
+assert.equal(units.ifcClass,'IfcUnitAssignment');
+assert.equal(units.units.find(x=>x.unitType==='LENGTHUNIT').name,'METRE');
+assert.deepEqual(units.units.find(x=>x.unitType==='FORCEUNIT'),{key:'unit:force',ifcClass:'IfcSIUnit',unitType:'FORCEUNIT',name:'NEWTON',prefix:'KILO'});
+assert.deepEqual(units.units.find(x=>x.unitType==='PRESSUREUNIT'),{key:'unit:pressure',ifcClass:'IfcSIUnit',unitType:'PRESSUREUNIT',name:'PASCAL',prefix:'MEGA'});
+assert.throws(()=>unitsForAstraStruct('kip-ft-ksi'),/não suportado/);
+const contextProbe=createIfcProjectContext({unitSystem:'kN-m-MPa',precision:1e-5,origin:[100,200,0]});
+assert.equal(validateIfcProjectContext(contextProbe),true);
+assert.equal(contextProbe.representationContexts[0].ifcClass,'IfcGeometricRepresentationContext');
+assert.equal(contextProbe.representationContexts[0].coordinateSpaceDimension,3);
+assert.deepEqual(contextProbe.representationContexts[0].worldCoordinateSystem.location,[100,200,0]);
+assert.deepEqual(contextProbe.subContexts.map(x=>x.contextIdentifier),['Body','Axis']);
 
 const project={
   id:'IFC-BENCH-001',name:'Pórtico + casca benchmark',units:'kN-m-MPa',schemaVersion:2,meta:{productVersion:'0.44.0'},
@@ -49,6 +64,10 @@ assert.equal(validateIfcInteroperabilityModel(model),true);
 assert.equal(model.schema,'IFC4X3_ADD2');
 assert.equal(model.project.ifcClass,'IfcProject');
 assert.equal(model.analysisModel.ifcClass,'IfcStructuralAnalysisModel');
+assert.equal(model.context.contract,'ifc-project-context/v1');
+assert.equal(model.project.unitsInContextRef,'context:units');
+assert.deepEqual(model.project.representationContextRefs,['context:model3d']);
+assert.equal(model.context.representationContexts[0].precision,1e-6);
 assert.equal(model.nodes.length,4);assert.equal(model.members.length,2);assert.equal(model.relationships.length,6);
 assert.equal(model.nodes[0].ifcClass,'IfcStructuralPointConnection');
 assert.equal(model.nodes[0].condition.ifcClass,'IfcBoundaryNodeCondition');
@@ -87,5 +106,6 @@ assert.throws(()=>assignIfcGlobalIds(model,{identityMap:duplicateMap}),/duplicad
 
 assert.throws(()=>createIfcInteroperabilityModel({...project,elements:[{id:'BAD',type:'frame3d',n1:'N1',n2:'NX'}]}),/nó inexistente NX/);
 assert.throws(()=>createIfcInteroperabilityModel({...project,elements:[{id:'BAD',type:'frame3d',n1:'N1',n2:'N2',materialId:'ghost'}]}),/material inexistente/);
+assert.throws(()=>createIfcInteroperabilityModel({...project,units:'kip-ft-ksi'}),/não suportado/);
 
-console.log('AstraStruct v0.45 IFC interop smoke: IFC4X3 structural mapping, GlobalId codec/persistence, connectivity, provenance and canonical JSON round-trip coherent.');
+console.log('AstraStruct v0.45 IFC interop smoke: IFC4X3 mapping, units/context, GlobalId persistence, connectivity, provenance and canonical JSON round-trip coherent.');

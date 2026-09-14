@@ -29,3 +29,7 @@ export {
 export {
   IFC_STEP_WRITER_CONTRACT,IFC_STEP_WRITER_VERSION,validateIfcStepReadiness,renderIfcStep,validateIfcStepEnvelope
 } from './ifcStep.js';
+export {
+  IFC_EXCHANGE_STATE_CONTRACT,IFC_EXCHANGE_VERSION,explicitIfcProfileFromSection,enrichProjectSectionsForIfc,
+  inspectIfcExchangeReadiness,normalizeIfcExchangeState,prepareIfcExchange,safeIfcFilename
+} from './ifcExchange.js';

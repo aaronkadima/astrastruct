@@ -1,6 +1,7 @@
 import React from'react';
 import{createRoot,Root}from'react-dom/client';
-import{EngineeringRibbon,EngineeringModelExplorer,EngineeringRightRail,EngineeringResultsStrip}from'./EngineeringDesktopChrome';
+import{EngineeringRibbon,EngineeringModelExplorer,EngineeringRightRail}from'./EngineeringDesktopChrome';
+import{EngineeringResultsWorkbench}from'./EngineeringResultsWorkbench';
 // @ts-ignore
 import{normalizeProject}from'../../web/src/core/model.js';
 // @ts-ignore
@@ -33,7 +34,7 @@ function renderAll(){const app=document.querySelector<HTMLElement>('.astra-app')
   rootFor('ribbon',ribbon).render(<EngineeringRibbon project={project} result={result} activeScenario={project.settings?.analysisScenarioId||project.loadCases?.[0]?.id} onScenarioChange={changeScenario} onAnalyze={analyze} onOpenPanel={openPanel} onCommit={commitProject}/>);
   if(left){const h=ensureHost(left,'engineering-left-host');rootFor('left',h).render(<EngineeringModelExplorer project={project} result={result} onCommit={commitProject}/>)}
   if(right){const h=ensureHost(right,'engineering-right-host');rootFor('right',h).render(<EngineeringRightRail project={project} result={result}/>)}
-  if(results){const h=ensureHost(results,'engineering-results-host');rootFor('results',h).render(<EngineeringResultsStrip project={project} result={result}/>)}
+  if(results){const h=ensureHost(results,'engineering-results-host');rootFor('results',h).render(<EngineeringResultsWorkbench project={project} result={result}/>)}
 }
 function boot(){if(started)return;const app=document.querySelector<HTMLElement>('.astra-app');if(!app){requestAnimationFrame(boot);return}started=true;project=readProject();renderAll();subscribeAnalysisResult(next=>{result=next;renderAll()});window.addEventListener('astrastruct:project-external-commit',(ev:any)=>{project=ev?.detail?.project?withNBR6118Baseline(normalizeProject(ev.detail.project)):readProject();renderAll()});window.addEventListener('storage',e=>{if(e.key===STORAGE_KEY){project=readProject();renderAll()}});const mo=new MutationObserver(()=>renderAll());mo.observe(app,{childList:true,subtree:false})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else requestAnimationFrame(boot);

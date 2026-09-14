@@ -4,7 +4,8 @@ import {
   ifcClassForElement,createIfcInteroperabilityModel,validateIfcInteroperabilityModel,
   renderIfcInteroperabilityJson,parseIfcInteroperabilityJson,restoreStructuralCoreFromIfcModel,summarizeIfcInteroperability,
   IFC_GUID_ALPHABET,validateIfcGuid,compressIfcGuid,expandIfcGuid,createIfcIdentityMap,assignIfcGlobalIds,validateIfcGlobalIds,
-  IFC_CONTEXT_CONTRACT,unitsForAstraStruct,createIfcProjectContext,validateIfcProjectContext
+  IFC_CONTEXT_CONTRACT,unitsForAstraStruct,createIfcProjectContext,validateIfcProjectContext,
+  summarizeIfcBoundaryNodeCondition
 } from '../web/src/interop/index.js';
 
 assert.equal(IFC_INTEROP_CONTRACT,'ifc-interoperability/v1');
@@ -53,6 +54,7 @@ const project={
     {id:'S-SHELL',name:'Shell thickness',family:'shell',t:.18}
   ],
   supports:[{id:'SUP-N1',nodeId:'N1',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],
+  nodeSprings:[{id:'SPR-N2',nodeId:'N2',kx:5000,ky:0,kz:10000,krz:250}],
   elements:[
     {id:'E1',type:'frame3d',n1:'N1',n2:'N2',materialId:'steel355',sectionId:'S-BEAM'},
     {id:'E2',type:'shell4',n1:'N1',n2:'N2',n3:'N3',n4:'N4',materialId:'concrete30',sectionId:'S-SHELL',thickness:.18}
@@ -69,8 +71,17 @@ assert.equal(model.project.unitsInContextRef,'context:units');
 assert.deepEqual(model.project.representationContextRefs,['context:model3d']);
 assert.equal(model.context.representationContexts[0].precision,1e-6);
 assert.equal(model.nodes.length,4);assert.equal(model.members.length,2);assert.equal(model.relationships.length,6);
-assert.equal(model.nodes[0].ifcClass,'IfcStructuralPointConnection');
-assert.equal(model.nodes[0].condition.ifcClass,'IfcBoundaryNodeCondition');
+const n1=model.nodes.find(x=>x.sourceId==='N1'),n2=model.nodes.find(x=>x.sourceId==='N2');
+assert.equal(n1.ifcClass,'IfcStructuralPointConnection');
+assert.equal(n1.condition.ifcClass,'IfcBoundaryNodeCondition');
+assert.deepEqual(summarizeIfcBoundaryNodeCondition(n1.condition),{fixed:6,released:0,springs:0});
+assert.equal(n1.condition.translationalStiffnessX,true);
+assert.equal(n1.condition.rotationalStiffnessZ,true);
+assert.deepEqual(summarizeIfcBoundaryNodeCondition(n2.condition),{fixed:0,released:3,springs:3});
+assert.equal(n2.condition.translationalStiffnessX,5000);
+assert.equal(n2.condition.translationalStiffnessY,false);
+assert.equal(n2.condition.translationalStiffnessZ,10000);
+assert.equal(n2.condition.rotationalStiffnessZ,250);
 assert.equal(model.members.find(x=>x.sourceId==='E1').ifcClass,'IfcStructuralCurveMember');
 assert.equal(model.members.find(x=>x.sourceId==='E2').ifcClass,'IfcStructuralSurfaceMember');
 assert.equal(model.members.find(x=>x.sourceId==='E2').nodeRefs.length,4);
@@ -108,4 +119,4 @@ assert.throws(()=>createIfcInteroperabilityModel({...project,elements:[{id:'BAD'
 assert.throws(()=>createIfcInteroperabilityModel({...project,elements:[{id:'BAD',type:'frame3d',n1:'N1',n2:'N2',materialId:'ghost'}]}),/material inexistente/);
 assert.throws(()=>createIfcInteroperabilityModel({...project,units:'kip-ft-ksi'}),/não suportado/);
 
-console.log('AstraStruct v0.45 IFC interop smoke: IFC4X3 mapping, units/context, GlobalId persistence, connectivity, provenance and canonical JSON round-trip coherent.');
+console.log('AstraStruct v0.45 IFC interop smoke: IFC4X3 mapping, units/context, boundary conditions, GlobalId persistence, connectivity, provenance and canonical JSON round-trip coherent.');

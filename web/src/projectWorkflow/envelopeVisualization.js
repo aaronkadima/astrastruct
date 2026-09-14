@@ -1,3 +1,5 @@
+import{supportReactionAtCombination}from'./combinationEnvelopeExplorer.js';
+
 export const ENVELOPE_VISUALIZATION_CONTRACT='combination-envelope-visualization/v1';
 export const ENVELOPE_VISUALIZATION_VERSION='0.53.11-exp';
 
@@ -51,8 +53,9 @@ export function buildReactionVisualization(explorer={},field='R'){
   for(const e of explorer.supportReactionEnvelopes||[]){
     const env=e?.[selected],value=finite(env?.absMax);if(value==null)continue;
     let vector=null;if(Array.isArray(env?.vector))vector=env.vector.map(v=>finite(v)??0);else if(meta.axis!=null){vector=[0,0,0];vector[meta.axis]=value}
-    raw.push({kind:'support',nodeId:String(e.nodeId),label:String(e.label||e.nodeId),levelId:e.levelId==null?null:String(e.levelId),field:selected,value,magnitude:Math.abs(value),sign:value===0?0:value>0?1:-1,unit:meta.unit,quantity:meta.quantity,vector,restraints:e.restraints||null,governingCombinationId:env.governingCombinationId||null,governingComponent:selected});
+    const governingCombinationId=env.governingCombinationId||null,sourceCombinationReaction=governingCombinationId?supportReactionAtCombination(explorer,e.nodeId,governingCombinationId):null;
+    raw.push({kind:'support',nodeId:String(e.nodeId),label:String(e.label||e.nodeId),levelId:e.levelId==null?null:String(e.levelId),field:selected,value,magnitude:Math.abs(value),sign:value===0?0:value>0?1:-1,unit:meta.unit,quantity:meta.quantity,vector,restraints:e.restraints||null,governingCombinationId,governingComponent:selected,sourceCombinationReaction});
   }
   const maxAbs=Math.max(0,...raw.map(e=>e.magnitude)),items=raw.map(e=>({...e,ratio:maxAbs>1e-15?e.magnitude/maxAbs:0})),critical=items.slice().sort((a,b)=>b.magnitude-a.magnitude)[0]||null;
-  return{contract:ENVELOPE_VISUALIZATION_CONTRACT,version:ENVELOPE_VISUALIZATION_VERSION,domain:'reaction',field:selected,label:meta.label,quantity:meta.quantity,items,scales:{support:{maxAbs,unit:meta.unit,count:items.length}},criticalByKind:{support:critical},summary:{items:items.length,supports:items.length},governance:{solverReactionsOnly:true,supportNodesOnly:true,restrainedComponentsOnly:true,noSyntheticValues:true,noNormativePassFail:true,noUnitMixing:true,sourceContract:explorer.contract||null}};
+  return{contract:ENVELOPE_VISUALIZATION_CONTRACT,version:ENVELOPE_VISUALIZATION_VERSION,domain:'reaction',field:selected,label:meta.label,quantity:meta.quantity,items,scales:{support:{maxAbs,unit:meta.unit,count:items.length}},criticalByKind:{support:critical},summary:{items:items.length,supports:items.length},governance:{solverReactionsOnly:true,supportNodesOnly:true,restrainedComponentsOnly:true,noSyntheticValues:true,noNormativePassFail:true,noUnitMixing:true,singleCombinationSourceAttached:true,sourceContract:explorer.contract||null}};
 }

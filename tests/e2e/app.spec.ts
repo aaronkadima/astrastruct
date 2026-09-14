@@ -90,13 +90,13 @@ test('no bootstrap black screen', async ({ page }) => {
 test('migrated engineering panels mount without runtime failures', async ({ page }) => {
   await page.goto('./');
   await page.getByTestId('analyze-button').click();
-  const panels: Array<[string,string]> = [
-    ['Casos/combinações','panel-actions'],['Diagramas/envelopes','panel-postprocess'],['Cargas avançadas','panel-advanced'],['Materiais e seções','panel-properties'],['Molas e térmica','panel-mechanics'],['Ligações','panel-connections'],['Tensões','panel-stress'],['Tipo de análise','panel-analysis'],['Relatório técnico','panel-report'],['VNL','panel-vnl']
+  const panels: Array<[string,string,string]> = [
+    ['Casos/combinações','panel-actions','Fechar'],['Diagramas/envelopes','panel-postprocess','Fechar'],['Cargas avançadas','panel-advanced','Fechar'],['Materiais e seções','panel-properties','Fechar'],['Molas e térmica','panel-mechanics','Fechar'],['Ligações','panel-connections','Fechar'],['Tensões','panel-stress','Fechar'],['Tipo de análise','panel-analysis','Fechar'],['Relatório técnico','panel-report','Fechar'],['VNL','vnl-v049-workbench','Fechar VNL']
   ];
-  for (const [label,testId] of panels) {
+  for (const [label,testId,closeLabel] of panels) {
     await openCommand(page,label); const panel = page.getByTestId(testId); await expect(panel).toBeVisible();
     const box = await panel.boundingBox(); expect(box?.width || 0).toBeGreaterThan(250); expect(box?.height || 0).toBeGreaterThan(150);
-    await panel.locator('button[aria-label="Fechar"]').click(); await expect(panel).toHaveCount(0);
+    await panel.locator(`button[aria-label="${closeLabel}"]`).click(); await expect(panel).toHaveCount(0);
   }
 });
 

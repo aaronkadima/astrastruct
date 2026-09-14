@@ -8,7 +8,7 @@ A implementação permanece desacoplada do solver:
 
 `AstraStruct project -> IFC canonical interoperability model -> guarded IFC STEP writer -> external validation`
 
-O modelo canônico continua sendo a fonte intermediária auditável. O writer STEP é habilitado somente para o subconjunto cuja topologia e semântica já possuem gate próprio.
+O modelo canônico continua sendo a fonte intermediária auditável. O writer STEP é habilitado somente para o subconjunto cuja topologia e semântica possuem gate próprio.
 
 ## Contratos v0.45
 
@@ -45,12 +45,7 @@ O classificador de elemento é conservador: shell/surface/plate/slab/membrane/wa
 
 `web/src/interop/ifcGuid.js` implementa o codec UUID de 128 bits ↔ `IfcGloballyUniqueId` de 22 caracteres usando o alfabeto IFC oficial.
 
-O fluxo não regenera IDs a cada exportação. `createIfcIdentityMap()` cria um mapa persistível e `assignIfcGlobalIds()` reaplica as mesmas identidades aos objetos `IfcRoot` canônicos. O gate rejeita:
-
-- GlobalId inválido;
-- valor fora do espaço de 128 bits;
-- duplicidade;
-- ausência de identidade quando o writer exigir persistência.
+O fluxo não regenera IDs a cada exportação. `createIfcIdentityMap()` cria um mapa persistível e `assignIfcGlobalIds()` reaplica as mesmas identidades aos objetos `IfcRoot` canônicos. O gate rejeita GlobalId inválido, valor fora do espaço de 128 bits, duplicidade e ausência de identidade quando o writer exigir persistência.
 
 As relações adicionais criadas pelo writer (`IfcRelDeclares` e `IfcRelAssignsToGroup`) também recebem GlobalIds persistentes fornecidos explicitamente pelo chamador.
 
@@ -75,9 +70,7 @@ Essas grandezas são materializadas com `IfcDerivedUnit` + `IfcDerivedUnitElemen
 - `FALSE` = liberação / rigidez nula;
 - valor numérico = mola linear-elástica finita.
 
-A antiga convenção IFC2x3 de representar apoio fixo por `-1` não é usada.
-
-No STEP, valores numéricos translacionais são escritos como `IfcLinearStiffnessMeasure` e valores rotacionais como `IfcRotationalStiffnessMeasure`.
+A antiga convenção IFC2x3 de representar apoio fixo por `-1` não é usada. No STEP, valores numéricos translacionais são escritos como `IfcLinearStiffnessMeasure` e valores rotacionais como `IfcRotationalStiffnessMeasure`.
 
 ## Conectividade e round-trip canônico
 
@@ -87,9 +80,9 @@ O modelo rejeita IDs duplicados, conectividade insuficiente, nós inexistentes e
 
 Esse mecanismo não é apresentado como importador genérico de qualquer IFC externo.
 
-## Writer STEP curve-only
+## Writer STEP — curvas e superfícies planas
 
-`web/src/interop/ifcStep.js` implementa o primeiro writer ISO-10303-21 protegido. O subconjunto atual serializa:
+`web/src/interop/ifcStep.js` implementa um writer ISO-10303-21 protegido. O subconjunto atual serializa:
 
 - `IfcProject`;
 - `IfcUnitAssignment`, `IfcSIUnit` e `IfcDerivedUnit`;
@@ -97,28 +90,63 @@ Esse mecanismo não é apresentado como importador genérico de qualquer IFC ext
 - `IfcStructuralAnalysisModel` e `IfcLocalPlacement` compartilhado;
 - `IfcCartesianPoint`, `IfcVertexPoint` e topologia `Vertex`;
 - `IfcEdge` e topologia `Edge`;
+- `IfcPolyLoop`, `IfcFaceOuterBound`, `IfcPlane` e `IfcFaceSurface`;
 - `IfcStructuralPointConnection`;
 - `IfcBoundaryNodeCondition`;
 - `IfcStructuralCurveMember`;
+- `IfcStructuralSurfaceMember`;
 - `IfcRelConnectsStructuralMember`;
 - `IfcRelDeclares`;
 - `IfcRelAssignsToGroup`.
 
-A representação dos membros lineares usa `IfcEdge` compartilhando os `IfcVertexPoint` dos nós. O eixo local é derivado de uma direção não paralela à tangente e ortogonalizado antes de criar `IfcDirection`.
+### Membros lineares
 
-### Gate de segurança do writer
+A representação usa `IfcEdge` compartilhando os `IfcVertexPoint` dos nós. O eixo local é derivado de uma direção não paralela à tangente e ortogonalizado antes de criar `IfcDirection`.
+
+### Membros de superfície
+
+A superfície de referência é emitida somente quando os nós formam uma face plana válida. O writer:
+
+1. encontra três pontos não colineares;
+2. calcula e normaliza a normal da superfície;
+3. verifica todos os nós contra a tolerância de planicidade do contexto IFC;
+4. cria `IfcPolyLoop` usando os mesmos `IfcCartesianPoint` dos nós;
+5. cria `IfcFaceOuterBound`;
+6. define o plano por `IfcAxis2Placement3D` + `IfcPlane`;
+7. cria uma única `IfcFaceSurface` para a topologia `Face`;
+8. emite `IfcStructuralSurfaceMember` com `PredefinedType` e espessura quando disponível.
+
+O mapeamento inicial de `PredefinedType` é:
+
+- `membrane*` -> `MEMBRANE_ELEMENT`;
+- `plate*` / `slab*` -> `BENDING_ELEMENT`;
+- demais shell/surface/wall -> `SHELL`.
+
+A espessura é obtida do elemento (`thickness`/`t`) ou da seção associada (`thickness`/`t`) e, quando informada, deve ser estritamente positiva.
+
+### Gate geométrico de superfícies
+
+O writer recusa:
+
+- menos de três nós;
+- face colinear/degenerada;
+- face não planar além da precisão definida no contexto;
+- espessura informada menor ou igual a zero.
+
+Não há triangulação, ajuste por mínimos quadrados ou projeção automática que possa mascarar erro geométrico.
+
+## Gate geral do writer
 
 `validateIfcStepReadiness()` recusa a exportação quando:
 
 - o contrato canônico é inválido;
 - GlobalIds persistentes estão ausentes ou duplicados;
 - o schema não é `IFC4X3_ADD2`;
-- há `IfcStructuralSurfaceMember` ou qualquer membro fora do subconjunto curve-only;
+- a classe de membro está fora do subconjunto suportado;
+- a geometria de curva/superfície viola o respectivo gate;
 - os GlobalIds persistentes de `IfcRelDeclares` e `IfcRelAssignsToGroup` não foram fornecidos.
 
-Portanto, uma malha com laje/casca **não gera um arquivo parcial silenciosamente**. Ela permanece no modelo canônico até o writer de superfície estar implementado.
-
-`validateIfcStepEnvelope()` verifica o envelope ISO-10303-21, schema declarado, entidades emitidas e referências STEP não resolvidas. Essa verificação interna não substitui um validador IFC externo.
+`validateIfcStepEnvelope()` verifica envelope ISO-10303-21, schema declarado, entidades emitidas e referências STEP não resolvidas, além de sinalizar a presença de membros de curva, membros de superfície e `IfcFaceSurface`. Essa verificação interna não substitui um validador IFC externo.
 
 ## Cobertura de testes
 
@@ -126,23 +154,24 @@ A cadeia de `npm test` em `develop` inclui:
 
 - `tests/ifc-interop-v045-smoke.mjs` — mapeamento canônico, conectividade, GlobalId, contexto e round-trip;
 - `tests/ifc-units-v045-smoke.mjs` — unidades derivadas de rigidez;
-- `tests/ifc-step-v045-smoke.mjs` — emissão STEP curve-only, topologia Vertex/Edge, apoio fixo, molas, relações e rejeição de superfícies.
+- `tests/ifc-step-v045-smoke.mjs` — emissão STEP de curvas e superfícies planas, topologias Vertex/Edge/Face, apoio fixo, molas, espessura, relações e rejeição de faces não planares/degeneradas.
 
-O benchmark STEP usa timestamp controlado para manter os testes determinísticos.
+Os benchmarks STEP usam timestamp controlado para manter os testes determinísticos.
 
 ## Limitações ainda abertas antes do writer de produção
 
-Apesar de existir um writer STEP executável, o campo canônico `exchange.stepWriterReady` permanece `false`. Isso é intencional: `false` significa **não promover o writer experimental como exportador IFC de produção**.
+Apesar de existir um writer STEP executável para curvas e superfícies planas, o campo canônico `exchange.stepWriterReady` permanece `false`. Isso é intencional: `false` significa **não promover o writer experimental como exportador IFC de produção**.
 
 Ainda são necessários:
 
-1. writer de `IfcStructuralSurfaceMember` com topologia `IfcFaceSurface` e teste de planicidade/orientação;
-2. associações completas de materiais e perfis/seções;
-3. owner/application metadata e política de revisão;
-4. parser/round-trip STEP do subconjunto suportado;
-5. validação externa automatizada contra schema IFC4X3 e/ou IfcOpenShell;
-6. testes com arquivos de referência e intercâmbio com ferramentas BIM/estruturais;
-7. gate final v0.45 antes de qualquer atualização de `PRODUCT_VERSION`.
+1. associações normativamente coerentes de materiais: `IfcMaterialProfileSetUsage` para membros lineares e `IfcMaterialLayerSetUsage` para membros de superfície;
+2. mapeamento geométrico/semântico completo de perfis e seções;
+3. refinamento da conectividade de superfície por borda/face onde exigido pelo caso de intercâmbio;
+4. owner/application metadata e política de revisão;
+5. parser/round-trip STEP do subconjunto suportado;
+6. validação externa automatizada contra schema IFC4X3 e/ou IfcOpenShell;
+7. testes com arquivos de referência e intercâmbio com ferramentas BIM/estruturais;
+8. gate final v0.45 antes de qualquer atualização de `PRODUCT_VERSION`.
 
 ## Regra de publicação
 

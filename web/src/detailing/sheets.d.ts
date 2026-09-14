@@ -1,0 +1,12 @@
+export const DRAWING_SHEET_CONTRACT:string;
+export const DRAWING_SHEET_VERSION:string;
+export const PAPER_SIZES_MM:Record<string,[number,number]>;
+export function createDrawingSheet(options?:any):any;
+export function normalizeEntity(entity:any,index?:number):any;
+export function createRebarSheetsFromSchedule(options:{schedule:any;projectId?:string;title?:string;paper?:string;scale?:string;revision?:string;marksPerSheet?:number}):any[];
+export function updateSheetEntity(sheet:any,entityId:string,patch?:any):any;
+export function moveSheetEntity(sheet:any,entityId:string,dx?:number,dy?:number):any;
+export function sheetsFromProject(project:any):any[];
+export function withDrawingSheets(project:any,sheets:any[]):any;
+export function findRebarSchedule(project:any):any|null;
+export function exportDrawingSheetSvg(sheet:any):string;

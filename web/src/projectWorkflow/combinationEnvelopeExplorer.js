@@ -43,6 +43,17 @@ function updateResultantEnvelope(env,components,combinationId){const values=comp
 function supportMap(project){
   const out=new Map();for(const s of project.supports||[]){const id=String(s?.nodeId??'');if(!id)continue;const prev=out.get(id)||{nodeId:id,ux:false,uy:false,uz:false,rx:false,ry:false,rz:false};for(const k of ['ux','uy','uz','rx','ry','rz'])prev[k]=!!(prev[k]||s?.[k]);out.set(id,prev)}return out;
 }
+
+export function supportReactionAtCombination(explorer={},nodeId,combinationId){
+  const id=text(nodeId),combo=text(combinationId);if(!id||!combo)return null;
+  const entry=(explorer.combinations||[]).find(e=>e?.status==='READY'&&text(e?.combinationId)===combo),env=(explorer.supportReactionEnvelopes||[]).find(e=>text(e?.nodeId)===id);if(!entry||!env)return null;
+  const row=reactionRows(entry.result).find(r=>text(r?.nodeId)===id);if(!row)return null;
+  const restraints={ux:!!env?.restraints?.ux,uy:!!env?.restraints?.uy,uz:!!env?.restraints?.uz,rx:!!env?.restraints?.rx,ry:!!env?.restraints?.ry,rz:!!env?.restraints?.rz},components={};
+  for(const [key,field,dof] of [['Fx','fx','ux'],['Fy','fy','uy'],['Fz','fz','uz'],['Mx','mx','rx'],['My','my','ry'],['Mz','mz','rz']])components[key]=restraints[dof]?finite(row?.[field]):0;
+  const complete=Object.values(components).every(v=>v!==null&&Number.isFinite(Number(v)));
+  return{contract:'support-reaction-at-combination/v1',version:COMBINATION_ENVELOPE_VERSION,nodeId:id,combinationId:combo,components,forceUnit:'kN',momentUnit:'kN·m',restraints,complete,governance:{singlePhysicalCombination:true,restrainedComponentsOnly:true,unrestrainedComponentsZeroed:true,noEnvelopeComponentMixing:true}};
+}
+
 function updateSupportReaction(env,row,support,combinationId){
   const fields=[['Fx','fx','ux'],['Fy','fy','uy'],['Fz','fz','uz'],['Mx','mx','rx'],['My','my','ry'],['Mz','mz','rz']];
   for(const [key,field,dof] of fields){if(!support[dof])continue;const v=finite(row?.[field]);if(v!=null)updateEnvelope(env[key],[{component:key,value:v}],combinationId)}

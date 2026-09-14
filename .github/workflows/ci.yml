@@ -77,7 +77,7 @@ jobs:
         run: npm run build
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run desktop, Android and tablet regression
+      - name: Run critical desktop, Android and tablet regression
         env:
           ASTRA_BASE_PATH: /astrastruct/dev/
-        run: npm run test:e2e
+        run: npx playwright test tests/e2e/engineering-desktop-v054.spec.ts

@@ -1,4 +1,5 @@
 import {runMonteCarloReliability} from './monteCarlo.js';
+import {runLatinHypercubeReliability} from './latinHypercube.js';
 import {runMvfosmReliability} from './mvfosm.js';
 import {runFormReliability} from './form.js';
 import {runSystemMonteCarloReliability} from './system.js';
@@ -6,7 +7,7 @@ import {runImportanceSamplingReliability} from './importanceSampling.js';
 
 export const RELIABILITY_STUDY_CONTRACT='project-reliability-study/v1';
 export const RELIABILITY_STUDY_VERSION='0.50.0-exp';
-export const RELIABILITY_METHODS=Object.freeze(['monte-carlo','mvfosm','form','system-monte-carlo','importance-sampling']);
+export const RELIABILITY_METHODS=Object.freeze(['monte-carlo','latin-hypercube','mvfosm','form','system-monte-carlo','importance-sampling']);
 const clone=value=>JSON.parse(JSON.stringify(value));
 
 export function defaultReliabilityStudy(){return{contract:RELIABILITY_STUDY_CONTRACT,version:RELIABILITY_STUDY_VERSION,name:'Estudo de confiabilidade',method:'form',scenarioId:null,variables:[],limitStates:[],activeLimitStateId:null,correlationMatrix:null,samples:2000,seed:50050,systemMode:'series',lastResult:null};}
@@ -22,6 +23,7 @@ function activeLimitState(study){const ls=study.limitStates.find(x=>x.id===study
 export function executeReliabilityStudy(project,input={},solver){
   const study=normalizeReliabilityStudy(input),base={variables:study.variables,scenarioId:study.scenarioId,correlationMatrix:study.correlationMatrix,samples:study.samples,seed:study.seed};
   if(study.method==='monte-carlo')return runMonteCarloReliability(project,{...base,limitState:activeLimitState(study)},solver);
+  if(study.method==='latin-hypercube')return runLatinHypercubeReliability(project,{...base,limitState:activeLimitState(study)},solver);
   if(study.method==='mvfosm')return runMvfosmReliability(project,{...base,limitState:activeLimitState(study)},solver);
   if(study.method==='form')return runFormReliability(project,{...base,limitState:activeLimitState(study)},solver);
   if(study.method==='importance-sampling')return runImportanceSamplingReliability(project,{...base,limitState:activeLimitState(study)},solver);

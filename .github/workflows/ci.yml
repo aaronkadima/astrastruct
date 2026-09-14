@@ -2,9 +2,9 @@ name: AstraStruct CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, 'feature/**']
   pull_request:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
 permissions:
@@ -26,15 +26,17 @@ jobs:
         run: npm test
       - name: Validate v0.53.13 foundation reaction transfer
         run: node tests/foundation-reaction-transfer-v05313-smoke.mjs
+      - name: Validate v0.54 engineering desktop and visualization postprocess
+        run: node tests/engineering-desktop-v054-smoke.mjs
       - name: Validate persistent IFC application exchange
         run: node tests/ifc-exchange-ui-v045-smoke.mjs
       - name: Build React/Vite application
         env:
-          ASTRA_BASE_PATH: ${{ github.ref == 'refs/heads/develop' && '/astrastruct/dev/' || '/astrastruct/' }}
+          ASTRA_BASE_PATH: ${{ (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')) && '/astrastruct/dev/' || '/astrastruct/' }}
         run: npm run build
 
   ifc-external-validation:
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')
     needs: app-and-solver-tests
     runs-on: ubuntu-latest
     steps:
@@ -57,7 +59,7 @@ jobs:
         run: python scripts/validate-ifc-v045-ifcopenshell.py artifacts/ifc/astrastruct-v045-validation.ifc
 
   development-browser-regression:
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')
     needs: app-and-solver-tests
     runs-on: ubuntu-latest
     steps:

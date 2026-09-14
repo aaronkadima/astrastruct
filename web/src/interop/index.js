@@ -24,5 +24,8 @@ export {
   IFC_STEP_OWNER_CONTRACT,IFC_STEP_OWNER_VERSION,validateIfcOwnerMetadata,emitIfcStepOwner
 } from './ifcStepOwner.js';
 export {
+  IFC_STEP_PARSER_CONTRACT,IFC_STEP_PARSER_VERSION,parseIfcStepEntities,parseIfcStructuralStep,validateIfcStructuralRoundTrip
+} from './ifcStepParse.js';
+export {
   IFC_STEP_WRITER_CONTRACT,IFC_STEP_WRITER_VERSION,validateIfcStepReadiness,renderIfcStep,validateIfcStepEnvelope
 } from './ifcStep.js';

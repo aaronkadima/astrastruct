@@ -2,6 +2,8 @@ export const ELEMENT_APPEARANCE_CONTRACT='element-appearance/v1';
 export const ELEMENT_APPEARANCE_VERSION='0.52.0-exp';
 export const STRUCTURAL_GROUP_APPEARANCE_CONTRACT='structural-appearance-group/v1';
 export const STRUCTURAL_GROUP_APPEARANCE_VERSION='0.52.0-exp';
+export const NODE_APPEARANCE_CONTRACT='node-appearance/v1';
+export const NODE_APPEARANCE_VERSION='0.52.0-exp';
 export const STRUCTURAL_APPEARANCE_GROUPS=Object.freeze([
   {id:'slab',label:'Lajes',color:'#6d8da4'},
   {id:'beam',label:'Vigas',color:'#2f70ad'},
@@ -39,6 +41,14 @@ function frameGroup(project,e){
 export function normalizeElementAppearance(value={}){
   return{contract:ELEMENT_APPEARANCE_CONTRACT,version:ELEMENT_APPEARANCE_VERSION,color:hex(value.color),opacity:clamp(Number.isFinite(Number(value.opacity))?Number(value.opacity):1,0,1),visible:value.visible!==false};
 }
+export function nodeAppearance(project){
+  const value=project?.visualization?.nodeAppearance||{};
+  return{contract:NODE_APPEARANCE_CONTRACT,version:NODE_APPEARANCE_VERSION,opacity:clamp(Number.isFinite(Number(value.opacity))?Number(value.opacity):1,0,1),visible:value.visible!==false};
+}
+export function withNodeAppearance(project,patch={}){
+  const p=clone(project||{}),current=nodeAppearance(p);p.visualization={...(p.visualization||{})};p.visualization.nodeAppearance={contract:NODE_APPEARANCE_CONTRACT,version:NODE_APPEARANCE_VERSION,opacity:clamp(Number.isFinite(Number(patch.opacity))?Number(patch.opacity):current.opacity,0,1),visible:patch.visible===undefined?current.visible:patch.visible!==false};return p;
+}
+export function resetNodeAppearance(project){const p=clone(project||{});if(p.visualization?.nodeAppearance){p.visualization={...p.visualization};delete p.visualization.nodeAppearance;}return p;}
 export function structuralElementGroup(project,elementOrId){
   const e=typeof elementOrId==='string'?(project?.elements||[]).find(x=>String(x.id)===String(elementOrId)):elementOrId||{},explicit=explicitGroup(e);if(explicit)return explicit;
   const type=String(e.type||'').toLowerCase();if(/foundation|footing|pilecap/.test(type))return'foundation';if(type.includes('shell')||type.includes('plate')||type.includes('surface'))return shellGroup(project,e);if(type.includes('truss')||type.includes('cable'))return'brace';if(type.includes('frame')||type.includes('beam'))return frameGroup(project,e);return'other';
@@ -71,4 +81,4 @@ export function withElementAppearance(project,elementId,patch={}){const e=(proje
 export function resetElementAppearance(project,elementId){const e=(project?.elements||[]).find(x=>String(x.id)===String(elementId));return e?resetGroupAppearance(project,structuralElementGroup(project,e)):clone(project||{});}
 export function applyAppearanceToType(project,sourceElementId){const e=(project?.elements||[]).find(x=>String(x.id)===String(sourceElementId));if(!e)throw new Error('Appearance: elemento fonte não encontrado.');const groupId=structuralElementGroup(project,e),style=elementAppearance(project,e);return withGroupAppearance(project,groupId,style);}
 export function appearanceGroupSummary(project){const rows=STRUCTURAL_APPEARANCE_GROUPS.map(g=>{const elements=(project?.elements||[]).filter(e=>structuralElementGroup(project,e)===g.id),appearance=groupAppearance(project,g.id);return{id:g.id,label:g.label,count:elements.length,...appearance};});return{contract:'structural-appearance-group-summary/v1',version:STRUCTURAL_GROUP_APPEARANCE_VERSION,count:rows.length,custom:rows.filter(r=>r.source==='group').length,rows};}
-export function appearanceSummary(project){const elements=project?.elements||[],rows=elements.map(e=>({id:e.id,type:e.type,...elementAppearance(project,e)}));return{contract:'element-appearance-summary/v1',version:ELEMENT_APPEARANCE_VERSION,count:rows.length,custom:rows.filter(r=>r.source==='group'||r.source==='legacy-element').length,rows,groups:appearanceGroupSummary(project)};}
+export function appearanceSummary(project){const elements=project?.elements||[],rows=elements.map(e=>({id:e.id,type:e.type,...elementAppearance(project,e)}));return{contract:'element-appearance-summary/v1',version:ELEMENT_APPEARANCE_VERSION,count:rows.length,custom:rows.filter(r=>r.source==='group'||r.source==='legacy-element').length,rows,groups:appearanceGroupSummary(project),nodes:nodeAppearance(project)};}

@@ -7,9 +7,12 @@ import {
   elementAppearance,
   groupAppearance,
   materializeGroupAppearances,
+  nodeAppearance,
   resetAllGroupAppearances,
+  resetNodeAppearance,
   structuralElementGroup,
   withGroupAppearance,
+  withNodeAppearance,
 } from '../../web/src/visualization/appearance.js';
 
 const PROJECT_KEY='astrastruct.project';
@@ -37,6 +40,15 @@ function pct(v:number){return`${Math.round(v*100)}%`;}
 function escapeHtml(v:any){
   return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]||m));
 }
+function nodeRowHtml(p:any){
+  const a=nodeAppearance(p),count=(p.nodes||[]).length;
+  return `<div class="workspace-group-row workspace-node-row" data-node-appearance>
+    <div class="workspace-group-name"><span class="workspace-node-swatch" aria-hidden="true"></span><span><strong>Nós</strong><small>${count} ${count===1?'nó':'nós'}</small></span></div>
+    <div class="workspace-node-scope"><span>Marcadores</span><strong>Global</strong></div>
+    <label class="workspace-group-opacity" title="Transparência dos nós"><span>Opacidade <b data-node-pct>${pct(a.opacity)}</b></span><input type="range" data-node-field="opacity" min="0" max="1" step=".05" value="${a.opacity}" aria-label="Opacidade dos nós"></label>
+    <label class="workspace-group-visible"><input type="checkbox" data-node-field="visible"${a.visible!==false?' checked':''} aria-label="Exibir nós"><span>Visível</span></label>
+  </div>`;
+}
 function rowHtml(p:any,g:any){
   const a=groupAppearance(p,g.id);
   const count=(p.elements||[]).filter((e:any)=>structuralElementGroup(p,e)===g.id).length;
@@ -50,11 +62,13 @@ function rowHtml(p:any,g:any){
 function panelHtml(p:any){
   const summary=appearanceGroupSummary(p);
   return `<fieldset class="workspace-group-appearance" data-group-appearance>
-    <legend>Aparência por grupo estrutural</legend>
+    <legend>Aparência do modelo</legend>
     <div class="workspace-group-head"><span>Grupo</span><span>Aparência</span><span>Transparência</span><span>Exibir</span></div>
+    <div class="workspace-group-list workspace-node-list">${nodeRowHtml(p)}</div>
+    <div class="workspace-group-divider">Elementos estruturais</div>
     <div class="workspace-group-list">${STRUCTURAL_APPEARANCE_GROUPS.map((g:any)=>rowHtml(p,g)).join('')}</div>
-    <div class="workspace-group-actions"><span>${summary.custom} ${summary.custom===1?'grupo personalizado':'grupos personalizados'} · aplicação automática a todos os elementos do grupo</span><div><button type="button" data-open-engineering-review>Detalhamento e fundações</button><button type="button" data-group-reset>Restaurar grupos</button></div></div>
-    <p class="workspace-group-note">A classificação usa função estrutural explícita quando disponível; na ausência dela, usa tipo e orientação geométrica. Cor, opacidade e visibilidade são apenas gráficas e não alteram rigidez, massa, cargas, dimensionamento ou resultados.</p>
+    <div class="workspace-group-actions"><span>${summary.custom} ${summary.custom===1?'grupo personalizado':'grupos personalizados'} · aplicação automática a todos os elementos do grupo</span><div><button type="button" data-open-engineering-review>Detalhamento e fundações</button><button type="button" data-group-reset>Restaurar aparência</button></div></div>
+    <p class="workspace-group-note">Nós usam visibilidade e opacidade globais; ocultá-los não oculta os apoios. Os elementos estruturais são classificados por função explícita ou por tipo/orientação geométrica. Estas propriedades são apenas gráficas e não alteram rigidez, massa, cargas, dimensionamento ou resultados.</p>
   </fieldset>`;
 }
 function enhanceSettingsDialog(){
@@ -69,6 +83,19 @@ function enhanceSettingsDialog(){
   wirePanel(panel);
 }
 function wirePanel(panel:HTMLElement){
+  const nodeRow=panel.querySelector<HTMLElement>('[data-node-appearance]');
+  const nodeOpacity=nodeRow?.querySelector<HTMLInputElement>('[data-node-field="opacity"]');
+  const nodeVisible=nodeRow?.querySelector<HTMLInputElement>('[data-node-field="visible"]');
+  nodeOpacity?.addEventListener('input',event=>{
+    const input=event.currentTarget as HTMLInputElement;
+    const readout=nodeRow?.querySelector<HTMLElement>('[data-node-pct]');
+    if(readout)readout.textContent=pct(Number(input.value));
+    commit(withNodeAppearance(project(),{opacity:Number(input.value)}));
+  });
+  nodeVisible?.addEventListener('change',event=>{
+    const input=event.currentTarget as HTMLInputElement;
+    commit(withNodeAppearance(project(),{visible:input.checked}));
+  });
   const rows=panel.querySelectorAll<HTMLElement>('[data-appearance-group]');
   rows.forEach(row=>{
     const groupId=row.dataset.appearanceGroup!;
@@ -97,7 +124,7 @@ function wirePanel(panel:HTMLElement){
     window.dispatchEvent(new CustomEvent('astrastruct:engineering-review-open'));
   });
   panel.querySelector<HTMLButtonElement>('[data-group-reset]')?.addEventListener('click',()=>{
-    commit(resetAllGroupAppearances(project()));
+    commit(resetNodeAppearance(resetAllGroupAppearances(project())));
     refreshPanel(project());
   });
 }
@@ -114,6 +141,18 @@ function elementId(group:Element){
   return group.querySelector<SVGTextElement>('.element-label')?.textContent?.trim()||group.querySelector<SVGTextElement>('text')?.textContent?.trim()||'';
 }
 function applyCanvasAppearance(p=project()){
+  const nodes=nodeAppearance(p);
+  document.querySelectorAll<SVGGElement>('svg.model-canvas g[data-entity="node"]').forEach(g=>{
+    g.dataset.nodeAppearanceVisible=nodes.visible===false?'false':'true';
+    const marker=g.querySelector<SVGElement>('.node');
+    const label=g.querySelector<SVGElement>('.node-label');
+    for(const el of[marker,label])if(el){el.style.display=nodes.visible===false?'none':'';el.style.opacity=String(nodes.opacity);}
+  });
+  document.querySelectorAll<SVGGElement>('svg.model-canvas g[data-scientific-nodes="true"]').forEach(g=>{
+    g.dataset.nodeAppearanceVisible=nodes.visible===false?'false':'true';
+    g.style.display=nodes.visible===false?'none':'';
+    g.style.opacity=String(nodes.opacity);
+  });
   document.querySelectorAll<SVGGElement>('svg.model-canvas g[data-entity="element"]').forEach(g=>{
     const id=elementId(g);
     const element=(p.elements||[]).find((x:any)=>String(x.id)===id);
@@ -136,6 +175,8 @@ function applyCanvasAppearance(p=project()){
   if(app){
     app.dataset.appearanceGroups=String(summary.custom);
     app.dataset.hiddenAppearanceGroups=String(summary.rows.filter((r:any)=>r.visible===false).length);
+    app.dataset.nodeAppearanceVisible=nodes.visible===false?'false':'true';
+    app.dataset.nodeAppearanceOpacity=String(nodes.opacity);
   }
 }
 function reconcileProject(p:any){

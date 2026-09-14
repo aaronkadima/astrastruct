@@ -1,10 +1,13 @@
 import{test,expect}from'@playwright/test';
 
+const preview='?engineeringDesktop=1';
+
 test('v0.54 engineering desktop exposes ribbon, model tree, right rail and bottom results',async({page})=>{
-  await page.goto('');
+  await page.goto(preview);
   await page.waitForFunction(()=>document.documentElement.dataset.astraReady==='true');
   const app=page.getByTestId('astra-app');
   await expect(app).toHaveClass(/engineering-desktop/);
+  await expect(app).toHaveAttribute('data-engineering-desktop-preview','true');
   await expect(page.getByTestId('engineering-ribbon')).toBeVisible();
   await expect(page.getByTestId('engineering-results-strip')).toBeVisible();
   const viewport=page.viewportSize();
@@ -22,7 +25,7 @@ test('v0.54 engineering desktop exposes ribbon, model tree, right rail and botto
 
 test('v0.54 3D result publishing exposes functional engineering result tabs',async({page})=>{
   await page.addInitScript(()=>localStorage.setItem('astrastruct.project',JSON.stringify({id:'v054-e2e',name:'Edifício teste',levels:[{id:'L0',name:'Base',elevation:0},{id:'L1',name:'Pav. 1',elevation:3}],nodes:[{id:'N0',x:0,y:0,z:0,levelId:'L0'},{id:'N1',x:0,y:0,z:3,levelId:'L1'}],supports:[{nodeId:'N0',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],materials:[{id:'steel355',name:'Aço',type:'steel',E:200e6,nu:.3,density:78.5,fy:355}],sections:[{id:'s',name:'Seção',family:'steel3d',A:.012,Iy:.00018,Iz:.00022,J:.00003,I:.00022}],elements:[{id:'C1',type:'frame3d',n1:'N0',n2:'N1',materialId:'steel355',sectionId:'s',A:.012,Iy:.00018,Iz:.00022,J:.00003}],loads:[{id:'P',caseId:'LC1',nodeId:'N1',fx:5,fy:0,fz:-10}],loadCases:[{id:'LC1',name:'LC1'}],loadCombinations:[],detailing:{reinforcement:{contract:'rebar-schedule/v1',marks:[{id:'A1',location:'Pilar C1',grade:'CA-50',diameterMm:12.5,quantity:4,cutLengthMm:3200,totalLengthM:12.8,totalMassKg:12.63}]}},settings:{analysisType:'linear',analysisScenarioId:'LC1',activeLoadCaseId:'LC1'}})));
-  await page.goto('');
+  await page.goto(preview);
   await page.waitForFunction(()=>document.documentElement.dataset.astraReady==='true');
   await page.getByTestId('engineering-ribbon-analyze').click();
   const strip=page.getByTestId('engineering-results-strip');

@@ -10,4 +10,5 @@ for(const file of files)run(process.execPath,['--check',file]);
 run(process.execPath,['tests/visual-detail-foundation-v052-smoke.mjs']);
 run(process.execPath,['tests/market-parity-v053-smoke.mjs']);
 run(process.execPath,['tests/market-parity-advanced-v053-smoke.mjs']);
-console.log(`AstraStruct check: TypeScript + ${files.length} módulos JS validados + gates funcionais v0.52, baseline v0.53 e paridade avançada v0.53.1.`);
+run(process.execPath,['tests/wind-durability-v0532-smoke.mjs']);
+console.log(`AstraStruct check: TypeScript + ${files.length} módulos JS validados + gates funcionais v0.52, v0.53.0, v0.53.1 e v0.53.2.`);

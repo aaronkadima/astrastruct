@@ -1,6 +1,7 @@
 import {validateIfcInteroperabilityModel,IFC_SCHEMA} from './ifc.js';
 import {validateIfcGlobalIds,validateIfcGuid} from './ifcGuid.js';
 import {validateIfcProjectContext} from './ifcContext.js';
+import {validateIfcStepMaterialReadiness,emitIfcStepMaterials} from './ifcStepMaterial.js';
 
 export const IFC_STEP_WRITER_CONTRACT='ifc-step-writer/v1';
 export const IFC_STEP_WRITER_VERSION='0.45.0-exp';
@@ -35,12 +36,12 @@ function memberAxis(member,nodeByKey){
 function surfaceGeometry(member,nodeByKey,precision=1e-6){
   const nodes=(member.nodeRefs||[]).map(k=>nodeByKey.get(k));if(nodes.some(x=>!x))throw new Error(`IFC STEP: nós ausentes na superfície ${member.sourceId}.`);
   if(nodes.length<3)throw new Error(`IFC STEP: superfície ${member.sourceId} requer ao menos três nós.`);
-  const points=nodes.map(pointOf),p0=points[0];let v1=null,v2=null,normalRaw=null;
+  const points=nodes.map(pointOf),p0=points[0];let v1=null,normalRaw=null;
   for(let i=1;i<points.length&&!normalRaw;i++){
     const candidate1=subtract(points[i],p0);if(magnitude(candidate1)<=precision)continue;
     for(let j=i+1;j<points.length;j++){
       const candidate2=subtract(points[j],p0),c=cross(candidate1,candidate2);
-      if(magnitude(c)>precision){v1=candidate1;v2=candidate2;normalRaw=c;break;}
+      if(magnitude(c)>precision){v1=candidate1;normalRaw=c;break;}
     }
   }
   if(!normalRaw)throw new Error(`IFC STEP: superfície ${member.sourceId} degenerada/colinear.`);
@@ -113,14 +114,18 @@ function validateMemberGeometry(model){
   }
 }
 
-export function validateIfcStepReadiness(model,{declarationGlobalId,groupGlobalId}={}){
+export function validateIfcStepReadiness(model,options={}){
+  const {declarationGlobalId,groupGlobalId}=options;
   validateIfcInteroperabilityModel(model);validateIfcProjectContext(model.context);validateIfcGlobalIds(model);
   if(model.schema!==IFC_SCHEMA)throw new Error(`IFC STEP: schema ${model.schema} não suportado.`);validateMemberGeometry(model);
   if(!validateIfcGuid(declarationGlobalId))throw new Error('IFC STEP: declarationGlobalId persistente é obrigatório.');
   if(!validateIfcGuid(groupGlobalId))throw new Error('IFC STEP: groupGlobalId persistente é obrigatório.');
-  const all=new Set([declarationGlobalId,groupGlobalId]);for(const record of [model.project,model.analysisModel,...model.nodes,...model.members,...model.relationships]){if(all.has(record.globalId))throw new Error(`IFC STEP: GlobalId duplicado ${record.globalId}.`);all.add(record.globalId)}
+  const materialReady=validateIfcStepMaterialReadiness(model,options);
+  const all=new Set([declarationGlobalId,groupGlobalId]);
+  for(const record of [model.project,model.analysisModel,...model.nodes,...model.members,...model.relationships]){if(all.has(record.globalId))throw new Error(`IFC STEP: GlobalId duplicado ${record.globalId}.`);all.add(record.globalId)}
+  for(const guid of materialReady.associationGlobalIds){if(all.has(guid))throw new Error(`IFC STEP: GlobalId duplicado ${guid}.`);all.add(guid)}
   const curves=model.members.filter(x=>x.ifcClass==='IfcStructuralCurveMember').length,surfaces=model.members.filter(x=>x.ifcClass==='IfcStructuralSurfaceMember').length;
-  return{contract:IFC_STEP_WRITER_CONTRACT,version:IFC_STEP_WRITER_VERSION,schema:model.schema,curveMembers:curves,surfaceMembers:surfaces,nodes:model.nodes.length,relationships:model.relationships.length,warnings:['material/profile associations ainda não serializadas neste incremento','conectividade de superfícies permanece baseada nas point connections canônicas até o gate de conexões de borda/face','validação externa buildingSMART/IfcOpenShell continua obrigatória antes de promover o writer para produção']};
+  return{contract:IFC_STEP_WRITER_CONTRACT,version:IFC_STEP_WRITER_VERSION,schema:model.schema,curveMembers:curves,surfaceMembers:surfaces,nodes:model.nodes.length,relationships:model.relationships.length,materialSummary:materialReady.summary,warnings:['conectividade de superfícies permanece baseada nas point connections canônicas até o gate de conexões de borda/face','validação externa buildingSMART/IfcOpenShell continua obrigatória antes de promover o writer para produção']};
 }
 
 export function renderIfcStep(model,options={}){
@@ -163,6 +168,7 @@ export function renderIfcStep(model,options={}){
     }
   }
 
+  emitIfcStepMaterials(emitter,model,options);
   for(const relation of model.relationships){emitter.add(`IFCRELCONNECTSSTRUCTURALMEMBER(${spfString(relation.globalId)},$,$,$,${ref(emitter.id(relation.memberRef))},${ref(emitter.id(relation.nodeRef))},$,$,$,$)`,relation.key)}
   const grouped=[...model.nodes.map(x=>emitter.id(x.key)),...model.members.map(x=>emitter.id(x.key))];
   emitter.add(`IFCRELASSIGNSTOGROUP(${spfString(options.groupGlobalId)},$,$,$,${refs(grouped)},$,${ref(analysisId)})`,'step:rel:group');
@@ -184,5 +190,5 @@ export function validateIfcStepEnvelope(step){
   if(!text.endsWith('END-ISO-10303-21;\n'))throw new Error('IFC STEP: terminador ausente.');
   const ids=[...text.matchAll(/^#(\d+)=/gm)].map(x=>Number(x[1]));if(!ids.length)throw new Error('IFC STEP: DATA vazio.');
   const defined=new Set(ids);for(const match of text.matchAll(/#(\d+)/g)){const id=Number(match[1]);if(!defined.has(id))throw new Error(`IFC STEP: referência #${id} não definida.`)}
-  return{entities:ids.length,maxEntityId:Math.max(...ids),schema:IFC_SCHEMA,hasProject:/IFCPROJECT\(/.test(text),hasAnalysisModel:/IFCSTRUCTURALANALYSISMODEL\(/.test(text),hasPointConnections:/IFCSTRUCTURALPOINTCONNECTION\(/.test(text),hasCurveMembers:/IFCSTRUCTURALCURVEMEMBER\(/.test(text),hasSurfaceMembers:/IFCSTRUCTURALSURFACEMEMBER\(/.test(text),hasFaceSurface:/IFCFACESURFACE\(/.test(text)};
+  return{entities:ids.length,maxEntityId:Math.max(...ids),schema:IFC_SCHEMA,hasProject:/IFCPROJECT\(/.test(text),hasAnalysisModel:/IFCSTRUCTURALANALYSISMODEL\(/.test(text),hasPointConnections:/IFCSTRUCTURALPOINTCONNECTION\(/.test(text),hasCurveMembers:/IFCSTRUCTURALCURVEMEMBER\(/.test(text),hasSurfaceMembers:/IFCSTRUCTURALSURFACEMEMBER\(/.test(text),hasFaceSurface:/IFCFACESURFACE\(/.test(text),hasMaterial:/IFCMATERIAL\(/.test(text),hasMaterialAssociations:/IFCRELASSOCIATESMATERIAL\(/.test(text),hasProfileSetUsage:/IFCMATERIALPROFILESETUSAGE\(/.test(text)};
 }

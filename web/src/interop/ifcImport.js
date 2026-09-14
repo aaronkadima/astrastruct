@@ -250,7 +250,9 @@ export function createIfcImportStaging(step,{projectId=null,projectName=null}={}
 
 export function validateIfcImportStaging(staging,{requireAnalysisReady=false}={}){
   if(staging?.contract!==IFC_IMPORT_STAGING_CONTRACT||staging?.version!==IFC_IMPORT_STAGING_VERSION)throw new Error('IFC import: staging incompatível.');
-  if(!staging?.readiness?.commitReady)throw new Error(`IFC import: staging possui ${staging?.readiness?.geometryIssues?.length||0} bloqueio(s) de importação segura.`);
+  if(!staging?.readiness?.geometryReady)throw new Error(`IFC import: geometria possui ${staging?.readiness?.geometryIssues?.length||0} bloqueio(s).`);
+  if(!staging?.readiness?.loadReady)throw new Error(`IFC import: cargas possuem ${staging?.readiness?.loadIssues?.length||0} bloqueio(s).`);
+  if(!staging?.readiness?.commitReady)throw new Error('IFC import: staging não está pronto para substituição segura.');
   if(requireAnalysisReady&&!staging?.readiness?.analysisReady)throw new Error(`IFC import: análise possui ${staging?.readiness?.analysisIssues?.length||0} pendência(s).`);
   return true;
 }

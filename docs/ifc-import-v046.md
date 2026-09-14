@@ -2,7 +2,15 @@
 
 ## Status
 
-A v0.46 está em desenvolvimento somente no branch `develop`. O produto permanece formalmente em **v0.45.0** até o gate final da v0.46. Nenhuma promoção para `main` faz parte deste incremento.
+A v0.46 foi fechada formalmente no branch `develop` como **AstraStruct 0.46.0** após validação do núcleo, schema IFC4X3/EXPRESS e regressão de aplicação. `main` continua sendo o canal estável publicado e não é alterado por este fechamento.
+
+`PRODUCT_VERSION = 0.46.0`
+
+`PROJECT_SCHEMA_VERSION = 2`
+
+`RESULT_CONTRACT_VERSION = 1.0`
+
+Nenhuma promoção para `main` ocorre automaticamente.
 
 ## Objetivo
 
@@ -12,18 +20,18 @@ A v0.46 transforma a leitura IFC da v0.45 em uma **importação estrutural audit
 
 Selecionar um arquivo não altera o projeto aberto. A substituição somente ocorre após a pré-importação e uma ação explícita do usuário.
 
-## Contratos experimentais
+## Contratos v0.46
 
-- `ifc-import-staging/v1` — `0.46.0-exp`;
-- `ifc-mechanical-exchange/v1` — `0.46.0-exp`;
+- `ifc-import-staging/v1` — implementação `0.46.0-exp`;
+- `ifc-mechanical-exchange/v1` — implementação `0.46.0-exp`;
 - schema de troca: `IFC4X3_ADD2`;
 - referência normativa: ISO 16739-1:2024.
 
-O `PROJECT_SCHEMA_VERSION` permanece 2 e o `RESULT_CONTRACT_VERSION` permanece `1.0`.
+Os contratos canônicos, writer, parser e estado persistente da v0.45 permanecem em `v1` e retrocompatíveis. A v0.46 estende conteúdo e fluxo sem migração desnecessária desses contratos.
 
 ## Readiness em duas camadas
 
-O staging separa dois estados:
+O staging separa dois estados.
 
 ### `geometryReady`
 
@@ -57,13 +65,9 @@ Enums de curva fora do subconjunto reconhecido são tratados como bloqueio geom�
 
 ## Superfícies
 
-`IfcStructuralSurfaceMember` é mapeado inicialmente para `shell4` quando o `PredefinedType` é:
+`IfcStructuralSurfaceMember` é mapeado inicialmente para `shell4` quando o `PredefinedType` é `SHELL`, `BENDING_ELEMENT` ou `MEMBRANE_ELEMENT`.
 
-- `SHELL`;
-- `BENDING_ELEMENT`;
-- `MEMBRANE_ELEMENT`.
-
-A v0.46 inicial exige quatro nós por superfície para compatibilidade direta com o solver `shell4`. Polígonos com outras cardinalidades não são triangulados nem projetados silenciosamente.
+A v0.46 exige quatro nós por superfície para compatibilidade direta com o solver `shell4`. Polígonos com outras cardinalidades não são triangulados nem projetados silenciosamente.
 
 ## Apoios e molas
 
@@ -78,7 +82,7 @@ A importação gera `supports` e `nodeSprings` separadamente. Restrições e mol
 
 ## Perfis e propriedades geométricas
 
-Perfis suportados no staging:
+Perfis suportados:
 
 - `IfcRectangleProfileDef`;
 - `IfcCircleProfileDef`;
@@ -88,11 +92,9 @@ O importador reconstrói `A`, `Iy`, `Iz` e `J` a partir das **dimensões explíc
 
 ## Propriedades mecânicas IFC
 
-O writer materializa propriedades estruturais em `IfcMaterialProperties` com o nome:
+O writer materializa propriedades estruturais em `IfcMaterialProperties` com o nome `Pset_MaterialMechanical`.
 
-`Pset_MaterialMechanical`
-
-As propriedades atualmente emitidas e recuperadas são:
+As propriedades emitidas e recuperadas são:
 
 - `YoungModulus` — `IfcModulusOfElasticityMeasure`;
 - `ShearModulus` — `IfcModulusOfElasticityMeasure`, quando `G` é explicitamente armazenado no projeto;
@@ -103,7 +105,7 @@ Cada valor é representado por `IfcPropertySingleValue` e o conjunto referencia 
 
 ### Conversão de unidades
 
-O AstraStruct trabalha internamente com `kN-m-MPa`, mas o módulo elástico dos materiais está armazenado em `kN/m²`. O IFC usa a unidade de pressão global `MPa` neste contrato. Portanto:
+O AstraStruct trabalha internamente com `kN-m-MPa`, mas o módulo elástico está armazenado em `kN/m²`. O IFC usa a unidade global de pressão `MPa` neste contrato:
 
 `E_IFC[MPa] = E_AstraStruct[kN/m²] / 1000`
 
@@ -115,14 +117,14 @@ A mesma conversão é aplicada a `G`. `ν` permanece adimensional e o coeficient
 
 ## Contrato estrito de unidades
 
-A v0.46 inicial aceita somente o sistema já usado pelo projeto:
+A v0.46 aceita somente:
 
 - comprimento: `METRE`;
 - força: `KILO NEWTON`;
 - pressão: `MEGA PASCAL`;
 - ângulo plano: `RADIAN`.
 
-Um IFC que declare, por exemplo, `KILO PASCAL` como `PRESSUREUNIT` é rejeitado. Não há conversão implícita nesta etapa, porque uma conversão parcial poderia corromper módulos, molas, coordenadas ou outras grandezas derivadas.
+Um IFC que declare, por exemplo, `KILO PASCAL` como `PRESSUREUNIT` é rejeitado. Não há conversão parcial implícita, evitando corrupção de módulos, molas, coordenadas ou grandezas derivadas.
 
 ## Densidade
 
@@ -130,20 +132,15 @@ O campo legado `density` do AstraStruct contém atualmente valores como 25 para 
 
 ## Fluxo na interface
 
-O painel IFC possui agora `Pré-importar arquivo IFC`.
-
-A pré-importação apresenta:
+O painel IFC possui `Pré-importar arquivo IFC` e apresenta:
 
 - projeto identificado no arquivo;
 - número de nós, elementos, materiais e seções;
 - estado `Geometria READY/PENDING`;
 - estado `Análise READY/PENDING`;
-- primeiras pendências estruturais detectadas.
+- pendências estruturais detectadas.
 
-Quando a geometria está pronta, o usuário pode confirmar:
-
-- `Importar projeto IFC`, se a análise também estiver pronta; ou
-- `Importar geometria (análise pendente)`, se faltarem propriedades mecânicas.
+Quando a geometria está pronta, o usuário pode confirmar `Importar projeto IFC` ou `Importar geometria (análise pendente)`.
 
 Antes da substituição, o projeto aberto é preservado em:
 
@@ -155,9 +152,9 @@ O arquivo selecionado não modifica o projeto antes dessa confirmação.
 
 Os `IfcGloballyUniqueId` dos nós e membros importados são preservados no projeto de staging. O fluxo continua compatível com o mapa de identidade persistente da v0.45 para exportações subsequentes.
 
-## Cobertura de testes
+## Cobertura de testes e validação
 
-`tests/ifc-import-staging-v046-smoke.mjs` verifica, entre outros pontos:
+`tests/ifc-import-staging-v046-smoke.mjs` verifica:
 
 - round-trip de barra + casca;
 - `frame3d <-> RIGID_JOINED_MEMBER`;
@@ -171,12 +168,12 @@ Os `IfcGloballyUniqueId` dos nós e membros importados são preservados no proje
 - recuperação de `ν`;
 - modo geometry-only sem propriedades mecânicas;
 - bloqueio do solver para imports com análise pendente;
-- rejeição de unidades de pressão incompatíveis;
+- rejeição de unidades incompatíveis;
 - rejeição de `PredefinedType` não suportado.
 
-A regressão Playwright cobre também o fluxo de interface exportar -> pré-importar -> confirmar -> criar backup -> recarregar o projeto, além do caminho de geometria com propriedades mecânicas removidas.
+A validação independente por **IfcOpenShell 0.8.5** verifica sintaxe STEP, schema IFC4X3 e regras EXPRESS do fixture produzido pelo writer, incluindo as propriedades mecânicas.
 
-A validação independente IfcOpenShell permanece obrigatória para o fixture IFC4X3 gerado pelo writer.
+A regressão Playwright verifica o fluxo de interface exportar -> pré-importar -> confirmar -> criar backup -> recarregar o projeto, além do modo geometry-only, em **desktop, Android e tablet**.
 
 ## Limitações remanescentes
 
@@ -192,4 +189,4 @@ A validação independente IfcOpenShell permanece obrigatória para o fixture IF
 
 ## Regra de publicação
 
-A v0.46 permanece experimental no `develop`. O `PRODUCT_VERSION` e o `package.json` continuam em `0.45.0` durante esta etapa. O fechamento da v0.46 exigirá gate próprio, documentação consolidada, validação IfcOpenShell e regressão completa desktop/Android/tablet. `main` permanece intocada até solicitação explícita de promoção.
+A v0.46.0 está fechada em `develop`. O fechamento usa `tests/release-gate-v046-smoke.mjs`, validação IfcOpenShell e regressão completa em desktop, Android e tablet. O canal `main` permanece separado e intocado. Nenhuma promoção para `main` deve ocorrer sem solicitação explícita de publicação.

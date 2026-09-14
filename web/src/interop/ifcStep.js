@@ -2,6 +2,7 @@ import {validateIfcInteroperabilityModel,IFC_SCHEMA} from './ifc.js';
 import {validateIfcGlobalIds,validateIfcGuid} from './ifcGuid.js';
 import {validateIfcProjectContext} from './ifcContext.js';
 import {validateIfcStepMaterialReadiness,emitIfcStepMaterials} from './ifcStepMaterial.js';
+import {validateIfcOwnerMetadata,emitIfcStepOwner} from './ifcStepOwner.js';
 
 export const IFC_STEP_WRITER_CONTRACT='ifc-step-writer/v1';
 export const IFC_STEP_WRITER_VERSION='0.45.0-exp';
@@ -120,20 +121,21 @@ export function validateIfcStepReadiness(model,options={}){
   if(model.schema!==IFC_SCHEMA)throw new Error(`IFC STEP: schema ${model.schema} não suportado.`);validateMemberGeometry(model);
   if(!validateIfcGuid(declarationGlobalId))throw new Error('IFC STEP: declarationGlobalId persistente é obrigatório.');
   if(!validateIfcGuid(groupGlobalId))throw new Error('IFC STEP: groupGlobalId persistente é obrigatório.');
-  const materialReady=validateIfcStepMaterialReadiness(model,options);
+  const owner=validateIfcOwnerMetadata(options.ownerMetadata||{},options.timestamp),materialReady=validateIfcStepMaterialReadiness(model,options);
   const all=new Set([declarationGlobalId,groupGlobalId]);
   for(const record of [model.project,model.analysisModel,...model.nodes,...model.members,...model.relationships]){if(all.has(record.globalId))throw new Error(`IFC STEP: GlobalId duplicado ${record.globalId}.`);all.add(record.globalId)}
   for(const guid of materialReady.associationGlobalIds){if(all.has(guid))throw new Error(`IFC STEP: GlobalId duplicado ${guid}.`);all.add(guid)}
   const curves=model.members.filter(x=>x.ifcClass==='IfcStructuralCurveMember').length,surfaces=model.members.filter(x=>x.ifcClass==='IfcStructuralSurfaceMember').length;
-  return{contract:IFC_STEP_WRITER_CONTRACT,version:IFC_STEP_WRITER_VERSION,schema:model.schema,curveMembers:curves,surfaceMembers:surfaces,nodes:model.nodes.length,relationships:model.relationships.length,materialSummary:materialReady.summary,warnings:['conectividade de superfícies permanece baseada nas point connections canônicas até o gate de conexões de borda/face','validação externa buildingSMART/IfcOpenShell continua obrigatória antes de promover o writer para produção']};
+  return{contract:IFC_STEP_WRITER_CONTRACT,version:IFC_STEP_WRITER_VERSION,schema:model.schema,curveMembers:curves,surfaceMembers:surfaces,nodes:model.nodes.length,relationships:model.relationships.length,materialSummary:materialReady.summary,owner:{organization:owner.organization.name,application:owner.application.fullName,applicationVersion:owner.application.version,creationDate:owner.creationDate},warnings:['conectividade de superfícies permanece baseada nas point connections canônicas até o gate de conexões de borda/face','validação externa buildingSMART/IfcOpenShell continua obrigatória antes de promover o writer para produção']};
 }
 
 export function renderIfcStep(model,options={}){
-  validateIfcStepReadiness(model,options);const emitter=createEmitter();
+  const timestamp=String(options.timestamp||new Date().toISOString().replace(/\.\d{3}Z$/,'Z')),resolvedOptions={...options,timestamp};
+  validateIfcStepReadiness(model,resolvedOptions);const emitter=createEmitter(),owner=emitIfcStepOwner(emitter,options.ownerMetadata||{},timestamp),ownerRef=ref(owner.ownerHistoryId);
   const unitsId=emitUnitAssignment(emitter,model.context.units),contextId=emitContext(emitter,model.context),sharedPlacementId=emitSharedPlacement(emitter);
-  const projectId=emitter.add(`IFCPROJECT(${spfString(model.project.globalId)},$,${spfString(model.project.name)},$,$,$,$,(${ref(contextId)}),${ref(unitsId)})`,model.project.key);
-  const analysisId=emitter.add(`IFCSTRUCTURALANALYSISMODEL(${spfString(model.analysisModel.globalId)},$,${spfString(model.analysisModel.name)},$,$,${enumValue(model.analysisModel.predefinedType||'LOADING_3D')},$,$,$,${ref(sharedPlacementId)})`,model.analysisModel.key);
-  emitter.add(`IFCRELDECLARES(${spfString(options.declarationGlobalId)},$,${spfString('AstraStruct structural analysis declaration')},$,${ref(projectId)},(${ref(analysisId)}))`,'step:rel:declares');
+  const projectId=emitter.add(`IFCPROJECT(${spfString(model.project.globalId)},${ownerRef},${spfString(model.project.name)},$,$,$,$,(${ref(contextId)}),${ref(unitsId)})`,model.project.key);
+  const analysisId=emitter.add(`IFCSTRUCTURALANALYSISMODEL(${spfString(model.analysisModel.globalId)},${ownerRef},${spfString(model.analysisModel.name)},$,$,${enumValue(model.analysisModel.predefinedType||'LOADING_3D')},$,$,$,${ref(sharedPlacementId)})`,model.analysisModel.key);
+  emitter.add(`IFCRELDECLARES(${spfString(options.declarationGlobalId)},${ownerRef},${spfString('AstraStruct structural analysis declaration')},$,${ref(projectId)},(${ref(analysisId)}))`,'step:rel:declares');
 
   const nodeByKey=new Map(model.nodes.map(x=>[x.key,x])),sectionByKey=new Map(model.sections.map(x=>[x.key,x])),precision=model.context.representationContexts[0].precision;
   for(const node of model.nodes){
@@ -142,7 +144,7 @@ export function renderIfcStep(model,options={}){
     const topology=emitter.add(`IFCTOPOLOGYREPRESENTATION(${ref(contextId)},${spfString('Reference')},${spfString('Vertex')},(${ref(vertex)}))`,`step:topology:${node.sourceId}`);
     const shape=emitter.add(`IFCPRODUCTDEFINITIONSHAPE($,$,(${ref(topology)}))`,`step:shape:${node.sourceId}`);
     const boundary=emitBoundary(emitter,node);
-    emitter.add(`IFCSTRUCTURALPOINTCONNECTION(${spfString(node.globalId)},$,${spfString(node.name)},$,$,${ref(sharedPlacementId)},${ref(shape)},${boundary?ref(boundary):'$'},$)`,node.key);
+    emitter.add(`IFCSTRUCTURALPOINTCONNECTION(${spfString(node.globalId)},${ownerRef},${spfString(node.name)},$,$,${ref(sharedPlacementId)},${ref(shape)},${boundary?ref(boundary):'$'},$)`,node.key);
   }
 
   for(const member of model.members){
@@ -152,7 +154,7 @@ export function renderIfcStep(model,options={}){
       const topology=emitter.add(`IFCTOPOLOGYREPRESENTATION(${ref(contextId)},${spfString('Reference')},${spfString('Edge')},(${ref(edge)}))`,`step:topology:member:${member.sourceId}`);
       const shape=emitter.add(`IFCPRODUCTDEFINITIONSHAPE($,$,(${ref(topology)}))`,`step:shape:member:${member.sourceId}`);
       const axisVector=memberAxis(member,nodeByKey),axis=emitter.add(`IFCDIRECTION((${axisVector.map((v,i)=>num(v,`${member.sourceId} Axis ${i}`)).join(',')}))`,`step:axis:${member.sourceId}`);
-      emitter.add(`IFCSTRUCTURALCURVEMEMBER(${spfString(member.globalId)},$,${spfString(member.name)},$,$,${ref(sharedPlacementId)},${ref(shape)},.RIGID_JOINED_MEMBER.,${ref(axis)})`,member.key);
+      emitter.add(`IFCSTRUCTURALCURVEMEMBER(${spfString(member.globalId)},${ownerRef},${spfString(member.name)},$,$,${ref(sharedPlacementId)},${ref(shape)},.RIGID_JOINED_MEMBER.,${ref(axis)})`,member.key);
     }else{
       const geometry=surfaceGeometry(member,nodeByKey,precision),pointIds=member.nodeRefs.map(k=>emitter.id(`step:point:${k.slice(5)}`));
       const loop=emitter.add(`IFCPOLYLOOP(${refs(pointIds)})`,`step:polyloop:${member.sourceId}`);
@@ -164,20 +166,20 @@ export function renderIfcStep(model,options={}){
       const face=emitter.add(`IFCFACESURFACE((${ref(bound)}),${ref(plane)},.T.)`,`step:face:${member.sourceId}`);
       const topology=emitter.add(`IFCTOPOLOGYREPRESENTATION(${ref(contextId)},${spfString('Reference')},${spfString('Face')},(${ref(face)}))`,`step:topology:member:${member.sourceId}`);
       const shape=emitter.add(`IFCPRODUCTDEFINITIONSHAPE($,$,(${ref(topology)}))`,`step:shape:member:${member.sourceId}`),thickness=surfaceThickness(member,sectionByKey);
-      emitter.add(`IFCSTRUCTURALSURFACEMEMBER(${spfString(member.globalId)},$,${spfString(member.name)},$,$,${ref(sharedPlacementId)},${ref(shape)},${enumValue(surfaceType(member))},${thickness==null?'$':num(thickness,`thickness ${member.sourceId}`)})`,member.key);
+      emitter.add(`IFCSTRUCTURALSURFACEMEMBER(${spfString(member.globalId)},${ownerRef},${spfString(member.name)},$,$,${ref(sharedPlacementId)},${ref(shape)},${enumValue(surfaceType(member))},${thickness==null?'$':num(thickness,`thickness ${member.sourceId}`)})`,member.key);
     }
   }
 
-  emitIfcStepMaterials(emitter,model,options);
-  for(const relation of model.relationships){emitter.add(`IFCRELCONNECTSSTRUCTURALMEMBER(${spfString(relation.globalId)},$,$,$,${ref(emitter.id(relation.memberRef))},${ref(emitter.id(relation.nodeRef))},$,$,$,$)`,relation.key)}
+  emitIfcStepMaterials(emitter,model,{...resolvedOptions,ownerHistoryId:owner.ownerHistoryId});
+  for(const relation of model.relationships){emitter.add(`IFCRELCONNECTSSTRUCTURALMEMBER(${spfString(relation.globalId)},${ownerRef},$,$,${ref(emitter.id(relation.memberRef))},${ref(emitter.id(relation.nodeRef))},$,$,$,$)`,relation.key)}
   const grouped=[...model.nodes.map(x=>emitter.id(x.key)),...model.members.map(x=>emitter.id(x.key))];
-  emitter.add(`IFCRELASSIGNSTOGROUP(${spfString(options.groupGlobalId)},$,$,$,${refs(grouped)},$,${ref(analysisId)})`,'step:rel:group');
+  emitter.add(`IFCRELASSIGNSTOGROUP(${spfString(options.groupGlobalId)},${ownerRef},$,$,${refs(grouped)},$,${ref(analysisId)})`,'step:rel:group');
 
-  const timestamp=String(options.timestamp||new Date().toISOString().replace(/\.\d{3}Z$/,'Z'));
-  const fileName=String(options.fileName||`${model.project.sourceId||'astrastruct'}.ifc`);
+  const personName=[owner.metadata.person.givenName,owner.metadata.person.familyName].filter(Boolean).join(' ')||owner.metadata.person.identification||'';
+  const fileName=String(options.fileName||`${model.project.sourceId||'astrastruct'}.ifc`),headerAuthor=options.author??personName,headerOrganization=options.organization??owner.metadata.organization.name;
   const header=[
     'ISO-10303-21;','HEADER;',"FILE_DESCRIPTION(('AstraStruct structural analysis exchange'),'2;1');",
-    `FILE_NAME(${spfString(fileName)},${spfString(timestamp)},(${spfString(options.author||'')}),(${spfString(options.organization||'')}),${spfString('AstraStruct')},${spfString(`AstraStruct ${IFC_STEP_WRITER_VERSION}`)},'');`,
+    `FILE_NAME(${spfString(fileName)},${spfString(timestamp)},(${spfString(headerAuthor)}),(${spfString(headerOrganization)}),${spfString('AstraStruct')},${spfString(`AstraStruct ${IFC_STEP_WRITER_VERSION}`)},'');`,
     `FILE_SCHEMA((${spfString(IFC_SCHEMA)}));`,'ENDSEC;','DATA;'
   ];
   return [...header,...emitter.lines,'ENDSEC;','END-ISO-10303-21;',''].join('\n');
@@ -190,5 +192,5 @@ export function validateIfcStepEnvelope(step){
   if(!text.endsWith('END-ISO-10303-21;\n'))throw new Error('IFC STEP: terminador ausente.');
   const ids=[...text.matchAll(/^#(\d+)=/gm)].map(x=>Number(x[1]));if(!ids.length)throw new Error('IFC STEP: DATA vazio.');
   const defined=new Set(ids);for(const match of text.matchAll(/#(\d+)/g)){const id=Number(match[1]);if(!defined.has(id))throw new Error(`IFC STEP: referência #${id} não definida.`)}
-  return{entities:ids.length,maxEntityId:Math.max(...ids),schema:IFC_SCHEMA,hasProject:/IFCPROJECT\(/.test(text),hasAnalysisModel:/IFCSTRUCTURALANALYSISMODEL\(/.test(text),hasPointConnections:/IFCSTRUCTURALPOINTCONNECTION\(/.test(text),hasCurveMembers:/IFCSTRUCTURALCURVEMEMBER\(/.test(text),hasSurfaceMembers:/IFCSTRUCTURALSURFACEMEMBER\(/.test(text),hasFaceSurface:/IFCFACESURFACE\(/.test(text),hasMaterial:/IFCMATERIAL\(/.test(text),hasMaterialAssociations:/IFCRELASSOCIATESMATERIAL\(/.test(text),hasProfileSetUsage:/IFCMATERIALPROFILESETUSAGE\(/.test(text)};
+  return{entities:ids.length,maxEntityId:Math.max(...ids),schema:IFC_SCHEMA,hasProject:/IFCPROJECT\(/.test(text),hasAnalysisModel:/IFCSTRUCTURALANALYSISMODEL\(/.test(text),hasPointConnections:/IFCSTRUCTURALPOINTCONNECTION\(/.test(text),hasCurveMembers:/IFCSTRUCTURALCURVEMEMBER\(/.test(text),hasSurfaceMembers:/IFCSTRUCTURALSURFACEMEMBER\(/.test(text),hasFaceSurface:/IFCFACESURFACE\(/.test(text),hasMaterial:/IFCMATERIAL\(/.test(text),hasMaterialAssociations:/IFCRELASSOCIATESMATERIAL\(/.test(text),hasProfileSetUsage:/IFCMATERIALPROFILESETUSAGE\(/.test(text),hasOwnerHistory:/IFCOWNERHISTORY\(/.test(text),hasApplication:/IFCAPPLICATION\(/.test(text)};
 }

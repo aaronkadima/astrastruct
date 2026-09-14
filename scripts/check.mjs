@@ -18,4 +18,5 @@ run(process.execPath,['tests/foundation-dashboard-v0536-smoke.mjs']);
 run(process.execPath,['tests/elu-els-dashboard-v0537-smoke.mjs']);
 run(process.execPath,['tests/combination-envelope-v0538-smoke.mjs']);
 run(process.execPath,['tests/combination-visualization-v05310-smoke.mjs']);
-console.log(`AstraStruct check: TypeScript + ${files.length} módulos JS validados + gates funcionais v0.52, v0.53.0–v0.53.10.`);
+run(process.execPath,['tests/combination-reactions-v05311-smoke.mjs']);
+console.log(`AstraStruct check: TypeScript + ${files.length} módulos JS validados + gates funcionais v0.52, v0.53.0–v0.53.11.`);

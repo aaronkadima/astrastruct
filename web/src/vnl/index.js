@@ -14,6 +14,7 @@ export {
   createVnlNode,
   createVnlEdge,
   defaultGraph,
+  defaultVnlGraph,
   normalizeGraph,
   validateGraph,
   topologicalOrder,

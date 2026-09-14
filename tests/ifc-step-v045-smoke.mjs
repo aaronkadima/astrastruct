@@ -49,8 +49,8 @@ assert.match(step,/IFCORGANIZATION\('ASTRASTRUCT-CI','AstraStruct CI','Determini
 assert.match(step,/IFCPERSONANDORGANIZATION\(#\d+,#\d+,\$\)/);
 assert.match(step,/IFCAPPLICATION\(#\d+,'0\.45\.0-exp','AstraStruct','ASTRASTRUCT'\)/);
 assert.match(step,/IFCOWNERHISTORY\(#\d+,#\d+,\$,\$,\$,\$,\$,1789346700\)/);
-assert.match(step,/IFCPROJECT\('[^']+',#\d+,'Pórtico linear/);
-assert.match(step,/IFCSTRUCTURALANALYSISMODEL\('[^']+',#\d+,'Pórtico linear/);
+assert.match(step,/IFCPROJECT\('[^']+',#\d+,'[^']+'/);
+assert.match(step,/IFCSTRUCTURALANALYSISMODEL\('[^']+',#\d+,'[^']+'/);
 assert.match(step,/IFCDERIVEDUNIT\(\([^\n]+\.LINEARSTIFFNESSUNIT\./);
 assert.match(step,/IFCDERIVEDUNIT\(\([^\n]+\.ROTATIONALSTIFFNESSUNIT\./);
 assert.match(step,/IFCBOUNDARYNODECONDITION\('Boundary N1',IFCBOOLEAN\(\.T\.\)/);

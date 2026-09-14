@@ -10,3 +10,6 @@ export {
 export {
   IFC_CONTEXT_CONTRACT,unitsForAstraStruct,createIfcProjectContext,validateIfcProjectContext,attachIfcProjectContext
 } from './ifcContext.js';
+export {
+  ifcBoundaryValue,createIfcBoundaryNodeCondition,validateIfcBoundaryNodeCondition,summarizeIfcBoundaryNodeCondition
+} from './ifcBoundary.js';

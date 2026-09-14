@@ -1,11 +1,11 @@
 import { VNL_PROJECT_CONTRACT, VNL_VERSION } from './contracts.js';
-import { defaultGraph, normalizeGraph, validateGraph } from './graph.js';
+import { defaultVnlGraph, normalizeGraph, validateGraph } from './graph.js';
 
 const clone = value => JSON.parse(JSON.stringify(value));
 
 export function vnlGraphFromProject(project = {}) {
   const stored = project?.vnl?.graph || project?.vnlGraph || null;
-  return normalizeGraph(stored || defaultGraph({ id: `vnl-${project?.id || 'project'}` }));
+  return normalizeGraph(stored || defaultVnlGraph({ id: `vnl-${project?.id || 'project'}` }));
 }
 
 export function withVnlGraph(project, graph) {

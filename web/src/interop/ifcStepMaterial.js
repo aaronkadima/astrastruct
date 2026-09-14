@@ -24,6 +24,22 @@ function emitMaterial(emitter,material){
   return getOrAdd(emitter,material.key,()=>`IFCMATERIAL(${spfString(material.name)},$,${optionalString(material.category)})`);
 }
 
+function emitMechanicalProperties(emitter,materialId,canonicalMaterial){
+  const source=canonicalMaterial?.properties||{},propertyIds=[],materialKey=canonicalMaterial?.key||`material:${materialId}`;
+  const add=(suffix,name,type,value)=>{
+    if(value==null||value===''||!Number.isFinite(Number(value)))return;
+    const n=Number(value);if((type==='IFCMODULUSOFELASTICITYMEASURE'||type==='IFCPOSITIVERATIOMEASURE')&&!(n>0))return;
+    if(type==='IFCTHERMALEXPANSIONCOEFFICIENTMEASURE'&&n<0)return;
+    propertyIds.push(getOrAdd(emitter,`step:material-property:${materialKey}:${suffix}`,()=>`IFCPROPERTYSINGLEVALUE(${spfString(name)},$,${type}(${num(n,name)}),$)`));
+  };
+  if(Number(source.E)>0)add('young','YoungModulus','IFCMODULUSOFELASTICITYMEASURE',Number(source.E)/1000);
+  if(Number(source.G)>0)add('shear','ShearModulus','IFCMODULUSOFELASTICITYMEASURE',Number(source.G)/1000);
+  if(source.nu!=null&&source.nu!==''&&Number(source.nu)>0)add('poisson','PoissonRatio','IFCPOSITIVERATIOMEASURE',Number(source.nu));
+  if(source.alpha!=null&&source.alpha!==''&&Number.isFinite(Number(source.alpha)))add('thermal-expansion','ThermalExpansionCoefficient','IFCTHERMALEXPANSIONCOEFFICIENTMEASURE',Number(source.alpha));
+  if(!propertyIds.length)return null;
+  return getOrAdd(emitter,`step:material-properties:${materialKey}`,()=>`IFCMATERIALPROPERTIES(${spfString('Pset_MaterialMechanical')},$,${refs(propertyIds)},${ref(materialId)})`);
+}
+
 function emitProfile(emitter,entry){
   const p=entry.profile,key=`profile:${entry.section.sourceId}`;
   if(p.position)throw new Error(`IFC STEP material: Position explícita de perfil ainda não suportada em ${entry.memberId}.`);
@@ -59,10 +75,11 @@ export function validateIfcStepMaterialReadiness(model,{materialAssociationGloba
 }
 
 export function emitIfcStepMaterials(emitter,model,options={}){
-  const ready=validateIfcStepMaterialReadiness(model,options),relationIds=[],ownerHistory=options.ownerHistoryId?ref(options.ownerHistoryId):'$';
+  const ready=validateIfcStepMaterialReadiness(model,options),relationIds=[],ownerHistory=options.ownerHistoryId?ref(options.ownerHistoryId):'$',canonicalMaterials=new Map((model.materials||[]).map(m=>[m.key,m]));
   for(const entry of ready.mapping.entries){
     if(entry.status!=='READY')continue;
-    const materialId=emitMaterial(emitter,entry.material),relatingMaterialId=entry.mode==='DIRECT_MATERIAL'?materialId:emitProfileUsage(emitter,entry,materialId);
+    const materialId=emitMaterial(emitter,entry.material);emitMechanicalProperties(emitter,materialId,canonicalMaterials.get(entry.material.key));
+    const relatingMaterialId=entry.mode==='DIRECT_MATERIAL'?materialId:emitProfileUsage(emitter,entry,materialId);
     const memberId=emitter.id(entry.memberKey),guid=relationGuid(options.materialAssociationGlobalIds,entry);
     relationIds.push(emitter.add(`IFCRELASSOCIATESMATERIAL(${spfString(guid)},${ownerHistory},$,$,(${ref(memberId)}),${ref(relatingMaterialId)})`,`step:material-rel:${entry.memberId}`));
   }

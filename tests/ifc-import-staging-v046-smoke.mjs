@@ -31,13 +31,16 @@ assert.ok(stage.readiness.analysisIssues.some(x=>x.code==='YOUNG_MODULUS_MISSING
 assert.ok(stage.readiness.analysisIssues.some(x=>x.code==='SHEAR_MODULUS_MISSING'),'frame3d deve exigir G ou ν explícito');
 assert.ok(stage.readiness.analysisIssues.some(x=>x.code==='POISSON_RATIO_MISSING'),'shell4 deve exigir ν explícito');
 
-const pinStep=exported.step.replace('.RIGID_JOINED_MEMBER.','.PIN_JOINED_MEMBER.');
-const pinStage=createIfcImportStaging(pinStep);
-assert.equal(pinStage.readiness.geometryReady,true);assert.equal(pinStage.project.elements.find(x=>x.id==='E_FRAME').type,'truss3d','PIN_JOINED_MEMBER deve importar como barra axial');
+const trussProject={...project,id:'IFC-IMPORT-TRUSS',name:'Treliça IFC v0.46',nodes:project.nodes.slice(0,2),materials:[project.materials[0]],sections:[project.sections[0]],supports:[project.supports[0]],nodeSprings:[],elements:[{...project.elements[0],id:'E_TRUSS',type:'truss3d'}]};
+const trussExport=prepareIfcExchange(trussProject,{guidFactory,ownerMetadata,timestamp:'2026-09-13T23:31:00-03:00',fileName:'truss-v046.ifc'});
+assert.match(trussExport.step,/\.PIN_JOINED_MEMBER\./,'truss3d deve ser serializado como PIN_JOINED_MEMBER');
+assert.doesNotMatch(trussExport.step,/IFCSTRUCTURALCURVEMEMBER\([^\n]+\.RIGID_JOINED_MEMBER\./,'treliça não pode ser promovida silenciosamente a membro rígido');
+const trussStage=createIfcImportStaging(trussExport.step);
+assert.equal(trussStage.readiness.geometryReady,true);assert.equal(trussStage.project.elements.find(x=>x.id==='E_TRUSS').type,'truss3d','PIN_JOINED_MEMBER deve importar como barra axial');
 
 const unsupportedStep=exported.step.replace('.RIGID_JOINED_MEMBER.','.CABLE.');
 const unsupported=createIfcImportStaging(unsupportedStep);
 assert.equal(unsupported.readiness.geometryReady,false);assert.ok(unsupported.readiness.geometryIssues.some(x=>x.code==='CURVE_PREDEFINED_TYPE_UNSUPPORTED'));
 assert.throws(()=>validateIfcImportStaging(unsupported),/geometria possui/);
 
-console.log('AstraStruct v0.46 IFC import staging smoke: geometry, GlobalIds, supports/springs, member semantics and conservative analysis readiness coherent.');
+console.log('AstraStruct v0.46 IFC import staging smoke: geometry, GlobalIds, supports/springs, frame/truss semantics and conservative analysis readiness coherent.');

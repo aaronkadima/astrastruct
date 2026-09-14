@@ -2,15 +2,27 @@ import assert from 'node:assert/strict';
 import {
   IFC_INTEROP_CONTRACT,IFC_INTEROP_VERSION,IFC_SCHEMA,IFC_STANDARD,
   ifcClassForElement,createIfcInteroperabilityModel,validateIfcInteroperabilityModel,
-  renderIfcInteroperabilityJson,parseIfcInteroperabilityJson,restoreStructuralCoreFromIfcModel,summarizeIfcInteroperability
+  renderIfcInteroperabilityJson,parseIfcInteroperabilityJson,restoreStructuralCoreFromIfcModel,summarizeIfcInteroperability,
+  IFC_GUID_ALPHABET,validateIfcGuid,compressIfcGuid,expandIfcGuid,createIfcIdentityMap,assignIfcGlobalIds,validateIfcGlobalIds
 } from '../web/src/interop/index.js';
 
 assert.equal(IFC_INTEROP_CONTRACT,'ifc-interoperability/v1');
 assert.equal(IFC_INTEROP_VERSION,'0.45.0-exp');
 assert.equal(IFC_SCHEMA,'IFC4X3_ADD2');
 assert.equal(IFC_STANDARD,'ISO 16739-1:2024');
+assert.equal(IFC_GUID_ALPHABET,'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$');
 assert.equal(ifcClassForElement({type:'frame3d'}),'IfcStructuralCurveMember');
 assert.equal(ifcClassForElement({type:'shell4'}),'IfcStructuralSurfaceMember');
+
+// Public IfcOpenShell-compatible reference vector: UUID -> 22-character IFC GlobalId.
+const referenceUuid='81b96203-fcdd-4046-921a-4f407ed029b7';
+const referenceGuid='21kM83$Dr0Hf8QJq1_q2ct';
+assert.equal(compressIfcGuid(referenceUuid),referenceGuid);
+assert.equal(expandIfcGuid(referenceGuid,{hyphenated:true}),referenceUuid);
+assert.equal(validateIfcGuid(referenceGuid),true);
+assert.equal(validateIfcGuid(`4${referenceGuid.slice(1)}`),false,'primeiro dígito não pode exceder os 128 bits disponíveis');
+assert.throws(()=>compressIfcGuid('not-a-uuid'),/128 bits/);
+assert.throws(()=>expandIfcGuid('short'),/inválido/);
 
 const project={
   id:'IFC-BENCH-001',name:'Pórtico + casca benchmark',units:'kN-m-MPa',schemaVersion:2,meta:{productVersion:'0.44.0'},
@@ -55,7 +67,25 @@ assert.equal(restored.elements.find(x=>x.id==='E2').n4,'N4');
 assert.equal(restored.elements.find(x=>x.id==='E2').materialId,'concrete30');
 assert.equal(restored.elements.find(x=>x.id==='E2').sectionId,'S-SHELL');
 
+// Identities are created once, attached to IfcRoot-like records, serialized, and must then remain unchanged.
+let identitySequence=0;
+const identityMap=createIfcIdentityMap(model,{uuidFactory:()=> (++identitySequence).toString(16).padStart(32,'0')});
+assert.equal(identityMap.contract,'ifc-identity-map/v1');
+assert.equal(Object.keys(identityMap.ids).length,14);
+const identified=assignIfcGlobalIds(model,{identityMap});
+assert.equal(validateIfcGlobalIds(identified),true);
+assert.equal(identified.identity.persistent,true);
+assert.equal(identified.identity.count,14);
+assert.equal(identified.project.globalId,identityMap.ids['project:IFC-BENCH-001']);
+assert.equal(identified.members.find(x=>x.sourceId==='E1').globalId,identityMap.ids['member:E1']);
+const identifiedParsed=parseIfcInteroperabilityJson(renderIfcInteroperabilityJson(identified));
+assert.equal(validateIfcGlobalIds(identifiedParsed),true);
+assert.equal(identifiedParsed.project.globalId,identified.project.globalId,'GlobalId deve sobreviver ao round-trip sem regeneração');
+assert.throws(()=>assignIfcGlobalIds(model,{}),/GlobalId ausente/);
+const duplicateMap={...identityMap,ids:{...identityMap.ids,'member:E1':identityMap.ids['node:N1']}};
+assert.throws(()=>assignIfcGlobalIds(model,{identityMap:duplicateMap}),/duplicado/);
+
 assert.throws(()=>createIfcInteroperabilityModel({...project,elements:[{id:'BAD',type:'frame3d',n1:'N1',n2:'NX'}]}),/nó inexistente NX/);
 assert.throws(()=>createIfcInteroperabilityModel({...project,elements:[{id:'BAD',type:'frame3d',n1:'N1',n2:'N2',materialId:'ghost'}]}),/material inexistente/);
 
-console.log('AstraStruct v0.45 IFC interop smoke: IFC4X3 structural mapping, connectivity, provenance and canonical JSON round-trip coherent.');
+console.log('AstraStruct v0.45 IFC interop smoke: IFC4X3 structural mapping, GlobalId codec/persistence, connectivity, provenance and canonical JSON round-trip coherent.');

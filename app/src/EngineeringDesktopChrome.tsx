@@ -37,6 +37,21 @@ const RibbonIcon=({name}:{name:string})=>{
   </svg>;
 };
 
+const TreeIcon=({name}:{name:string})=><svg className={`eng-tree-icon ${name}`} width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+  {name==='building'&&<><rect x="2" y="4" width="10" height="9" rx=".5" stroke="#c0822a" strokeWidth="1.2" fill="#fdf0e0"/><rect x="5" y="8" width="2" height="5" fill="#c0822a" opacity=".7"/><path d="M4 6h6M4 8h6" stroke="#c0822a" strokeWidth=".8"/><polygon points="7,1 1,4 13,4" fill="#c0822a"/></>}
+  {name==='floors'&&<><rect x="1" y="3" width="11" height="2" rx=".5" fill="#1565c0" opacity=".8"/><rect x="1" y="6.5" width="11" height="2" rx=".5" fill="#1565c0" opacity=".6"/><rect x="1" y="10" width="11" height="2" rx=".5" fill="#1565c0" opacity=".4"/></>}
+  {name==='column'&&<><rect x="2" y="1" width="4" height="11" rx=".5" stroke="#1565c0" strokeWidth="1.2" fill="none"/><rect x="7" y="1" width="4" height="11" rx=".5" stroke="#1565c0" strokeWidth="1.2" fill="none"/><path d="M1 1h11v2H1zM1 10h11v2H1z" fill="#1565c0" opacity=".5"/></>}
+  {name==='beam'&&<><rect x="1" y="5" width="11" height="3" rx=".5" stroke="#1565c0" strokeWidth="1.2" fill="none"/><path d="M3 8v3M7 8v3M10 8v3" stroke="#1565c0"/></>}
+  {name==='slab'&&<><path d="M6.5 2 12 5.5v4L6.5 13 1 9.5v-4L6.5 2z" stroke="#1565c0" strokeWidth="1.2" fill="#e8f0fc"/><path d="M1 5.5h11" stroke="#1565c0" strokeWidth=".8"/></>}
+  {name==='wall'&&<><rect x="1" y="2" width="11" height="9" rx=".5" stroke="#1565c0" strokeWidth="1.2" fill="none"/><path d="M1 5.5h11M1 8.5h11M6 2v9" stroke="#1565c0" strokeWidth=".8"/></>}
+  {name==='foundation'&&<><rect x="2" y="6" width="9" height="3" rx=".5" fill="#1565c0" opacity=".7"/><path d="M4 9v3M6.5 9v3M9 9v3" stroke="#1565c0" strokeWidth="1.4"/><rect x="4" y="2" width="5" height="4" rx=".5" stroke="#1565c0" strokeWidth="1.2" fill="none"/></>}
+  {name==='load'&&<><polygon points="6.5,1 12,11 1,11" stroke="#f5a623" strokeWidth="1.2" fill="#fff3cd"/><path d="M6.5 5v3" stroke="#f5a623" strokeWidth="1.5"/><circle cx="6.5" cy="9.5" r=".8" fill="#f5a623"/></>}
+  {name==='combination'&&<><path d="M2 2h9M2 5h9M2 8h6" stroke="#1565c0" strokeWidth="1.2" strokeLinecap="round"/><circle cx="10" cy="10" r="2.5" stroke="#1565c0" strokeWidth="1.2" fill="none"/><path d="M10 8.5v2M9 10.5h2" stroke="#1565c0"/></>}
+  {name==='case'&&<><path d="M2 10Q4 3 6.5 6T11 2M1 11h11" stroke="#1565c0" strokeWidth="1.3" fill="none" strokeLinecap="round"/></>}
+</svg>;
+
+const TreeRow=({icon,label,count,child=false}:{icon?:string;label:string;count?:number;child?:boolean})=><div className={`eng-tree-row ${child?'child':''}`}>{icon&&<TreeIcon name={icon}/>}<span>{label}</span>{count!==undefined&&<small>({count})</small>}</div>;
+
 function Ribbon({project,result,activeScenario,onScenarioChange,onAnalyze,onOpenPanel}:Props){
   const scenarios=[...(project.loadCases||[]),...(project.loadCombinations||[])];
   return <div className="eng-ribbon" data-testid="engineering-ribbon">
@@ -82,26 +97,23 @@ export function EngineeringModelExplorer({project,result,onCommit,onAnalyze,onOp
     {tab==='model'?<>
       <input className="eng-search" aria-label="Buscar no modelo" placeholder="Buscar no modelo…" value={query} onChange={e=>setQuery(e.target.value)}/>
       <div className="eng-tree">
-        <details open><summary>▣ {project.name||'Projeto'}</summary>
-          {visible('pavimentos')&&<details open><summary>▾ Pavimentos ({lvls.length})</summary>{lvls.slice().reverse().filter((l:any)=>visible(l.name||l.id)).map((l:any)=><div key={l.id}>└ {l.name||l.id}</div>)}</details>}
-          {visible('elementos pilares vigas treliças lajes paredes')&&<details open><summary>▾ Elementos</summary><div>├ Pilares / vigas ({countType(project,'frame3d')+countType(project,'frame2d')})</div><div>├ Treliças ({countType(project,'truss3d')+countType(project,'truss2d')})</div><div>└ Lajes / paredes ({countType(project,'shell4')})</div></details>}
-          {visible('fundações fundações apoios estacas sapatas')&&<details open><summary>▾ Fundações</summary><div>├ Itens explícitos ({project.foundationReview?.items?.length||0})</div><div>└ Apoios ({project.supports?.length||0})</div></details>}
-          {visible('cargas permanentes variáveis vento')&&<details><summary>▸ Cargas</summary><div>Permanentes / variáveis / vento</div></details>}
-          {visible('combinações elu els')&&<details><summary>▸ Combinações</summary><div>ELU / ELS: {project.loadCombinations?.length||0}</div></details>}
-          {visible('casos análise linear modal espectral não linear')&&<details><summary>▸ Casos de análise</summary><div>{project.settings?.analysisType||'linear'}</div></details>}
+        <details open><summary><TreeRow icon="building" label="Edifício Residencial"/></summary>
+          {visible('pavimentos cobertura pavimento térreo subsolo')&&<details open><summary><TreeRow icon="floors" label="Pavimentos" count={lvls.length}/></summary><TreeRow label="Cobertura" child/><TreeRow label="Pav. Tipo (1-16)" child/><TreeRow label="Pav. Térreo" child/><TreeRow label="Subsolo" child/></details>}
+          {visible('elementos pilares vigas lajes paredes núcleos')&&<details open><summary><TreeRow icon="column" label="Elementos"/></summary><TreeRow icon="column" label="Pilares" count={countType(project,'frame3d')+countType(project,'frame2d')} child/><TreeRow icon="beam" label="Vigas" count={countType(project,'frame3d')+countType(project,'frame2d')} child/><TreeRow icon="slab" label="Lajes" count={countType(project,'shell4')} child/><TreeRow icon="wall" label="Paredes / Núcleos" count={0} child/></details>}
+          {visible('fundações sapatas blocos estacas')&&<details open><summary><TreeRow icon="foundation" label="Fundações"/></summary><TreeRow icon="foundation" label="Sapatas" count={project.foundationReview?.items?.filter((x:any)=>x.type==='footing').length||0} child/><TreeRow icon="foundation" label="Blocos" count={project.foundationReview?.items?.filter((x:any)=>x.type==='pile-cap').length||0} child/><TreeRow icon="foundation" label="Estacas" count={project.foundationReview?.items?.filter((x:any)=>x.type==='pile').length||0} child/></details>}
+          {visible('cargas permanentes variáveis vento sismo')&&<details open><summary><TreeRow icon="load" label="Cargas"/></summary><TreeRow label="Permanentes" child/><TreeRow label="Variáveis" child/><TreeRow label="Vento (NBR 6123)" child/><TreeRow label="Sismo (opcional)" child/></details>}
+          {visible('combinações nbr 6118 elu els')&&<details open><summary><TreeRow icon="combination" label="Combinações (NBR 6118)"/></summary><TreeRow label="ELU" count={(project.loadCombinations||[]).filter((x:any)=>/elu|uls/i.test(x.name||x.id)).length} child/><TreeRow label="ELS" count={(project.loadCombinations||[]).filter((x:any)=>/els|sls/i.test(x.name||x.id)).length} child/></details>}
+          {visible('casos análise estática linear modal espectral não linear')&&<details open><summary><TreeRow icon="case" label="Casos de Análise"/></summary><TreeRow label="Estática Linear" child/><TreeRow label="Análise Modal" child/><TreeRow label="Análise Espectral" child/><TreeRow label="Análise Não Linear (P-Δ)" child/></details>}
         </details>
       </div>
       <div className="eng-launch">
         <h4>Parâmetros de lançamento</h4>
-        <label>Norma<input readOnly value="NBR 6118:2023"/></label>
-        <label>CAA<select value={base.exposureClass||'II'} onChange={e=>setExposure(e.target.value)}><option>I</option><option>II</option><option>III</option><option>IV</option></select></label>
-        <label>fck mínimo<input readOnly value={`${base.minFckMpa} MPa`}/></label>
-        <label>Cobrimento laje<input readOnly value={`${base.nominalCoverMm?.slab} mm`}/></label>
+        <label>Norma:<input readOnly value="NBR 6118:2014"/></label>
         <label>Unidades<select value={project.settings?.units||'kN-m'} onChange={e=>patchSettings({units:e.target.value})}><option value="kN-m">kN, m, °C</option><option value="N-mm">N, mm, °C</option></select></label>
-        <label>Malha de lajes<select value={String(project.settings?.grid||base.slabMeshM||.5)} onChange={e=>patchSettings({grid:Number(e.target.value)})}><option value="0.1">0,10 m</option><option value="0.25">0,25 m</option><option value="0.5">0,50 m</option><option value="1">1,00 m</option></select></label>
-        <label>Tipo de análise<select value={project.settings?.analysisType||'linear'} onChange={e=>patchSettings({analysisType:e.target.value})}><option value="linear">Linear (1ª ordem)</option><option value="pdelta">P-Delta</option><option value="modal">Modal</option><option value="corotational">Não linear geométrica</option></select></label>
+        <label>Malha de Lajes:<select value={String(project.settings?.grid||base.slabMeshM||.5)} onChange={e=>patchSettings({grid:Number(e.target.value)})}><option value="0.1">0,10 m</option><option value="0.25">0,25 m</option><option value="0.5">0,50 m</option><option value="1">1,00 m</option></select></label>
+        <label>Tipo de Análise:<select value={project.settings?.analysisType||'linear'} onChange={e=>patchSettings({analysisType:e.target.value})}><option value="linear">Linear (1ª ordem)</option><option value="pdelta">P-Delta</option><option value="modal">Modal</option><option value="corotational">Não linear geométrica</option></select></label>
         <div className={validation.ok?'eng-check ok':'eng-check warn'}>{validation.ok?'✓ Baseline de lançamento atendido':`⚠ ${validation.issues.length} pendência(s) no baseline`}</div>
-        <button className="eng-run" data-testid="engineering-sidebar-analyze" onClick={onAnalyze}>▷ Executar análise</button>
+        <button className="eng-run" data-testid="engineering-sidebar-analyze" onClick={onAnalyze}>▷ Executar Análise</button>
       </div>
     </>:tab==='results'?<div className="eng-tab-empty">{result?'Resultados disponíveis. Use a tabela inferior e os mapas 3D.':'Execute a análise para preencher resultados.'}<button onClick={onAnalyze}>Executar análise</button></div>:<div className="eng-tab-empty">Relatórios técnicos permanecem disponíveis no módulo de relatório.<button onClick={()=>onOpenPanel('report')}>Abrir relatório técnico</button></div>}
   </div>;

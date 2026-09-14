@@ -51,6 +51,7 @@ function surfaceGeometry(member,nodeByKey,precision=1e-6){
   return{nodes,points,normal,refDirection};
 }
 
+function curveType(member){const type=String(member.elementType||'').toLowerCase();return type.includes('truss')?'PIN_JOINED_MEMBER':'RIGID_JOINED_MEMBER'}
 function surfaceType(member){const type=String(member.elementType||'').toLowerCase();if(type.includes('membrane'))return'MEMBRANE_ELEMENT';if(type.includes('plate')||type.includes('slab'))return'BENDING_ELEMENT';return'SHELL'}
 function surfaceThickness(member,sectionByKey){
   const section=member.sectionRef?sectionByKey.get(member.sectionRef):null;const raw=member.properties?.thickness??member.properties?.t??section?.properties?.thickness??section?.properties?.t??null;
@@ -154,7 +155,7 @@ export function renderIfcStep(model,options={}){
       const topology=emitter.add(`IFCTOPOLOGYREPRESENTATION(${ref(contextId)},${spfString('Reference')},${spfString('Edge')},(${ref(edge)}))`,`step:topology:member:${member.sourceId}`);
       const shape=emitter.add(`IFCPRODUCTDEFINITIONSHAPE($,$,(${ref(topology)}))`,`step:shape:member:${member.sourceId}`);
       const axisVector=memberAxis(member,nodeByKey),axis=emitter.add(`IFCDIRECTION((${axisVector.map((v,i)=>num(v,`${member.sourceId} Axis ${i}`)).join(',')}))`,`step:axis:${member.sourceId}`);
-      emitter.add(`IFCSTRUCTURALCURVEMEMBER(${spfString(member.globalId)},${ownerRef},${spfString(member.name)},$,$,${ref(sharedPlacementId)},${ref(shape)},.RIGID_JOINED_MEMBER.,${ref(axis)})`,member.key);
+      emitter.add(`IFCSTRUCTURALCURVEMEMBER(${spfString(member.globalId)},${ownerRef},${spfString(member.name)},$,$,${ref(sharedPlacementId)},${ref(shape)},${enumValue(curveType(member))},${ref(axis)})`,member.key);
     }else{
       const geometry=surfaceGeometry(member,nodeByKey,precision),pointIds=member.nodeRefs.map(k=>emitter.id(`step:point:${k.slice(5)}`));
       const loop=emitter.add(`IFCPOLYLOOP(${refs(pointIds)})`,`step:polyloop:${member.sourceId}`);

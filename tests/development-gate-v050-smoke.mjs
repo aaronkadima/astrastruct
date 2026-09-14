@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {PRODUCT_VERSION,PROJECT_SCHEMA_VERSION,RESULT_CONTRACT_VERSION} from '../web/src/core/version.js';
+import {RELIABILITY_CONTRACT,RELIABILITY_VERSION,OPTIMIZATION_CONTRACT,OPTIMIZATION_VERSION,RANDOM_VARIABLE_DISTRIBUTIONS} from '../web/src/reliability/index.js';
+const pkg=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
+assert.equal(pkg.version,'0.49.0','produto permanece 0.49.0 durante o gate experimental v0.50');
+assert.equal(PRODUCT_VERSION,'0.49.0','PRODUCT_VERSION não sobe antes do release gate v0.50');
+assert.equal(PROJECT_SCHEMA_VERSION,2);assert.equal(RESULT_CONTRACT_VERSION,'1.0');
+assert.equal(RELIABILITY_CONTRACT,'structural-reliability/v1');assert.equal(RELIABILITY_VERSION,'0.50.0-exp');
+assert.equal(OPTIMIZATION_CONTRACT,'structural-optimization/v1');assert.equal(OPTIMIZATION_VERSION,'0.50.0-exp');
+for(const d of ['deterministic','normal','lognormal','uniform'])assert.ok(RANDOM_VARIABLE_DISTRIBUTIONS.includes(d),`distribuição ausente: ${d}`);
+assert.ok(pkg.scripts.test.startsWith('node tests/development-gate-v050-smoke.mjs && node tests/reliability-optimization-v050-smoke.mjs'),'test chain deve iniciar pelos gates v0.50');
+assert.ok(pkg.scripts.test.includes('tests/release-gate-v049-smoke.mjs'),'release gate v0.49 deve permanecer durante desenvolvimento v0.50');
+assert.ok(!pkg.scripts.test.includes('tests/release-gate-v050-smoke.mjs'),'release gate v0.50 não deve existir antes do fechamento');
+const docs=await readFile(new URL('../docs/reliability-optimization-v050.md',import.meta.url),'utf8');
+for(const phrase of ['v0.50 — Reliability + Optimization','structural-reliability/v1','Monte Carlo','MVFOSM','bounded-coordinate-search','independentes','`main` permanece intocada'])assert.ok(docs.includes(phrase),`documentação v0.50 incompleta: ${phrase}`);
+console.log('AstraStruct v0.50 development gate: reliability and optimization core enabled without product bump.');

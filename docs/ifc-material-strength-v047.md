@@ -2,7 +2,7 @@
 
 ## Status
 
-A v0.47 é um incremento experimental no branch `develop`. O produto permanece formalmente em **v0.46.0** até o fechamento do gate v0.47. **Nenhuma promoção para `main`** faz parte desta etapa.
+A v0.47 está **formalmente fechada no branch `develop`** como AstraStruct **0.47.0**. `PRODUCT_VERSION = 0.47.0`, `PROJECT_SCHEMA_VERSION = 2` e `RESULT_CONTRACT_VERSION = 1.0`. **Nenhuma promoção para `main`** faz parte deste fechamento.
 
 ## Objetivo
 
@@ -20,8 +20,6 @@ Preservar propriedades resistentes já existentes no modelo nativo durante o int
 
 Materiais explicitamente tipados como `steel` ou `rebar` podem gerar `Pset_MaterialSteel` no `IfcMaterial`.
 
-Mapeamento:
-
 | AstraStruct | IFC4X3 | Tipo STEP | Unidade |
 |---|---|---|---|
 | `fy` | `YieldStress` | `IFCPRESSUREMEASURE` | MPa |
@@ -37,8 +35,6 @@ Regras:
 ## Concreto e graute
 
 Materiais explicitamente tipados como `concrete` ou `grout` podem gerar `Pset_MaterialConcrete`.
-
-Mapeamento:
 
 | AstraStruct | IFC4X3 | Tipo STEP | Unidade |
 |---|---|---|---|
@@ -80,9 +76,9 @@ O estado `analysisReady` continua sendo determinado pelo contrato mecânico da v
 5. não aceitar `YieldStress`, `UltimateStress` ou `CompressiveStrength` com tipo STEP diferente de `IFCPRESSUREMEASURE`;
 6. manter unidades de resistência em MPa dentro do contrato `kN-m-MPa`.
 
-## Testes
+## Cobertura de validação
 
-`tests/ifc-material-strength-v047-smoke.mjs` cobre:
+`tests/ifc-material-strength-v047-smoke.mjs` verifica:
 
 - emissão de `Pset_MaterialSteel`;
 - emissão de `Pset_MaterialConcrete`;
@@ -92,4 +88,18 @@ O estado `analysisReady` continua sendo determinado pelo contrato mecânico da v
 - rejeição de `fu < fy`;
 - rejeição de tipo STEP incorreto.
 
-O gate experimental é `tests/development-gate-v047-smoke.mjs`.
+O fixture IFC4X3 de CI contém aço S355 (`fy=355 MPa`, `fu=510 MPa`) e concreto C30 (`fck=30 MPa`). O validador **IfcOpenShell 0.8.5** exige, além da sintaxe STEP e das regras EXPRESS, exatamente dois `Pset_MaterialMechanical`, um `Pset_MaterialSteel` e um `Pset_MaterialConcrete` com as propriedades previstas.
+
+A regressão de aplicação permanece validada em **desktop, Android e tablet**. O gate formal é `tests/release-gate-v047-smoke.mjs`.
+
+## Limitações remanescentes
+
+- `fctm` continua sem mapeamento IFC material direto;
+- densidade/peso específico ainda aguarda contrato interno inequívoco de unidade;
+- propriedades plásticas/constitutivas avançadas de aço e concreto ainda não são serializadas;
+- cargas, casos de carga e combinações IFC ainda não são reconstruídos;
+- interoperabilidade com aplicações independentes continua necessária além da validação de schema/EXPRESS.
+
+## Regra de publicação
+
+O fechamento 0.47.0 ocorre somente em `develop`. `main` permanece estável e intocada até solicitação explícita de publicação/promoção.

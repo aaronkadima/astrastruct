@@ -14,5 +14,9 @@ export {
   ifcBoundaryValue,createIfcBoundaryNodeCondition,validateIfcBoundaryNodeCondition,summarizeIfcBoundaryNodeCondition
 } from './ifcBoundary.js';
 export {
+  IFC_MATERIAL_MAPPING_CONTRACT,IFC_MATERIAL_MAPPING_VERSION,validateExplicitIfcProfile,
+  createIfcMaterialMapping,validateIfcMaterialMapping,summarizeIfcMaterialMapping
+} from './ifcMaterial.js';
+export {
   IFC_STEP_WRITER_CONTRACT,IFC_STEP_WRITER_VERSION,validateIfcStepReadiness,renderIfcStep,validateIfcStepEnvelope
 } from './ifcStep.js';

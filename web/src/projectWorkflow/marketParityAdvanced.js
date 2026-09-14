@@ -2,8 +2,9 @@ import{deriveLevels}from'../core/levels.js';
 import{structuralElementGroup}from'../visualization/appearance.js';
 import{reviewFoundationProject}from'../foundation/review.js';
 import{designBasisFromProject,drawingSheetIndexFromProject}from'./marketParity.js';
+import{engineeringProfilesFromProject,evaluateDurabilityBasis,windAuditFromProject}from'./windDurabilityProfiles.js';
 
-export const MARKET_PARITY_ADVANCED_VERSION='0.53.1-exp';
+export const MARKET_PARITY_ADVANCED_VERSION='0.53.2-exp';
 export const FOUNDATION_SCENE_CONTRACT='foundation-soil-scene/v1';
 export const RESULT_DASHBOARD_CONTRACT='market-parity-result-dashboard/v1';
 export const BUILDING_INVENTORY_CONTRACT='building-level-inventory/v1';
@@ -52,17 +53,20 @@ export function resultCapabilityDashboard(project={}){
 }
 
 export function marketParityCoverageMatrix(project={}){
-  const inventory=buildingLevelInventory(project),basis=designBasisFromProject(project),scene=foundationSoilSceneFromProject(project),results=resultCapabilityDashboard(project),sheets=drawingSheetIndexFromProject(project),has=(v)=>v!==null&&v!==undefined&&v!=='';
+  const inventory=buildingLevelInventory(project),basis=designBasisFromProject(project),scene=foundationSoilSceneFromProject(project),results=resultCapabilityDashboard(project),sheets=drawingSheetIndexFromProject(project),profiles=engineeringProfilesFromProject(project),durability=evaluateDurabilityBasis(project,profiles.durability),wind=windAuditFromProject(project,profiles.wind,profiles.windConfig),has=(v)=>v!==null&&v!==undefined&&v!=='';
+  const generatedWind=(project.loadCases||[]).some(c=>c?.metadata?.generator==='astrastruct-wind-v0532'),durabilityRules=(profiles.durability.rules||[]).length;
   const rows=[
     {domain:'Base do projeto',feature:'Norma, vida útil, exposição, fck/fyk e cobrimentos',state:has(basis.general.designCode)&&has(basis.durability.exposureClass)?'configured':'configure'},
+    {domain:'Critérios',feature:'Perfil versionado de durabilidade com regras auditáveis',state:durabilityRules&&durability.status!=='PENDING'?'configured':durabilityRules?'available':'configure'},
     {domain:'Modelagem',feature:'Pavimentos/níveis + vigas/pilares/lajes/paredes',state:inventory.summary.levels&&inventory.summary.elements?'configured':'configure'},
-    {domain:'Ações',feature:'Peso próprio, permanentes, uso, vento, sismo, temperatura',state:(project.loadCases||[]).length?'configured':'configure'},
+    {domain:'Ações',feature:'Peso próprio, permanentes, uso, sismo, temperatura e estágios',state:(project.loadCases||[]).length?'configured':'configure'},
+    {domain:'Vento',feature:'Perfil versionado + forças auditáveis por pavimento/direção',state:generatedWind?'configured':wind.summary.rows&&wind.summary.pending===0?'available':'configure'},
     {domain:'Análise',feature:'Linear, P-Delta, não linear, modal, espectro e história no tempo',state:project?.settings?.analysisType?'available':'configure'},
     {domain:'Resultados',feature:'Deformada 3D, diagramas de barras e contornos de casca',state:results.rows.some(r=>r.state==='ready')?'configured':'available'},
     {domain:'Fundações',feature:'Sapatas/blocos/radier/estacas + revisão PASS/FAIL/PENDING',state:scene.items.length?'configured':'configure'},
     {domain:'Geotecnia',feature:'Camadas de solo, água, apoio elástico/SSI e reações',state:scene.soilLayers.length?'configured':'configure'},
     {domain:'Documentação',feature:'Pranchas editáveis por categoria, nível e revisão',state:sheets.count?'configured':'configure'},
-    {domain:'Paridade pendente',feature:'Geração normativa auditável de vento e perfis normativos completos',state:'planned'},
+    {domain:'Paridade pendente',feature:'Tabelas normativas licenciadas/conectores oficiais para preenchimento assistido dos perfis',state:'planned'},
     {domain:'Paridade pendente',feature:'SSI espacial iterativo e resultados geotécnicos de campo',state:'planned'},
   ];
   return{contract:'market-parity-coverage/v1',version:MARKET_PARITY_ADVANCED_VERSION,rows,summary:{configured:rows.filter(r=>r.state==='configured').length,available:rows.filter(r=>r.state==='available').length,configure:rows.filter(r=>r.state==='configure').length,planned:rows.filter(r=>r.state==='planned').length}};

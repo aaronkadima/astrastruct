@@ -10,3 +10,4 @@ export {runFormReliability} from './form.js';
 export {runSystemMonteCarloReliability} from './system.js';
 export {runImportanceSamplingReliability} from './importanceSampling.js';
 export {RELIABILITY_STUDY_CONTRACT,RELIABILITY_STUDY_VERSION,RELIABILITY_METHODS,defaultReliabilityStudy,normalizeReliabilityStudy,reliabilityStudyFromProject,summarizeReliabilityResult,withReliabilityStudy,executeReliabilityStudy} from './study.js';
+export {OPTIMIZATION_STUDY_CONTRACT,OPTIMIZATION_STUDY_VERSION,OPTIMIZATION_STUDY_METHODS,defaultOptimizationStudy,normalizeOptimizationStudy,optimizationStudyFromProject,summarizeOptimizationResult,withOptimizationStudy,executeOptimizationStudy,applyOptimizationBest} from './optimizationStudy.js';

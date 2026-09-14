@@ -21,6 +21,9 @@ export {
   IFC_STEP_MATERIAL_CONTRACT,IFC_STEP_MATERIAL_VERSION,validateIfcStepMaterialReadiness,emitIfcStepMaterials
 } from './ifcStepMaterial.js';
 export {
+  IFC_MECHANICAL_EXCHANGE_CONTRACT,IFC_MECHANICAL_EXCHANGE_VERSION,validateAstraStructIfcUnits,extractIfcMechanicalMaterialProperties
+} from './ifcMechanical.js';
+export {
   IFC_STEP_OWNER_CONTRACT,IFC_STEP_OWNER_VERSION,validateIfcOwnerMetadata,emitIfcStepOwner
 } from './ifcStepOwner.js';
 export {

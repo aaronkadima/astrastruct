@@ -18,7 +18,7 @@ const stage=createIfcImportStaging(exported.step);
 assert.equal(stage.contract,IFC_IMPORT_STAGING_CONTRACT);assert.equal(stage.version,IFC_IMPORT_STAGING_VERSION);assert.equal(stage.schema,'IFC4X3_ADD2');
 assert.equal(stage.readiness.geometryReady,true);assert.equal(stage.readiness.analysisReady,false,'propriedades mecânicas não devem ser inventadas pelo importador');
 assert.equal(validateIfcImportStaging(stage),true);assert.throws(()=>validateIfcImportStaging(stage,{requireAnalysisReady:true}),/análise possui/);
-assert.deepEqual(summarizeIfcImportStaging(stage),{nodes:4,elements:2,curves:1,surfaces:1,materials:2,sections:2,supports:1,nodeSprings:1,geometryBlocking:0,analysisBlocking:3,schema:'IFC4X3_ADD2',geometryReady:true,analysisReady:false});
+assert.deepEqual(summarizeIfcImportStaging(stage),{nodes:4,elements:2,curves:1,surfaces:1,materials:2,sections:2,supports:1,nodeSprings:1,geometryBlocking:0,analysisBlocking:4,schema:'IFC4X3_ADD2',geometryReady:true,analysisReady:false});
 assert.equal(stage.project.nodes.find(x=>x.id==='N1').ifcGlobalId,exported.canonical.nodes.find(x=>x.sourceId==='N1').globalId);
 assert.equal(stage.project.elements.find(x=>x.id==='E_FRAME').type,'frame3d');
 assert.equal(stage.project.elements.find(x=>x.id==='E_SHELL').type,'shell4');
@@ -28,6 +28,8 @@ assert.equal(stage.project.nodeSprings[0].nodeId,'N2');assert.equal(stage.projec
 assert.ok(stage.project.sections.find(x=>x.id==='R_30x50')?.ifcProfile,'perfil explícito deve sobreviver ao staging');
 assert.equal(stage.project.materials.find(x=>x.id==='Steel_S355').E,null,'E não pode ser inferido de nome/categoria');
 assert.ok(stage.readiness.analysisIssues.some(x=>x.code==='YOUNG_MODULUS_MISSING'));
+assert.ok(stage.readiness.analysisIssues.some(x=>x.code==='SHEAR_MODULUS_MISSING'),'frame3d deve exigir G ou ν explícito');
+assert.ok(stage.readiness.analysisIssues.some(x=>x.code==='POISSON_RATIO_MISSING'),'shell4 deve exigir ν explícito');
 
 const pinStep=exported.step.replace('.RIGID_JOINED_MEMBER.','.PIN_JOINED_MEMBER.');
 const pinStage=createIfcImportStaging(pinStep);

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 
 import ifcopenshell
@@ -39,11 +40,32 @@ def main():
         "IfcRelAssociatesMaterial": 2,
         "IfcOwnerHistory": 1,
         "IfcApplication": 1,
+        "IfcMaterialProperties": 4,
+        "IfcPropertySingleValue": 7,
     }
     counts = {name: len(model.by_type(name)) for name in required}
     wrong = {name: {"expected": required[name], "actual": count} for name, count in counts.items() if count != required[name]}
     if wrong:
         fail("Unexpected IFC entity population", wrong)
+
+    property_sets = model.by_type("IfcMaterialProperties")
+    pset_counts = Counter(getattr(pset, "Name", None) for pset in property_sets)
+    expected_psets = {"Pset_MaterialMechanical": 2, "Pset_MaterialSteel": 1, "Pset_MaterialConcrete": 1}
+    if dict(pset_counts) != expected_psets:
+        fail("Unexpected IfcMaterialProperties names", {"expected": expected_psets, "actual": dict(pset_counts)})
+
+    def names_for(pset_name):
+        matches = [pset for pset in property_sets if getattr(pset, "Name", None) == pset_name]
+        return [sorted(getattr(prop, "Name", None) for prop in getattr(pset, "Properties", ()) or ()) for pset in matches]
+
+    steel_props = names_for("Pset_MaterialSteel")
+    if steel_props != [["UltimateStress", "YieldStress"]]:
+        fail("Unexpected Pset_MaterialSteel properties", steel_props)
+    concrete_props = names_for("Pset_MaterialConcrete")
+    if concrete_props != [["CompressiveStrength"]]:
+        fail("Unexpected Pset_MaterialConcrete properties", concrete_props)
+    if any("TensileStrength" in names for names in names_for("Pset_MaterialConcrete")):
+        fail("fctm must not be mapped to TensileStrength in Pset_MaterialConcrete")
 
     logger = ifc_validate.json_logger()
     try:
@@ -76,6 +98,7 @@ def main():
         "entities": len(list(model)),
         "root_entities": len(global_ids),
         "counts": counts,
+        "material_property_sets": dict(pset_counts),
     }
     print(json.dumps(result, indent=2, ensure_ascii=False))
 

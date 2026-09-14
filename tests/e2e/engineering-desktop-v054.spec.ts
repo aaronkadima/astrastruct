@@ -45,3 +45,25 @@ test('v0.54 3D result publishing exposes functional engineering result tabs',asy
   if((viewport?.width||1200)>900)await expect(page.getByTestId('engineering-right-rail').getByText(/Detalhamento após análise/)).toBeVisible();
   else await expect(page.getByTestId('engineering-right-rail').getByText(/Detalhamento após análise/)).toHaveCount(1);
 });
+
+test('v0.54 Figma workstation controls are connected to real application state',async({page})=>{
+  await page.goto('');
+  await page.waitForFunction(()=>document.documentElement.dataset.astraReady==='true');
+  const viewport=page.viewportSize();
+  if((viewport?.width||1200)<=900)return;
+  const explorer=page.getByTestId('engineering-model-explorer');
+  const search=explorer.getByLabel('Buscar no modelo');
+  await search.fill('fundações');
+  await expect(explorer.getByText(/Fundações/).first()).toBeVisible();
+  await expect(explorer.getByText(/Pavimentos/)).toHaveCount(0);
+  await search.fill('');
+  await explorer.getByLabel('Buscar no modelo').press('Tab');
+  await page.getByRole('button',{name:'Ajuda'}).click();
+  await expect(page.getByText('Ajuda · AstraStruct')).toBeVisible();
+  await page.getByRole('button',{name:'Fechar ajuda'}).click();
+  const strip=page.getByTestId('engineering-results-strip');
+  await strip.getByRole('button',{name:'Reações de apoio'}).click();
+  await expect(strip.getByText('Fx [kN]')).toBeVisible();
+  await strip.getByRole('button',{name:'Deslocamentos em nós'}).click();
+  await expect(strip.getByText('Ux [mm]')).toBeVisible();
+});

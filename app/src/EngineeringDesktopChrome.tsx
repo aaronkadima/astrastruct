@@ -47,8 +47,9 @@ function Ribbon({project,result,activeScenario,onScenarioChange,onAnalyze,onOpen
   </div>;
 }
 
-export function EngineeringModelExplorer({project,result,onCommit}:Pick<Props,'project'|'result'|'onCommit'>){
+export function EngineeringModelExplorer({project,result,onCommit,onAnalyze,onOpenPanel}:Pick<Props,'project'|'result'|'onCommit'|'onAnalyze'|'onOpenPanel'>){
   const[tab,setTab]=useState('model');
+  const[query,setQuery]=useState('');
   const base=project.settings?.normativeBaseline||nbr6118Baseline();
   const validation=validateNBR6118Baseline(project);
   const lvls=projectLevels(project);
@@ -56,6 +57,8 @@ export function EngineeringModelExplorer({project,result,onCommit}:Pick<Props,'p
     ...project,
     settings:{...(project.settings||{}),normativeBaseline:nbr6118Baseline({...base,exposureClass})}
   },true);
+  const patchSettings=(patch:any)=>onCommit({...project,settings:{...(project.settings||{}),...patch}},true);
+  const visible=(label:string)=>!query.trim()||label.toLocaleLowerCase('pt-BR').includes(query.trim().toLocaleLowerCase('pt-BR'));
   return <div className="eng-model-explorer" data-testid="engineering-model-explorer">
     <div className="eng-side-tabs">
       <button className={tab==='model'?'active':''} onClick={()=>setTab('model')}>Modelo</button>
@@ -63,24 +66,15 @@ export function EngineeringModelExplorer({project,result,onCommit}:Pick<Props,'p
       <button className={tab==='reports'?'active':''} onClick={()=>setTab('reports')}>Relatórios</button>
     </div>
     {tab==='model'?<>
-      <input className="eng-search" placeholder="Buscar no modelo…"/>
+      <input className="eng-search" aria-label="Buscar no modelo" placeholder="Buscar no modelo…" value={query} onChange={e=>setQuery(e.target.value)}/>
       <div className="eng-tree">
         <details open><summary>▣ {project.name||'Projeto'}</summary>
-          <details open><summary>▾ Pavimentos ({lvls.length})</summary>
-            {lvls.slice().reverse().map((l:any)=><div key={l.id}>└ {l.name||l.id}</div>)}
-          </details>
-          <details open><summary>▾ Elementos</summary>
-            <div>├ Pilares / vigas ({countType(project,'frame3d')})</div>
-            <div>├ Treliças ({countType(project,'truss3d')})</div>
-            <div>└ Lajes / paredes ({countType(project,'shell4')})</div>
-          </details>
-          <details open><summary>▾ Fundações</summary>
-            <div>├ Itens explícitos ({project.foundationReview?.items?.length||0})</div>
-            <div>└ Apoios ({project.supports?.length||0})</div>
-          </details>
-          <details><summary>▸ Cargas</summary><div>Permanentes / variáveis / vento</div></details>
-          <details><summary>▸ Combinações</summary><div>ELU / ELS: {project.loadCombinations?.length||0}</div></details>
-          <details><summary>▸ Casos de análise</summary><div>{project.settings?.analysisType||'linear'}</div></details>
+          {visible('pavimentos')&&<details open><summary>▾ Pavimentos ({lvls.length})</summary>{lvls.slice().reverse().filter((l:any)=>visible(l.name||l.id)).map((l:any)=><div key={l.id}>└ {l.name||l.id}</div>)}</details>}
+          {visible('elementos pilares vigas treliças lajes paredes')&&<details open><summary>▾ Elementos</summary><div>├ Pilares / vigas ({countType(project,'frame3d')+countType(project,'frame2d')})</div><div>├ Treliças ({countType(project,'truss3d')+countType(project,'truss2d')})</div><div>└ Lajes / paredes ({countType(project,'shell4')})</div></details>}
+          {visible('fundações fundações apoios estacas sapatas')&&<details open><summary>▾ Fundações</summary><div>├ Itens explícitos ({project.foundationReview?.items?.length||0})</div><div>└ Apoios ({project.supports?.length||0})</div></details>}
+          {visible('cargas permanentes variáveis vento')&&<details><summary>▸ Cargas</summary><div>Permanentes / variáveis / vento</div></details>}
+          {visible('combinações elu els')&&<details><summary>▸ Combinações</summary><div>ELU / ELS: {project.loadCombinations?.length||0}</div></details>}
+          {visible('casos análise linear modal espectral não linear')&&<details><summary>▸ Casos de análise</summary><div>{project.settings?.analysisType||'linear'}</div></details>}
         </details>
       </div>
       <div className="eng-launch">
@@ -89,10 +83,13 @@ export function EngineeringModelExplorer({project,result,onCommit}:Pick<Props,'p
         <label>CAA<select value={base.exposureClass||'II'} onChange={e=>setExposure(e.target.value)}><option>I</option><option>II</option><option>III</option><option>IV</option></select></label>
         <label>fck mínimo<input readOnly value={`${base.minFckMpa} MPa`}/></label>
         <label>Cobrimento laje<input readOnly value={`${base.nominalCoverMm?.slab} mm`}/></label>
-        <label>Malha de lajes<input readOnly value={`${fmt(base.slabMeshM||.5,2)} m`}/></label>
+        <label>Unidades<select value={project.settings?.units||'kN-m'} onChange={e=>patchSettings({units:e.target.value})}><option value="kN-m">kN, m, °C</option><option value="N-mm">N, mm, °C</option></select></label>
+        <label>Malha de lajes<select value={String(project.settings?.grid||base.slabMeshM||.5)} onChange={e=>patchSettings({grid:Number(e.target.value)})}><option value="0.1">0,10 m</option><option value="0.25">0,25 m</option><option value="0.5">0,50 m</option><option value="1">1,00 m</option></select></label>
+        <label>Tipo de análise<select value={project.settings?.analysisType||'linear'} onChange={e=>patchSettings({analysisType:e.target.value})}><option value="linear">Linear (1ª ordem)</option><option value="pdelta">P-Delta</option><option value="modal">Modal</option><option value="corotational">Não linear geométrica</option></select></label>
         <div className={validation.ok?'eng-check ok':'eng-check warn'}>{validation.ok?'✓ Baseline de lançamento atendido':`⚠ ${validation.issues.length} pendência(s) no baseline`}</div>
+        <button className="eng-run" data-testid="engineering-sidebar-analyze" onClick={onAnalyze}>▷ Executar análise</button>
       </div>
-    </>:tab==='results'?<div className="eng-tab-empty">{result?'Resultados disponíveis. Use a tabela inferior e os mapas 3D.':'Execute a análise para preencher resultados.'}</div>:<div className="eng-tab-empty">Relatórios técnicos permanecem disponíveis no módulo de relatório.</div>}
+    </>:tab==='results'?<div className="eng-tab-empty">{result?'Resultados disponíveis. Use a tabela inferior e os mapas 3D.':'Execute a análise para preencher resultados.'}<button onClick={onAnalyze}>Executar análise</button></div>:<div className="eng-tab-empty">Relatórios técnicos permanecem disponíveis no módulo de relatório.<button onClick={()=>onOpenPanel('report')}>Abrir relatório técnico</button></div>}
   </div>;
 }
 
@@ -163,15 +160,21 @@ export function EngineeringRightRail({project,result}:Pick<Props,'project'|'resu
 }
 
 export function EngineeringResultsStrip({result}:Pick<Props,'project'|'result'>){
+  const[tab,setTab]=useState('Resultados');
   const vis=result?.engineeringVisualization,rows=vis?.floors?.levels||[];
+  const reactions=result?.reactions||[];const forces=result?.elementForces||[];const displacements=result?.totalDisplacements||result?.displacements||[];const checks=result?.designChecks||result?.detailing?.reinforcement||[];
   return <div className="eng-results-strip" data-testid="engineering-results-strip">
-    <div className="eng-result-tabs"><button className="active">Resultados</button><button>Reações de apoio</button><button>Esforços em elementos</button><button>Deslocamentos em nós</button><button>Armaduras (Resumo)</button></div>
-    <div className="eng-result-table"><table><thead><tr><th>Pavimento</th><th>Desloc. X (mm)</th><th>Desloc. Y (mm)</th><th>Desloc. Z (mm)</th><th>|u| (mm)</th><th>Drift X (%)</th><th>Drift Y (%)</th></tr></thead><tbody>
+    <div className="eng-result-tabs">{['Resultados','Reações de apoio','Esforços em elementos','Deslocamentos em nós','Armaduras (Resumo)'].map(x=><button key={x} className={tab===x?'active':''} onClick={()=>setTab(x)}>{x}</button>)}</div>
+    {tab==='Resultados'&&<div className="eng-result-table"><table><thead><tr><th>Pavimento</th><th>Desloc. X (mm)</th><th>Desloc. Y (mm)</th><th>Desloc. Z (mm)</th><th>|u| (mm)</th><th>Drift X (%)</th><th>Drift Y (%)</th></tr></thead><tbody>
       {rows.length?rows.slice().reverse().map((r:any)=>{
         const drift=(vis?.floors?.storyDrifts||[]).find((d:any)=>d.levelId===r.id);
         return <tr key={r.id}><td>{r.label||r.id}</td><td>{fmt(r.uxMm,3)}</td><td>{fmt(r.uyMm,3)}</td><td>{fmt(r.uzMm,3)}</td><td>{fmt(r.resultantMm,3)}</td><td>{fmt(100*(drift?.driftX||0),3)}</td><td>{fmt(100*(drift?.driftY||0),3)}</td></tr>;
       }):<tr><td colSpan={7}>Execute uma análise 3D para preencher deslocamentos e drifts por pavimento.</td></tr>}
-    </tbody></table></div>
+    </tbody></table></div>}
+    {tab==='Reações de apoio'&&<div className="eng-result-table"><table><thead><tr><th>Nó</th><th>Fx [kN]</th><th>Fy [kN]</th><th>Fz [kN]</th><th>Mx [kN·m]</th><th>My [kN·m]</th><th>Mz [kN·m]</th></tr></thead><tbody>{reactions.length?reactions.map((r:any,i:number)=><tr key={r.nodeId||i}><td>{r.nodeId||'—'}</td><td>{fmt(r.fx??r.Fx,3)}</td><td>{fmt(r.fy??r.Fy,3)}</td><td>{fmt(r.fz??r.Fz,3)}</td><td>{fmt(r.mx??r.Mx,3)}</td><td>{fmt(r.my??r.My,3)}</td><td>{fmt(r.mz??r.Mz,3)}</td></tr>):<tr><td colSpan={7}>Nenhuma reação disponível no resultado atual.</td></tr>}</tbody></table></div>}
+    {tab==='Esforços em elementos'&&<div className="eng-result-table"><table><thead><tr><th>Elemento</th><th>Tipo</th><th>N</th><th>V / Vy</th><th>Vz</th><th>M / My</th><th>Mz</th><th>T</th></tr></thead><tbody>{forces.length?forces.map((f:any,i:number)=><tr key={f.elementId||i}><td>{f.elementId||'—'}</td><td>{f.type||'barra'}</td><td>{fmt(f.N1??f.axialForce??f.Nx,3)}</td><td>{fmt(f.V1??f.Vy1??f.Qx,3)}</td><td>{fmt(f.Vz1??f.Qy,3)}</td><td>{fmt(f.M1??f.My1??f.Mx,3)}</td><td>{fmt(f.Mz1??f.My,3)}</td><td>{fmt(f.T1??f.Mxy,3)}</td></tr>):<tr><td colSpan={8}>Nenhum esforço disponível no resultado atual.</td></tr>}</tbody></table></div>}
+    {tab==='Deslocamentos em nós'&&<div className="eng-result-table"><table><thead><tr><th>Nó</th><th>Ux [mm]</th><th>Uy [mm]</th><th>Uz [mm]</th><th>Rx [rad]</th><th>Ry [rad]</th><th>Rz [rad]</th></tr></thead><tbody>{displacements.length?displacements.map((d:any,i:number)=><tr key={d.nodeId||i}><td>{d.nodeId||'—'}</td><td>{fmt(1000*Number(d.ux||0),4)}</td><td>{fmt(1000*Number(d.uy||0),4)}</td><td>{fmt(1000*Number(d.uz||0),4)}</td><td>{fmt(d.rx,6)}</td><td>{fmt(d.ry,6)}</td><td>{fmt(d.rz,6)}</td></tr>):<tr><td colSpan={7}>Nenhum deslocamento disponível no resultado atual.</td></tr>}</tbody></table></div>}
+    {tab==='Armaduras (Resumo)'&&<div className="eng-result-table"><table><thead><tr><th>Elemento</th><th>Verificação</th><th>Estado</th><th>Utilização</th><th>Armadura / detalhe</th></tr></thead><tbody>{checks.length?checks.map((c:any,i:number)=><tr key={c.id||i}><td>{c.elementId||c.id||'—'}</td><td>{c.limitState||c.category||c.type||'—'}</td><td>{c.status||'—'}</td><td>{fmt(c.utilization,3)}</td><td>{c.reinforcement||c.summary||c.detail||'—'}</td></tr>):<tr><td colSpan={5}>O resultado atual não contém detalhamento de armaduras. Abra Detalhamento após a análise.</td></tr>}</tbody></table></div>}
   </div>;
 }
 

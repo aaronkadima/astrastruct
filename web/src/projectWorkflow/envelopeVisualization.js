@@ -1,5 +1,5 @@
 export const ENVELOPE_VISUALIZATION_CONTRACT='combination-envelope-visualization/v1';
-export const ENVELOPE_VISUALIZATION_VERSION='0.53.10-exp';
+export const ENVELOPE_VISUALIZATION_VERSION='0.53.11-exp';
 
 const finite=v=>v!==''&&v!==null&&v!==undefined&&Number.isFinite(Number(v))?Number(v):null;
 const FIELD_META={
@@ -8,8 +8,19 @@ const FIELD_META={
   M:{label:'M',barUnit:'kN·m',shellUnit:'kN·m/m'},
   T:{label:'T',barUnit:'kN·m',shellUnit:null}
 };
+const REACTION_FIELD_META={
+  R:{label:'R',unit:'kN',quantity:'force',axis:null},
+  Fx:{label:'Fx',unit:'kN',quantity:'force',axis:0},
+  Fy:{label:'Fy',unit:'kN',quantity:'force',axis:1},
+  Fz:{label:'Fz',unit:'kN',quantity:'force',axis:2},
+  M:{label:'M',unit:'kN·m',quantity:'moment',axis:null},
+  Mx:{label:'Mx',unit:'kN·m',quantity:'moment',axis:0},
+  My:{label:'My',unit:'kN·m',quantity:'moment',axis:1},
+  Mz:{label:'Mz',unit:'kN·m',quantity:'moment',axis:2}
+};
 
 export function envelopeFieldMeta(field='M'){return FIELD_META[field]||FIELD_META.M}
+export function reactionFieldMeta(field='R'){return REACTION_FIELD_META[field]||REACTION_FIELD_META.R}
 
 export function buildEnvelopeVisualization(explorer={},field='M'){
   const selected=FIELD_META[field]?field:'M',meta=envelopeFieldMeta(selected),raw=[];
@@ -33,4 +44,15 @@ export function buildDisplacementVisualization(explorer={}){
 export function buildDriftVisualization(explorer={}){
   const raw=(explorer.storyDriftEnvelopes||[]).map(e=>{const ratio=finite(e?.maxDriftRatio);if(ratio==null)return null;return{kind:'story',levelId:String(e.levelId),levelLabel:String(e.levelLabel||e.levelId),fromLevelId:e.fromLevelId==null?null:String(e.fromLevelId),heightM:finite(e.heightM),field:'DRIFT',value:ratio,magnitude:Math.abs(ratio),unit:'ratio',driftMm:finite(e.maxDriftMm),driftX:finite(e.driftX),driftY:finite(e.driftY),governingCombinationId:e.governingCombinationId||null}}).filter(Boolean),maxAbs=Math.max(0,...raw.map(e=>e.magnitude)),items=raw.map(e=>({...e,ratio:maxAbs>1e-15?e.magnitude/maxAbs:0})),critical=items.slice().sort((a,b)=>b.magnitude-a.magnitude)[0]||null;
   return{contract:ENVELOPE_VISUALIZATION_CONTRACT,version:ENVELOPE_VISUALIZATION_VERSION,domain:'drift',field:'DRIFT',label:'Drift entre pavimentos',items,scales:{story:{maxAbs,unit:'ratio',count:items.length}},criticalByKind:{story:critical},summary:{items:items.length,stories:items.length},governance:{postprocessOnly:true,noSyntheticValues:true,noNormativePassFail:true,physicalDisplacementsOnly:true,sourceContract:explorer.contract||null}};
+}
+
+export function buildReactionVisualization(explorer={},field='R'){
+  const selected=REACTION_FIELD_META[field]?field:'R',meta=reactionFieldMeta(selected),raw=[];
+  for(const e of explorer.supportReactionEnvelopes||[]){
+    const env=e?.[selected],value=finite(env?.absMax);if(value==null)continue;
+    let vector=null;if(Array.isArray(env?.vector))vector=env.vector.map(v=>finite(v)??0);else if(meta.axis!=null){vector=[0,0,0];vector[meta.axis]=value}
+    raw.push({kind:'support',nodeId:String(e.nodeId),label:String(e.label||e.nodeId),levelId:e.levelId==null?null:String(e.levelId),field:selected,value,magnitude:Math.abs(value),sign:value===0?0:value>0?1:-1,unit:meta.unit,quantity:meta.quantity,vector,restraints:e.restraints||null,governingCombinationId:env.governingCombinationId||null,governingComponent:selected});
+  }
+  const maxAbs=Math.max(0,...raw.map(e=>e.magnitude)),items=raw.map(e=>({...e,ratio:maxAbs>1e-15?e.magnitude/maxAbs:0})),critical=items.slice().sort((a,b)=>b.magnitude-a.magnitude)[0]||null;
+  return{contract:ENVELOPE_VISUALIZATION_CONTRACT,version:ENVELOPE_VISUALIZATION_VERSION,domain:'reaction',field:selected,label:meta.label,quantity:meta.quantity,items,scales:{support:{maxAbs,unit:meta.unit,count:items.length}},criticalByKind:{support:critical},summary:{items:items.length,supports:items.length},governance:{solverReactionsOnly:true,supportNodesOnly:true,restrainedComponentsOnly:true,noSyntheticValues:true,noNormativePassFail:true,noUnitMixing:true,sourceContract:explorer.contract||null}};
 }

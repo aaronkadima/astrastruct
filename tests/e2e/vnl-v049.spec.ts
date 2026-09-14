@@ -1,13 +1,36 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+async function visible(locator: ReturnType<Page['locator']>) {
+  return locator.isVisible().catch(() => false);
+}
+
+async function openVnl(page: Page) {
+  const width = page.viewportSize()?.width || 1280;
+  if (width <= 1100) {
+    const more = page.locator('button[aria-label="Mais comandos"]:visible').first();
+    await expect(more).toBeVisible();
+    await more.click();
+    const command = page.locator('.command-sheet button[aria-label="VNL"]:visible').first();
+    await expect(command).toBeVisible();
+    await command.click();
+  } else {
+    const direct = page.locator('button[aria-label="VNL"]:visible').first();
+    if (await visible(direct)) await direct.click();
+    else {
+      const library = page.locator('.library-tools button').filter({ hasText: 'VNL' }).first();
+      await expect(library).toBeVisible();
+      await library.scrollIntoViewIfNeeded();
+      await library.click();
+    }
+  }
+  await expect(page.getByTestId('vnl-v049-workbench')).toBeVisible();
+}
 
 test('VNL v0.49 executes, branches, guards invalid graphs, reuses Results and persists with the project', async ({ page }) => {
   await page.goto('./');
-  const launcher = page.getByTestId('vnl-v049-launcher');
-  await expect(launcher).toBeVisible();
-  await launcher.click();
+  await openVnl(page);
 
   const workbench = page.getByTestId('vnl-v049-workbench');
-  await expect(workbench).toBeVisible();
   await expect(workbench).toContainText('DAG tipado executável');
   await expect(workbench).toContainText('Grafo válido');
 
@@ -37,7 +60,7 @@ test('VNL v0.49 executes, branches, guards invalid graphs, reuses Results and pe
   await expect(mainResult).toContainText('Resultado VNL');
   await expect(mainResult).toContainText('linear');
 
-  await page.getByTestId('vnl-v049-launcher').click();
+  await openVnl(page);
   await workbench.getByRole('button', { name: 'Salvar no projeto' }).click();
   const persisted = await page.evaluate(() => {
     const raw = localStorage.getItem('astrastruct.project');
@@ -56,6 +79,6 @@ test('VNL v0.49 executes, branches, guards invalid graphs, reuses Results and pe
 
   await page.getByRole('button', { name: 'Fechar VNL' }).click();
   await page.reload();
-  await page.getByTestId('vnl-v049-launcher').click();
+  await openVnl(page);
   await expect(page.getByTestId('vnl-v049-workbench').locator('.vnl-card-v049')).toHaveCount(persisted.nodes);
 });

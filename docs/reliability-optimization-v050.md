@@ -70,3 +70,11 @@ O smoke determinístico usa uma barra axial linear para verificar:
 O gate de release v0.50 só poderá ser criado após ampliar a camada com, no mínimo, FORM/HL-RF ou equivalente validado, tratamento explícito de correlação, amostragem mais eficiente para eventos raros, múltiplos estados limite, integração React para configuração/revisão dos estudos, persistência controlada no projeto e regressão browser desktop/Android/tablet.
 
 Nenhuma promoção para `main` será feita sem solicitação explícita.
+
+## FORM / HL-RF e correlação normal
+
+O segundo incremento adiciona `runFormReliability()` com o algoritmo Hasofer-Lind-Rackwitz-Fiessler no espaço normal padrão independente. Quando uma `correlationMatrix` é fornecida, a transformação usa fatoração de Cholesky para mapear o vetor independente `u` em variáveis normais correlacionadas antes de aplicar os targets físicos ao projeto.
+
+Nesta etapa, correlação explícita e FORM são deliberadamente limitados a variáveis **normais** com desvio padrão positivo. O código rejeita matrizes não quadradas, assimétricas, com diagonal diferente de 1 ou que não sejam positivas definidas. Distribuições não normais não são convertidas silenciosamente por Nataf/Rosenblatt.
+
+O Monte Carlo também aceita a mesma `correlationMatrix` sob essa regra normal-only. O smoke inclui um caso analítico de duas cargas normais com `rho = 0.5`, para o qual `beta = 20/sqrt(300)`.

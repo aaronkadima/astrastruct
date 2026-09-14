@@ -5,3 +5,5 @@ export {extractResponse,evaluateLimitState} from './response.js';
 export {runMonteCarloReliability} from './monteCarlo.js';
 export {runMvfosmReliability} from './mvfosm.js';
 export {optimizeProject} from './optimization.js';
+export {identityCorrelation,choleskyCorrelation,multiplyLowerTriangular,normalPhysicalValues,sampleCorrelatedNormalValues} from './correlation.js';
+export {runFormReliability} from './form.js';

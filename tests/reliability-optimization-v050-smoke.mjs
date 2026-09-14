@@ -26,3 +26,24 @@ const limitState={selector:{type:'node-displacement',nodeId:'N2',component:'ux'}
   assert.ok(r.best.feasible,'otimizador deve retornar solução factível');assert.ok(r.best.values.A>=.005-2e-6&&r.best.values.A<=.00503,`área ótima esperada ~0.005 m², obtida ${r.best.values.A}`);assert.ok(r.best.constraints[0].response<=.0002*(1+2e-5),'restrição de deslocamento violada');
 }
 console.log('AstraStruct v0.50 reliability/optimization smoke: seeded Monte Carlo, MVFOSM and bounded coordinate search coherent.');
+
+// FORM/HL-RF: para o caso univariado linear, o design point deve coincidir com beta=2.
+{
+  const {runFormReliability}=await import('../web/src/reliability/index.js');
+  const r=runFormReliability(axialBar(),{variables:[loadVariable],limitState,maxIterations:20});
+  assert.ok(r.converged,'FORM univariado linear deve convergir');
+  assert.ok(Math.abs(r.beta-2)<2e-3,`FORM beta esperado ~2, obtido ${r.beta}`);
+  assert.ok(Math.abs(r.designPoint.physical.P-120)<2e-2,`FORM design point esperado P≈120 kN, obtido ${r.designPoint.physical.P}`);
+}
+
+// Correlação normal explícita: duas cargas N(50,10), rho=0.5 => sigma(P1+P2)=sqrt(300), beta=20/sqrt(300).
+{
+  const {runFormReliability}=await import('../web/src/reliability/index.js');
+  const p=axialBar();p.loads=[{id:'P1',caseId:'LC1',nodeId:'N2',fx:50,fy:0,mz:0},{id:'P2',caseId:'LC1',nodeId:'N2',fx:50,fy:0,mz:0}];
+  const variables=[
+    {id:'P1',distribution:'normal',mean:50,standardDeviation:10,target:{kind:'entity',collection:'loads',id:'P1',property:'fx'}},
+    {id:'P2',distribution:'normal',mean:50,standardDeviation:10,target:{kind:'entity',collection:'loads',id:'P2',property:'fx'}},
+  ];
+  const r=runFormReliability(p,{variables,correlationMatrix:[[1,.5],[.5,1]],limitState,maxIterations:30});
+  const expected=20/Math.sqrt(300);assert.ok(r.converged,'FORM correlacionado deve convergir');assert.ok(Math.abs(r.beta-expected)<3e-3,`FORM correlacionado beta esperado ${expected}, obtido ${r.beta}`);
+}

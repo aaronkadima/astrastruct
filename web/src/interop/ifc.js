@@ -1,4 +1,5 @@
 import {createIfcProjectContext,validateIfcProjectContext} from './ifcContext.js';
+import {createIfcBoundaryNodeCondition,validateIfcBoundaryNodeCondition} from './ifcBoundary.js';
 
 export const IFC_INTEROP_CONTRACT='ifc-interoperability/v1';
 export const IFC_INTEROP_VERSION='0.45.0-exp';
@@ -24,13 +25,6 @@ export function ifcClassForElement(element={}){
   return'IfcStructuralCurveMember';
 }
 
-function supportForNode(project,nodeId){
-  const list=Array.isArray(project?.supports)?project.supports:[];
-  const hits=list.filter(s=>text(s.nodeId??s.node??s.id)===nodeId);
-  if(!hits.length)return null;
-  return{ifcClass:'IfcBoundaryNodeCondition',source:copy(hits)};
-}
-
 function materialRecord(m){
   const id=requireId('material',m?.id);
   return{key:key('material',id),ifcClass:'IfcMaterial',sourceId:id,name:text(m.name)||id,category:text(m.type)||null,properties:copy(m)};
@@ -43,7 +37,7 @@ function sectionRecord(s){
 
 function nodeRecord(project,n){
   const id=requireId('node',n?.id);
-  return{key:key('node',id),ifcClass:'IfcStructuralPointConnection',sourceId:id,name:text(n.name)||id,placement:{x:finite(n.x),y:finite(n.y),z:finite(n.z)},condition:supportForNode(project,id),properties:copy(n)};
+  return{key:key('node',id),ifcClass:'IfcStructuralPointConnection',sourceId:id,name:text(n.name)||id,placement:{x:finite(n.x),y:finite(n.y),z:finite(n.z)},condition:createIfcBoundaryNodeCondition(project,id),properties:copy(n)};
 }
 
 function memberRecord(e,nodeSet){
@@ -99,7 +93,7 @@ export function validateIfcInteroperabilityModel(model){
   if(model.project.unitsInContextRef!==model.context.units.key)throw new Error('IFC interop: referência UnitsInContext inválida.');
   const contextKeys=new Set(model.context.representationContexts.map(x=>x.key));for(const ref of model.project.representationContextRefs||[])if(!contextKeys.has(ref))throw new Error(`IFC interop: RepresentationContext inválido ${ref}.`);
   const nodeKeys=new Set(),memberKeys=new Set();
-  for(const n of model.nodes||[]){if(n.ifcClass!=='IfcStructuralPointConnection')throw new Error(`IFC interop: nó ${n.sourceId} com classe inválida.`);if(nodeKeys.has(n.key))throw new Error(`IFC interop: chave de nó duplicada ${n.key}.`);nodeKeys.add(n.key);for(const a of ['x','y','z'])if(!Number.isFinite(Number(n.placement?.[a])))throw new Error(`IFC interop: coordenada ${a} inválida em ${n.sourceId}.`)}
+  for(const n of model.nodes||[]){if(n.ifcClass!=='IfcStructuralPointConnection')throw new Error(`IFC interop: nó ${n.sourceId} com classe inválida.`);if(nodeKeys.has(n.key))throw new Error(`IFC interop: chave de nó duplicada ${n.key}.`);nodeKeys.add(n.key);for(const a of ['x','y','z'])if(!Number.isFinite(Number(n.placement?.[a])))throw new Error(`IFC interop: coordenada ${a} inválida em ${n.sourceId}.`);if(n.condition)validateIfcBoundaryNodeCondition(n.condition)}
   for(const m of model.members||[]){if(!['IfcStructuralCurveMember','IfcStructuralSurfaceMember'].includes(m.ifcClass))throw new Error(`IFC interop: membro ${m.sourceId} com classe inválida.`);if(memberKeys.has(m.key))throw new Error(`IFC interop: chave de membro duplicada ${m.key}.`);memberKeys.add(m.key);if((m.nodeRefs||[]).length<2)throw new Error(`IFC interop: membro ${m.sourceId} sem conectividade suficiente.`);for(const ref of m.nodeRefs)if(!nodeKeys.has(ref))throw new Error(`IFC interop: referência de nó inválida ${ref}.`)}
   for(const r of model.relationships||[]){if(r.ifcClass!=='IfcRelConnectsStructuralMember'||!memberKeys.has(r.memberRef)||!nodeKeys.has(r.nodeRef))throw new Error(`IFC interop: relação estrutural inválida ${r.key}.`)}
   return true;

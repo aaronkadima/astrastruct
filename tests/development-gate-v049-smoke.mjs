@@ -23,7 +23,7 @@ for (const block of ['Geometry','Material','Section','Boundary','Load','Combinat
   assert.ok(VNL_BLOCKS.includes(block), `bloco VNL obrigatório ausente: ${block}`);
 }
 
-assert.ok(pkg.scripts.test.startsWith('node tests/development-gate-v049-smoke.mjs && node tests/vnl-runtime-v049-smoke.mjs'), 'test chain deve iniciar pelo gate e smoke VNL v0.49');
+assert.ok(pkg.scripts.test.startsWith('node tests/development-gate-v049-smoke.mjs && node tests/vnl-runtime-v049-smoke.mjs && node tests/vnl-modes-v049-smoke.mjs'), 'test chain deve iniciar pelo gate, runtime e modos VNL v0.49');
 assert.ok(pkg.scripts.test.includes('tests/release-gate-v048-smoke.mjs'), 'release gate v0.48 permanece durante desenvolvimento v0.49');
 assert.ok(!pkg.scripts.test.includes('tests/release-gate-v049-smoke.mjs'), 'release gate v0.49 não deve existir antes do fechamento');
 

@@ -24,14 +24,10 @@ function resolveCaseId(load,cases,firstCaseId,warnings,issues){
 
 function caseRecord(source){
   const id=requireId('loadCase',source.id);
-  return{
-    key:key('load-case',id),ifcClass:'IfcStructuralLoadCase',sourceId:id,name:text(source.name)||id,
-    predefinedType:'LOAD_CASE',actionType:actionTypeFor(source),actionSource:'NOTDEFINED',coefficient:1,purpose:null,selfWeightCoefficients:null,
-    sourceType:text(source.type)||'user'
-  };
+  return{key:key('load-case',id),ifcClass:'IfcStructuralLoadCase',sourceId:id,name:text(source.name)||id,predefinedType:'LOAD_CASE',actionType:actionTypeFor(source),actionSource:'NOTDEFINED',coefficient:1,purpose:null,selfWeightCoefficients:null,sourceType:text(source.type)||'user'};
 }
 
-function combinationRecords(project,caseSet,combinationSet,issues,warnings){
+function combinationRecords(project,caseSet,issues,warnings){
   const combinations=[],factorRelations=[];
   for(const combination of project.loadCombinations||[]){
     const id=requireId('loadCombination',combination.id);
@@ -98,10 +94,10 @@ function elementActions(project,elementById,caseSet,firstCaseId,issues,warnings)
 export function createIfcStructuralLoadMapping(project={}){
   const unitSystem=text(project.units)||'kN-m-MPa',issues=[],warnings=[],nodes=Array.isArray(project.nodes)?project.nodes:[],elements=Array.isArray(project.elements)?project.elements:[],loadCases=Array.isArray(project.loadCases)?project.loadCases:[],loadCombinations=Array.isArray(project.loadCombinations)?project.loadCombinations:[];
   if(unitSystem!=='kN-m-MPa')issues.push({severity:'BLOCKING',code:'UNIT_SYSTEM_UNSUPPORTED',message:`IFC loads v0.48 aceita somente kN-m-MPa; recebido ${unitSystem}.`});
-  const nodeSet=uniqueIds(nodes,'node'),elementSet=uniqueIds(elements,'element'),caseSet=uniqueIds(loadCases,'loadCase'),combinationSet=uniqueIds(loadCombinations,'loadCombination');
+  const nodeSet=uniqueIds(nodes,'node');uniqueIds(elements,'element');const caseSet=uniqueIds(loadCases,'loadCase');uniqueIds(loadCombinations,'loadCombination');
   const elementById=new Map(elements.map(e=>[e.id,e])),cases=loadCases.map(caseRecord),firstCaseId=loadCases[0]?.id||null;
-  const combined=combinationRecords({loadCombinations},caseSet,combinationSet,issues,warnings),nodal=nodalActions(project,nodeSet,caseSet,firstCaseId,issues,warnings),element=elementActions(project,elementById,caseSet,firstCaseId,issues,warnings);
-  if((project.settlements||[]).length){issues.push({severity:'BLOCKING',code:'SETTLEMENT_EXCHANGE_PENDING',count:project.settlements.length,message:'Assentamentos nodais ainda não são materializados no contrato IFC de cargas v0.48.'})}
+  const combined=combinationRecords({loadCombinations},caseSet,issues,warnings),nodal=nodalActions(project,nodeSet,caseSet,firstCaseId,issues,warnings),element=elementActions(project,elementById,caseSet,firstCaseId,issues,warnings);
+  if((project.settlements||[]).length)issues.push({severity:'BLOCKING',code:'SETTLEMENT_EXCHANGE_PENDING',count:project.settlements.length,message:'Assentamentos nodais ainda não são materializados no contrato IFC de cargas v0.48.'});
   const actions=[...nodal.actions,...element.actions],caseAssignments=[...nodal.caseAssignments,...element.caseAssignments],activityConnections=[...nodal.activityConnections,...element.activityConnections];
   const mapping={contract:IFC_LOAD_EXCHANGE_CONTRACT,version:IFC_LOAD_EXCHANGE_VERSION,unitSystem,cases,combinations:combined.combinations,actions,relationships:{caseAssignments,combinationFactors:combined.factorRelations,activityConnections},pending:element.pending,issues,warnings,ready:issues.length===0};
   validateIfcStructuralLoadMapping(mapping);return mapping;
@@ -113,8 +109,8 @@ export function validateIfcStructuralLoadMapping(mapping){
   if(caseKeys.size!==(mapping.cases||[]).length)throw new Error('IFC loads: caso duplicado no mapping.');
   if(combinationKeys.size!==(mapping.combinations||[]).length)throw new Error('IFC loads: combinação duplicada no mapping.');
   if(actionKeys.size!==(mapping.actions||[]).length)throw new Error('IFC loads: ação duplicada no mapping.');
-  for(const c of mapping.cases||[]){if(c.ifcClass!=='IfcStructuralLoadCase'||c.predefinedType!=='LOAD_CASE'||c.coefficient!==1)throw new Error(`IFC loads: caso inválido ${c.sourceId}.`)}
-  for(const c of mapping.combinations||[]){if(c.ifcClass!=='IfcStructuralLoadGroup'||c.predefinedType!=='LOAD_COMBINATION'||c.coefficient!==1)throw new Error(`IFC loads: combinação inválida ${c.sourceId}.`)}
+  for(const c of mapping.cases||[])if(c.ifcClass!=='IfcStructuralLoadCase'||c.predefinedType!=='LOAD_CASE'||c.coefficient!==1)throw new Error(`IFC loads: caso inválido ${c.sourceId}.`);
+  for(const c of mapping.combinations||[])if(c.ifcClass!=='IfcStructuralLoadGroup'||c.predefinedType!=='LOAD_COMBINATION'||c.coefficient!==1)throw new Error(`IFC loads: combinação inválida ${c.sourceId}.`);
   for(const a of mapping.actions||[]){
     if(!caseKeys.has(a.caseRef))throw new Error(`IFC loads: ação ${a.sourceId} sem caso válido.`);
     if(a.ifcClass==='IfcStructuralPointAction'){if(a.globalOrLocal!=='GLOBAL_COORDS'||a.appliedLoad?.ifcClass!=='IfcStructuralLoadSingleForce')throw new Error(`IFC loads: ação pontual inválida ${a.sourceId}.`)}
@@ -123,7 +119,7 @@ export function validateIfcStructuralLoadMapping(mapping){
   }
   for(const r of mapping.relationships?.caseAssignments||[])if(r.ifcClass!=='IfcRelAssignsToGroup'||!caseKeys.has(r.relatingGroupRef)||r.relatedObjectRefs.some(x=>!actionKeys.has(x)))throw new Error(`IFC loads: atribuição a caso inválida ${r.key}.`);
   for(const r of mapping.relationships?.combinationFactors||[])if(r.ifcClass!=='IfcRelAssignsToGroupByFactor'||!combinationKeys.has(r.relatingGroupRef)||r.relatedObjectRefs.length!==1||!caseKeys.has(r.relatedObjectRefs[0])||!finite(r.factor)||Math.abs(Number(r.factor))<=EPS)throw new Error(`IFC loads: fator de combinação inválido ${r.key}.`);
-  if(mapping.ready!==(mapping.issues||[]).length===0)throw new Error('IFC loads: ready incoerente com issues.');
+  if(mapping.ready!==((mapping.issues||[]).length===0))throw new Error('IFC loads: ready incoerente com issues.');
   return true;
 }
 

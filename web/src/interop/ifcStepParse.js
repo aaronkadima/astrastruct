@@ -108,6 +108,11 @@ export function validateIfcStructuralRoundTrip(model,parsedStep){
   for(const [guid,n] of expectedNodes){const actual=actualNodes.get(guid);if(!actual)throw new Error(`IFC STEP round-trip: nó ${guid} ausente.`);const expected=[n.placement.x,n.placement.y,n.placement.z].map(Number);if(expected.some((v,i)=>Math.abs(v-actual.coordinates[i])>1e-12))throw new Error(`IFC STEP round-trip: coordenadas divergiram no nó ${guid}.`)}
   const expectedMembers=new Map((model.members||[]).map(m=>[m.globalId,m])),actualMembers=new Map(parsed.members.map(m=>[m.globalId,m]));
   if(expectedMembers.size!==actualMembers.size)throw new Error('IFC STEP round-trip: quantidade de membros divergiu.');
-  for(const [guid,m] of expectedMembers){const actual=actualMembers.get(guid);if(!actual)throw new Error(`IFC STEP round-trip: membro ${guid} ausente.`);const expected=(m.nodeRefs||[]).map(k=>nodeByKey.get(k)?.globalId);if(expected.some(Boolean)===false&&expected.length)throw new Error(`IFC STEP round-trip: referência de nó canônica ausente em ${guid}.`);if(JSON.stringify(expected)!==JSON.stringify(actual.nodeGlobalIds))throw new Error(`IFC STEP round-trip: conectividade divergiu em ${guid}.`)}
+  for(const [guid,m] of expectedMembers){
+    const actual=actualMembers.get(guid);if(!actual)throw new Error(`IFC STEP round-trip: membro ${guid} ausente.`);
+    const expected=(m.nodeRefs||[]).map(k=>nodeByKey.get(k)?.globalId);
+    if(expected.some(x=>!x))throw new Error(`IFC STEP round-trip: referência de nó canônica ausente em ${guid}.`);
+    if(JSON.stringify(expected)!==JSON.stringify(actual.nodeGlobalIds))throw new Error(`IFC STEP round-trip: conectividade divergiu em ${guid}.`);
+  }
   return{project:true,nodes:expectedNodes.size,members:expectedMembers.size,materialAssociations:parsed.materials.length,owner:true};
 }

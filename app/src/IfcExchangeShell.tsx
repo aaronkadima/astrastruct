@@ -14,7 +14,7 @@ const personValid=(o:any)=>!!(o.identification.trim()||o.givenName.trim()||o.fam
 
 export function IfcExchangeShell({children}:{children:React.ReactNode}){
   const[open,setOpen]=useState(false),[project,setProject]=useState<any>(null),[owner,setOwner]=useState(initialOwner),[message,setMessage]=useState(''),[preview,setPreview]=useState<any>(null),[busy,setBusy]=useState(false);const fileRef=useRef<HTMLInputElement|null>(null);
-  const inspection=useMemo(()=>{if(!project)return null;try{return inspectIfcExchangeReadiness(project)}catch(e:any){return{error:e?.message||String(e),ready:false,summary:null,mapping:{entries:[]}}}},[project]);
+  const inspection:any=useMemo(()=>{if(!project)return null;try{return inspectIfcExchangeReadiness(project)}catch(e:any){return{error:e?.message||String(e),ready:false,summary:null,mapping:{entries:[]}}}},[project]);
   const refresh=()=>{try{setProject(readProject());setMessage('');setPreview(null)}catch(e:any){setMessage(e?.message||String(e))}};
   const show=()=>{setOpen(true);refresh()};
   const change=(key:string,value:string)=>{const next={...owner,[key]:value};setOwner(next);localStorage.setItem(OWNER_KEY,JSON.stringify(next))};

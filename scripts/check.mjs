@@ -16,4 +16,5 @@ run(process.execPath,['tests/foundation-ssi-v0534-smoke.mjs']);
 run(process.execPath,['tests/geotechnical-v0535-smoke.mjs']);
 run(process.execPath,['tests/foundation-dashboard-v0536-smoke.mjs']);
 run(process.execPath,['tests/elu-els-dashboard-v0537-smoke.mjs']);
-console.log(`AstraStruct check: TypeScript + ${files.length} módulos JS validados + gates funcionais v0.52, v0.53.0, v0.53.1, v0.53.2, v0.53.3, v0.53.4, v0.53.5, v0.53.6 e v0.53.7.`);
+run(process.execPath,['tests/combination-envelope-v0538-smoke.mjs']);
+console.log(`AstraStruct check: TypeScript + ${files.length} módulos JS validados + gates funcionais v0.52, v0.53.0, v0.53.1, v0.53.2, v0.53.3, v0.53.4, v0.53.5, v0.53.6, v0.53.7 e v0.53.8.`);

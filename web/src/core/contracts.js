@@ -31,9 +31,14 @@ export function createAnalysisRequest(project = {}, scenarioId = null) {
   };
 }
 
+function publishContractedResult(project,result){
+  if(typeof globalThis?.dispatchEvent!=='function'||typeof globalThis?.CustomEvent!=='function')return;
+  try{globalThis.dispatchEvent(new globalThis.CustomEvent('astrastruct:solver-result',{detail:{project,result}}))}catch{}
+}
+
 export function attachResultContract(project, scenarioId, result = {}) {
   const request = createAnalysisRequest(project, scenarioId);
-  return {
+  const contracted={
     ...result,
     contract: {
       name: 'structural-result/v1',
@@ -53,4 +58,6 @@ export function attachResultContract(project, scenarioId, result = {}) {
       },
     },
   };
+  publishContractedResult(project,contracted);
+  return contracted;
 }

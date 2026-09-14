@@ -2,6 +2,7 @@ import React from'react';
 import{createRoot,Root}from'react-dom/client';
 import{EngineeringRibbon,EngineeringModelExplorer,EngineeringRightRail}from'./EngineeringDesktopChrome';
 import{EngineeringResultsWorkbench}from'./EngineeringResultsWorkbench';
+import'./engineering-results-workbench.css';
 // @ts-ignore
 import{normalizeProject}from'../../web/src/core/model.js';
 // @ts-ignore

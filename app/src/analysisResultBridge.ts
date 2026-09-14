@@ -13,5 +13,5 @@ export function currentAnalysisResult(){return latestResult;}
 export function subscribeAnalysisResult(listener:Listener){
   listeners.add(listener);
   listener(latestResult);
-  return()=>listeners.delete(listener);
+  return()=>{listeners.delete(listener);};
 }

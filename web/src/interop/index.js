@@ -21,5 +21,8 @@ export {
   IFC_STEP_MATERIAL_CONTRACT,IFC_STEP_MATERIAL_VERSION,validateIfcStepMaterialReadiness,emitIfcStepMaterials
 } from './ifcStepMaterial.js';
 export {
+  IFC_STEP_OWNER_CONTRACT,IFC_STEP_OWNER_VERSION,validateIfcOwnerMetadata,emitIfcStepOwner
+} from './ifcStepOwner.js';
+export {
   IFC_STEP_WRITER_CONTRACT,IFC_STEP_WRITER_VERSION,validateIfcStepReadiness,renderIfcStep,validateIfcStepEnvelope
 } from './ifcStep.js';

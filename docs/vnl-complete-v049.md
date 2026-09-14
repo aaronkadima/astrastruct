@@ -1,147 +1,75 @@
 # AstraStruct v0.49 — VNL completa
 
-## Estado
+## Estado final
 
-A v0.49 está em desenvolvimento exclusivamente no branch `develop` como **0.49.0-exp**. Enquanto o gate final não for fechado, `PRODUCT_VERSION` e `package.json` permanecem em **0.48.0** e `main` não é alterado.
+A v0.49 está formalmente fechada no branch `develop` como **AstraStruct 0.49.0**. O fechamento atualiza `package.json` e `PRODUCT_VERSION = 0.49.0`, mantendo `PROJECT_SCHEMA_VERSION = 2` e `RESULT_CONTRACT_VERSION = 1.0`.
 
-Esta versão é a recuperação explícita do roadmap: **v0.49 = VNL completa**. Nenhuma ampliação funcional de IFC/BIM faz parte deste ciclo.
+Este ciclo foi dedicado exclusivamente à conclusão da **VNL — Visual Nonlinear Language**. Nenhuma nova ampliação funcional IFC/BIM foi incluída. Nenhuma promoção para `main` foi realizada.
 
-## Objetivo
+## Arquitetura
 
-Transformar a VNL — Visual Nonlinear Language — de um painel declarativo em uma linguagem visual executável, persistente e validável, reutilizando o kernel estrutural existente em vez de duplicar solvers.
+A VNL v0.49 usa o contrato `visual-nonlinear-language/v2` com versão interna `0.49.0-exp`. O grafo é um DAG tipado, persistente e validável, com nós, portas nomeadas e arestas explícitas. Os tipos de porta distinguem modelo estrutural, resultado de análise, descritor de plot e artefato de exportação.
 
-Pipeline de referência:
+O pipeline de referência é:
 
-`Geometry -> Material/Section/Boundary/Load -> Analysis modifiers -> Solver -> Result -> Plot/Export`
+`Geometry -> Material/Section/Boundary/Load -> modificadores de análise -> Solver -> Result -> Plot/Export`
 
-O runtime compila o grafo para `analysis-config/v1` e chama exclusivamente o `solve()` público do AstraStruct.
+A VNL não implementa um solver estrutural paralelo. O compilador produz configuração compatível com `analysis-config/v1` e `executeVnlGraph()` chama exclusivamente o `solve()` público do AstraStruct.
 
-## Contratos experimentais v0.49
+## Validação do grafo
 
-- `visual-nonlinear-language/v2` — `0.49.0-exp`;
-- `vnl-compiled-plan/v1`;
-- `vnl-execution/v1`;
-- `project-vnl/v1`;
-- `vnl-plot/v1`;
-- `vnl-export-artifact/v1`.
+Antes da execução são bloqueados IDs duplicados, portas inexistentes, tipos incompatíveis, entradas obrigatórias ausentes, múltiplas ligações na mesma entrada, ciclos, blocos desconectados e Solver sem Result. A execução só é habilitada quando o DAG está estruturalmente válido.
 
-## Grafo tipado
+O branching é suportado explicitamente: um mesmo modelo pode alimentar múltiplos Solver/Result e um Result pode alimentar diferentes blocos Plot/Export.
 
-A VNL v0.49 usa um DAG explícito com:
+## Catálogo executável
 
-- nós com ID, tipo, parâmetros, estado habilitado e posição visual;
-- arestas com origem/destino e portas nomeadas;
-- tipos de porta `structural-model`, `analysis-result`, `plot-descriptor` e `export-artifact`;
-- validação de IDs duplicados;
-- validação de existência e tipo das portas;
-- uma única ligação por porta de entrada;
-- entradas obrigatórias;
-- detecção de ciclos;
-- detecção de blocos desconectados;
-- garantia de que cada `Solver` alimenta ao menos um `Result`;
-- uma única fonte `Geometry` por execução.
+O catálogo final inclui Geometry, Mesh, Material, Section, Reinforcement, Boundary, Connection, Load, Combination, Material Nonlinearity, Geometric Nonlinearity, Increment, Convergence, Contact, Solver, Result, Plot e Export.
 
-O branching é permitido por múltiplas arestas de saída. Um mesmo modelo pode alimentar mais de um `Solver`, e um `Result` pode alimentar diferentes blocos de pós-processamento.
+Os blocos de análise alteram apenas parâmetros reconhecidos pelo kernel. Eles não inventam propriedades constitutivas, contatos ou capacidades numéricas ausentes no modelo; a autoridade final continua sendo o solver público.
 
-## Catálogo de blocos
+## Modos de análise
 
-O catálogo v0.49 inclui:
+O gate determinístico comprova execução pela VNL dos seis modos já existentes no kernel: **Linear, P-Delta, co-rotacional, modal, time-history e response-spectrum**. Parâmetros de incremento, controle e convergência são compilados para a configuração estrutural existente.
 
-- Geometry;
-- Mesh;
-- Material;
-- Section;
-- Reinforcement;
-- Boundary;
-- Connection;
-- Load;
-- Combination;
-- Material Nonlinearity;
-- Geometric Nonlinearity;
-- Increment;
-- Convergence;
-- Contact;
-- Solver;
-- Result;
-- Plot;
-- Export.
+## Runtime e resultados
 
-Blocos de modelagem/engenharia passam o `structural-model` adiante. Eles não fabricam capacidades numéricas inexistentes: o solver público continua sendo a autoridade para aceitar ou rejeitar uma combinação de modelo/análise.
+`executeVnlGraph()` normaliza e valida o DAG, compila o plano, executa cada Solver, propaga Results, produz séries Plot e serializa Export JSON. O retorno contém trace, resultados, plots, artefatos e `primaryResult`.
 
-## Compilação para AnalysisConfig
-
-Os modificadores VNL escrevem somente configurações já reconhecidas pelo núcleo:
-
-- `Geometric Nonlinearity` -> `linear`, `pdelta` ou `corotational`;
-- `Material Nonlinearity` -> execução co-rotacional quando habilitado, deixando o próprio solver verificar se há constitutivos compatíveis;
-- `Increment` -> passos, controle de carga/deslocamento/arc-length e parâmetros relacionados;
-- `Convergence` -> iterações, tolerância e line search;
-- `Solver` -> tipo de análise e cenário.
-
-O resultado é sincronizado com `analysis-config/v1` antes da execução.
-
-## Runtime
-
-`executeVnlGraph()`:
-
-1. normaliza e valida o DAG;
-2. compila o plano;
-3. executa cada `Solver` usando `solve()`;
-4. propaga resultados pelos blocos `Result`;
-5. produz séries determinísticas em `Plot`;
-6. serializa `Export` em artefato JSON quando solicitado;
-7. retorna trace, resultados, plots, artefatos e `primaryResult`.
-
-A VNL não contém uma segunda implementação de análise estrutural.
+O `primaryResult` é reutilizado pela área principal **Resultados** da aplicação, portanto a VNL não mantém uma visualização isolada do restante do produto.
 
 ## Persistência
 
-O grafo validado pode ser armazenado no próprio projeto sob:
+O grafo validado é salvo no projeto em:
 
 `project.vnl = { contract: 'project-vnl/v1', version: '0.49.0-exp', graph }`
 
-Projetos sem esse campo recebem um grafo padrão. O campo é aditivo durante o gate experimental e não altera ainda `PROJECT_SCHEMA_VERSION = 2`.
+Projetos sem o campo recebem um grafo padrão. A extensão continua aditiva e, por isso, o schema persistido permanece na versão 2.
 
-## Critérios para considerar a VNL completa
+## Editor React
 
-O fechamento v0.49 somente poderá ocorrer quando todos os itens abaixo estiverem atendidos no mesmo commit final:
+O editor React é a superfície oficial da VNL. Ele permite criar, remover e ordenar blocos, editar parâmetros, construir conexões tipadas, restaurar o pipeline padrão, criar ramos paralelos, salvar o grafo, executar e apresentar erros de compilação/runtime.
 
-1. DAG tipado e validação estrutural;
-2. compilação para `analysis-config/v1`;
-3. execução real pelo `solve()` público;
-4. suporte aos modos Linear, P-Delta, co-rotacional, modal, time-history e response-spectrum já existentes no kernel;
-5. parâmetros de incremento e convergência editáveis;
-6. branching com múltiplos Solver/Result;
-7. Plot e Export executáveis;
-8. persistência no projeto e round-trip JSON;
-9. editor React conectado ao runtime, sem painel meramente demonstrativo;
-10. possibilidade de criar, remover, ordenar/conectar blocos e editar seus parâmetros;
-11. apresentação de erros de compilação/execução na interface;
-12. resultado VNL reutilizável pelo painel principal de resultados;
-13. smoke tests determinísticos;
-14. regressão Playwright desktop, Android e tablet;
-15. toda a suíte estrutural histórica verde.
+O acesso ocorre pelo comando **VNL** já integrado à interface do AstraStruct. O launcher flutuante experimental foi retirado da camada de interação para evitar sobreposição com comandos de canvas, IFC ou navegação em diferentes viewports.
 
-## Gate atual
+## Verificação de fechamento
 
-O primeiro smoke da v0.49 cobre:
+O fechamento exige, no mesmo estado do código:
 
-- grafo padrão válido;
-- execução linear real;
-- compilação co-rotacional com Increment/Convergence;
-- branching com dois solvers;
-- Plot;
-- Export JSON;
-- persistência/reabertura do grafo;
-- rejeição de incompatibilidade de portas;
-- rejeição de ciclos.
+- release gate v0.49, runtime smoke e multi-mode smoke;
+- toda a suíte estrutural histórica preservada;
+- typecheck e build Vite;
+- intercâmbio IFC persistente sem regressão;
+- validação externa IFC4X3/EXPRESS com IfcOpenShell;
+- regressão Playwright em **desktop, Android e tablet**;
+- VNL executável, branching, Plot/Export, persistência e integração com Resultados.
 
-A versão **não deve ser marcada como 0.49.0** até que o editor React e os demais critérios acima estejam concluídos e validados.
+O commit funcional imediatamente anterior ao release gate passou integralmente esses gates. O commit formal 0.49.0 é submetido novamente à mesma matriz antes de ser considerado fechado para desenvolvimento.
 
-## Regra de roadmap
+## Roadmap bloqueado
 
-Após o fechamento da v0.49, a próxima versão planejada é **v0.50 — Reliability + Optimization**. IA/automation/digital engineering permanece reservada para **v0.51+**. Não iniciar esses módulos antes do gate final da VNL.
+Com a VNL concluída, a próxima versão planejada é **v0.50 — Reliability + Optimization**. Recursos de IA, automation e digital engineering permanecem reservados para **v0.51+** e não fazem parte da v0.49.
 
-## Regra de publicação
+## Publicação
 
-Todo o trabalho ocorre em `develop`. `main` permanece estável e intocada até solicitação explícita de promoção/publicação.
+Todo o fechamento ocorre em `develop`. `main` permanece como canal estável/publicado e não será alterada sem solicitação explícita do usuário. **Nenhuma promoção para `main`** faz parte deste gate.

@@ -1,0 +1,9 @@
+import assert from 'node:assert/strict';
+import {emptyProject,normalizeProject} from '../web/src/core/model.js';
+import {RELIABILITY_STUDY_CONTRACT,RELIABILITY_STUDY_VERSION,defaultReliabilityStudy,withReliabilityStudy,reliabilityStudyFromProject,executeReliabilityStudy} from '../web/src/reliability/index.js';
+function fixture(){const p=emptyProject();p.nodes=[{id:'N1',x:0,y:0},{id:'N2',x:2,y:0}];p.elements=[{id:'E1',type:'truss2d',n1:'N1',n2:'N2',materialId:'steel355',sectionId:'truss_generic',A:.01,I:0}];p.supports=[{nodeId:'N1',ux:true,uy:true,rz:false},{nodeId:'N2',ux:false,uy:true,rz:false}];p.loads=[{id:'P1',caseId:'LC1',nodeId:'N2',fx:100,fy:0,mz:0}];return p;}
+const study={...defaultReliabilityStudy(),name:'SLS axial',method:'form',variables:[{id:'P',distribution:'normal',mean:100,standardDeviation:10,target:{kind:'entity',collection:'loads',id:'P1',property:'fx'}}],limitStates:[{id:'LS1',selector:{type:'node-displacement',nodeId:'N2',component:'ux'},capacity:.00012}],activeLimitStateId:'LS1'};
+const result=executeReliabilityStudy(fixture(),study);assert.ok(result.converged);assert.ok(Math.abs(result.beta-2)<2e-3);
+const stored=withReliabilityStudy(fixture(),study,result),normalized=normalizeProject(JSON.parse(JSON.stringify(stored))),roundtrip=reliabilityStudyFromProject(normalized);
+assert.equal(roundtrip.contract,RELIABILITY_STUDY_CONTRACT);assert.equal(roundtrip.version,RELIABILITY_STUDY_VERSION);assert.equal(roundtrip.variables.length,1);assert.equal(roundtrip.limitStates.length,1);assert.ok(Math.abs(roundtrip.lastResult.beta-2)<2e-3);assert.equal(roundtrip.lastResult.samples,undefined,'resumo persistido não deve conter amostras brutas');
+console.log('AstraStruct v0.50 reliability study smoke: additive schema-2 persistence and compact result round-trip coherent.');

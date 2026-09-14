@@ -20,11 +20,11 @@ export function normalizeFoundationGeotechnical(raw={}){
 export function foundationGeotechnicalFromProject(project={}){return normalizeFoundationGeotechnical(project.foundationGeotechnical||{});}
 
 function validateLayer(layer){
-  const issues=[],a=layer.topDepthM,b=layer.bottomDepthM;
-  if(a==null||b==null)issues.push('Informe profundidades superior e inferior.');
+  const issues=[],a=layer.topDepthM,b=layer.bottomDepthM,missing=a==null||b==null;
+  if(missing)issues.push('Informe profundidades superior e inferior.');
   else{if(a<0)issues.push('Profundidade superior não pode ser negativa.');if(!(b>a))issues.push('Profundidade inferior deve ser maior que a superior.');}
   const p=layer.parameters||{};if(p.nSpt!=null&&p.nSpt<0)issues.push('NSPT não pode ser negativo.');if(p.unitWeightKNm3!=null&&p.unitWeightKNm3<=0)issues.push('Peso específico deve ser positivo.');if(p.youngModulusKPa!=null&&p.youngModulusKPa<=0)issues.push('Módulo de Young deve ser positivo.');if(p.poisson!=null&&(p.poisson<0||p.poisson>=.5))issues.push('Poisson deve estar em 0 ≤ ν < 0,5.');if(p.subgradeModulusKNm3!=null&&p.subgradeModulusKNm3<0)issues.push('Módulo de reação não pode ser negativo.');if(p.admissiblePressureKPa!=null&&p.admissiblePressureKPa<0)issues.push('Pressão admissível não pode ser negativa.');
-  return{...layer,state:issues.length?'INVALID':'READY',issues};
+  const invalid=issues.some(x=>!/Informe profundidades/.test(x));return{...layer,state:invalid?'INVALID':missing?'PENDING':'READY',issues};
 }
 export function validateGeotechnicalProfile(profileInput={}){
   const profile=normalizeGeotechnicalProfile(profileInput),issues=[];
@@ -34,7 +34,8 @@ export function validateGeotechnicalProfile(profileInput={}){
   const layers=profile.layers.map(validateLayer),validIntervals=layers.filter(x=>x.topDepthM!=null&&x.bottomDepthM!=null&&x.bottomDepthM>x.topDepthM).sort((a,b)=>a.topDepthM-b.topDepthM);
   for(let i=1;i<validIntervals.length;i++)if(validIntervals[i].topDepthM<validIntervals[i-1].bottomDepthM-1e-9)issues.push(`Camadas ${validIntervals[i-1].id} e ${validIntervals[i].id} se sobrepõem.`);
   if(layers.some(x=>x.state==='INVALID'))issues.push('Existem camadas com dados geométricos ou parâmetros inválidos.');
-  const state=issues.some(x=>/sobrepõem|inválid|negativ|maior/i.test(x))?'INVALID':issues.length?'PENDING':'READY';
+  if(layers.some(x=>x.state==='PENDING'))issues.push('Existem camadas com dados pendentes.');
+  const invalid=issues.some(x=>/sobrepõem|inválid|negativ|maior/i.test(x)),state=invalid?'INVALID':issues.length?'PENDING':'READY';
   return{...profile,layers,state,issues,maxDepthM:validIntervals.length?Math.max(...validIntervals.map(x=>x.bottomDepthM)):null};
 }
 export function foundationGeotechnicalModelFromProject(project={}){

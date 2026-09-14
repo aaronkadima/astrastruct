@@ -6,7 +6,7 @@ export const COMBINATION_ENVELOPE_VERSION='0.53.10-exp';
 const finite=v=>v!==''&&v!==null&&v!==undefined&&Number.isFinite(Number(v))?Number(v):null;
 const text=(v,f='')=>String(v??f);
 const norm=v=>text(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-const abs=n=>Math.abs(Number(n)||0;
+const abs=n=>Math.abs(Number(n)||0);
 
 export function classifyCombination(combination={}){
   const explicit=norm(combination.limitStateCategory||combination.limitStateType||combination.category||combination.designSituation);

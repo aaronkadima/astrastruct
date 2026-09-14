@@ -9,12 +9,9 @@ assert.equal(PRODUCT_VERSION,'0.49.0','PRODUCT_VERSION não sobe antes do releas
 assert.equal(PROJECT_SCHEMA_VERSION,2);assert.equal(RESULT_CONTRACT_VERSION,'1.0');
 assert.equal(VNL_CONTRACT,'visual-nonlinear-language/v2');assert.equal(VNL_VERSION,'0.49.0-exp');assert.equal(VNL_EXECUTION_CONTRACT,'vnl-execution/v1');assert.equal(VNL_PROJECT_CONTRACT,'project-vnl/v1');
 for(const block of ['Geometry','Material','Section','Boundary','Load','Combination','Material Nonlinearity','Geometric Nonlinearity','Increment','Convergence','Contact','Solver','Result','Plot','Export'])assert.ok(VNL_BLOCKS.includes(block),`invariante VNL ausente: ${block}`);
-assert.equal(RELIABILITY_CONTRACT,'structural-reliability/v1');assert.equal(RELIABILITY_VERSION,'0.50.0-exp');
-assert.equal(OPTIMIZATION_CONTRACT,'structural-optimization/v1');assert.equal(OPTIMIZATION_VERSION,'0.50.0-exp');
+assert.equal(RELIABILITY_CONTRACT,'structural-reliability/v1');assert.equal(RELIABILITY_VERSION,'0.50.0-exp');assert.equal(OPTIMIZATION_CONTRACT,'structural-optimization/v1');assert.equal(OPTIMIZATION_VERSION,'0.50.0-exp');
 for(const d of ['deterministic','normal','lognormal','uniform'])assert.ok(RANDOM_VARIABLE_DISTRIBUTIONS.includes(d),`distribuição ausente: ${d}`);
-assert.ok(pkg.scripts.test.startsWith('node tests/development-gate-v050-smoke.mjs && node tests/reliability-optimization-v050-smoke.mjs && node tests/vnl-runtime-v049-smoke.mjs && node tests/vnl-modes-v049-smoke.mjs'),'test chain deve iniciar pelos gates v0.50 e regressões VNL v0.49');
-assert.ok(!pkg.scripts.test.includes('tests/release-gate-v049-smoke.mjs'),'release gate histórico v0.49 não deve bloquear o gate corrente');
-assert.ok(!pkg.scripts.test.includes('tests/release-gate-v050-smoke.mjs'),'release gate v0.50 não deve existir antes do fechamento');
-const docs=await readFile(new URL('../docs/reliability-optimization-v050.md',import.meta.url),'utf8');
-for(const phrase of ['v0.50 — Reliability + Optimization','structural-reliability/v1','Monte Carlo','MVFOSM','bounded-coordinate-search','independentes','`main` permanece intocada'])assert.ok(docs.includes(phrase),`documentação v0.50 incompleta: ${phrase}`);
-console.log('AstraStruct v0.50 development gate: reliability and optimization core enabled without product bump; VNL v0.49 invariants preserved.');
+assert.ok(pkg.scripts.test.startsWith('node tests/development-gate-v050-smoke.mjs && node tests/reliability-optimization-v050-smoke.mjs && node tests/reliability-system-v050-smoke.mjs && node tests/vnl-runtime-v049-smoke.mjs && node tests/vnl-modes-v049-smoke.mjs'),'test chain deve iniciar pelos gates v0.50 e regressões VNL v0.49');
+assert.ok(!pkg.scripts.test.includes('tests/release-gate-v049-smoke.mjs'),'release gate histórico v0.49 não deve bloquear o gate corrente');assert.ok(!pkg.scripts.test.includes('tests/release-gate-v050-smoke.mjs'),'release gate v0.50 não deve existir antes do fechamento');
+const docs=await readFile(new URL('../docs/reliability-optimization-v050.md',import.meta.url),'utf8');for(const phrase of ['v0.50 — Reliability + Optimization','structural-reliability/v1','Monte Carlo','MVFOSM','FORM / HL-RF','Confiabilidade de sistema','Importance sampling','bounded-coordinate-search','`main` permanece intocada'])assert.ok(docs.includes(phrase),`documentação v0.50 incompleta: ${phrase}`);
+console.log('AstraStruct v0.50 development gate: reliability, system reliability, rare-event sampling and optimization enabled without product bump; VNL v0.49 invariants preserved.');

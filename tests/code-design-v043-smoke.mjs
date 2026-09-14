@@ -10,18 +10,9 @@ const profile=createCodeDesignProfile({
   id:'user-v043-benchmark',code:'USER-PARAMETERIZED',edition:'2026',
   provenance:{source:'benchmark parameters supplied explicitly',requiresLicensedParameters:true,automaticResistance:false},
   parameters:{
-    rc:{
-      flexure:{phi:.90,alpha1:.85,beta1:.80,epsCu:.003},
-      shear:{phi:.75,vcCoefficient:.17,steelCoefficient:1}
-    },
+    rc:{flexure:{phi:.90,alpha1:.85,beta1:.80,epsCu:.003},shear:{phi:.75,vcCoefficient:.17,steelCoefficient:1}},
     steel:{phiTension:.90,phiBending:.90,phiShear:.90,shearCoefficient:.60,interaction:{axialExponent:1,bendingExponent:1,limit:1}},
-    foundation:{
-      sliding:{frictionCoefficient:.50,cohesionKPa:0,resistanceFactor:.90},
-      stability:{requiredOverturningFS:1.50},
-      punching:{phi:.75,concreteCoefficient:.17},
-      oneWayShear:{phi:.75,concreteCoefficient:.17},
-      flexure:{phi:.90,leverArmRatio:.90}
-    }
+    foundation:{sliding:{frictionCoefficient:.50,cohesionKPa:0,resistanceFactor:.90},stability:{requiredOverturningFS:1.50},punching:{phi:.75,concreteCoefficient:.17},oneWayShear:{phi:.75,concreteCoefficient:.17},flexure:{phi:.90,leverArmRatio:.90}}
   },
   clauses:{foundationBearing:'user-profile',foundationSliding:'user-profile',foundationOverturning:'user-profile',foundationPunching:'user-profile',foundationOneWayShear:'user-profile',foundationFlexure:'user-profile'}
 });
@@ -58,7 +49,7 @@ near(footingFlex.resistance,364.5);assert.equal(footingFlex.ok,true);
 const pending=designCheck({id:'licensed-coefficient-pending',discipline:'Foundation',limitState:'Parâmetro normativo ausente',demand:1,resistance:null,profile});
 assert.equal(pending.ok,null);assert.equal(pending.utilization,null);
 const result=summarizeCodeDesign({profile,combinationId:'ULS-1',checks:[rcFlex,rcShear,...steel,bearing,sliding,overturning,punching,oneWay,footingFlex,pending]});
-assert.equal(result.contract,CODE_DESIGN_CONTRACT);assert.equal(result.summary.fail,0);assert.equal(result.summary.pending,1);assert.ok(result.summary.pass>=14);
+assert.equal(result.contract,CODE_DESIGN_CONTRACT);assert.equal(result.summary.count,14);assert.equal(result.summary.pass,13);assert.equal(result.summary.fail,0);assert.equal(result.summary.pending,1);
 const result2=summarizeCodeDesign({profile,combinationId:'ULS-2',checks:[designCheck({id:'governing-demo',discipline:'Steel',limitState:'benchmark',demand:95,resistance:100,profile})]});
 const envelope=governingAcrossCombinations([{combinationId:'ULS-1',result},{combinationId:'ULS-2',result:result2}]);
 assert.equal(envelope.contract,'code-design-envelope/v1');assert.ok(envelope.governing.utilization>=.95-1e-12);

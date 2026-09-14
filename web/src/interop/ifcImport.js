@@ -5,7 +5,7 @@ export const IFC_IMPORT_STAGING_CONTRACT='ifc-import-staging/v1';
 export const IFC_IMPORT_STAGING_VERSION='0.46.0-exp';
 
 const text=v=>String(v??'').trim();
-const finite=v=>Number.isFinite(Number(v));
+const finite=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v));
 const positive=v=>finite(v)&&Number(v)>0;
 const copy=v=>v==null?v:typeof structuredClone==='function'?structuredClone(v):JSON.parse(JSON.stringify(v));
 

@@ -1,0 +1,66 @@
+import React, { useMemo, useState } from 'react';
+// @ts-ignore
+import { normalizeProject } from '../../web/src/core/model.js';
+// @ts-ignore
+import {
+  VNL_BLOCKS,
+  VNL_BLOCK_CATALOG,
+  createVnlNode,
+  createVnlEdge,
+  defaultVnlGraph,
+  validateGraph,
+  executeVnlGraph,
+  vnlGraphFromProject,
+  withVnlGraph,
+} from '../../web/src/vnl/index.js';
+import './vnl-workbench.css';
+
+const STORAGE_KEY='astrastruct.project';
+const clone=<T,>(value:T):T=>JSON.parse(JSON.stringify(value));
+const readProject=()=>{try{const raw=localStorage.getItem(STORAGE_KEY);return normalizeProject(raw?JSON.parse(raw):{});}catch{return normalizeProject({});}};
+const portValue=(nodeId:string,port:string)=>`${nodeId}::${port}`;
+const splitPort=(value:string)=>{const [nodeId,port]=value.split('::');return {nodeId,port};};
+
+function ParamEditor({node,project,onChange}:{node:any;project:any;onChange:(params:any)=>void}){
+  const p=node.params||{};
+  const patch=(key:string,value:any)=>onChange({...p,[key]:value});
+  if(node.type==='Solver')return <div className="vnl-param-grid"><label>Análise<select value={p.analysisType||'inherit'} onChange={e=>patch('analysisType',e.target.value)}><option value="inherit">Herdar</option><option value="linear">Linear</option><option value="pdelta">P-Delta</option><option value="corotational">Co-rotacional</option><option value="modal">Modal</option><option value="time-history">Time-history</option><option value="response-spectrum">Response spectrum</option></select></label><label>Cenário<select value={p.scenarioId||''} onChange={e=>patch('scenarioId',e.target.value||null)}><option value="">Projeto atual</option>{[...(project.loadCases||[]),...(project.loadCombinations||[])].map((s:any)=><option key={s.id} value={s.id}>{s.name||s.id}</option>)}</select></label></div>;
+  if(node.type==='Geometric Nonlinearity')return <div className="vnl-param-grid"><label>Modo<select value={p.mode||'corotational'} onChange={e=>patch('mode',e.target.value)}><option value="linear">Linear</option><option value="pdelta">P-Delta</option><option value="corotational">Co-rotacional</option></select></label></div>;
+  if(node.type==='Material Nonlinearity')return <label className="vnl-check"><input type="checkbox" checked={p.enabled!==false} onChange={e=>patch('enabled',e.target.checked)}/>Ativar constitutivos não lineares existentes no modelo</label>;
+  if(node.type==='Increment')return <div className="vnl-param-grid"><label>Passos<input type="number" min="1" max="200" value={p.steps??20} onChange={e=>patch('steps',Number(e.target.value))}/></label><label>Controle<select value={p.controlMode||'load'} onChange={e=>patch('controlMode',e.target.value)}><option value="load">Carga</option><option value="displacement">Deslocamento</option><option value="arc-length">Arc-length</option></select></label><label>DOF<input value={p.displacementDof||'uy'} onChange={e=>patch('displacementDof',e.target.value)}/></label><label>Alvo<input type="number" step="0.001" value={p.displacementTarget??-0.05} onChange={e=>patch('displacementTarget',Number(e.target.value))}/></label></div>;
+  if(node.type==='Convergence')return <div className="vnl-param-grid"><label>Máx. iterações<input type="number" min="2" max="100" value={p.maxIterations??35} onChange={e=>patch('maxIterations',Number(e.target.value))}/></label><label>Tolerância<input type="number" step="1e-8" value={p.tolerance??1e-8} onChange={e=>patch('tolerance',Number(e.target.value))}/></label><label className="vnl-check"><input type="checkbox" checked={p.lineSearch!==false} onChange={e=>patch('lineSearch',e.target.checked)}/>Line search</label></div>;
+  if(node.type==='Plot')return <div className="vnl-param-grid"><label>Métrica<select value={p.metric||'displacementMagnitude'} onChange={e=>patch('metric',e.target.value)}><option value="displacementMagnitude">|u|</option><option value="ux">Ux</option><option value="uy">Uy</option><option value="uz">Uz</option><option value="rz">Rz</option><option value="frequencyHz">Frequência</option><option value="loadFactor">Fator de carga</option></select></label><label>Rótulo<input value={p.label||''} onChange={e=>patch('label',e.target.value)}/></label></div>;
+  if(node.type==='Export')return <div className="vnl-param-grid"><label>Formato<select value={p.format||'json'} onChange={e=>patch('format',e.target.value)}><option value="json">JSON</option></select></label><label>Arquivo<input value={p.fileName||'astrastruct-vnl-result.json'} onChange={e=>patch('fileName',e.target.value)}/></label></div>;
+  return <div className="vnl-param-note">Este bloco usa diretamente o modelo estrutural corrente; não cria propriedades mecânicas fictícias.</div>;
+}
+
+export function VnlWorkbench(){
+  const [open,setOpen]=useState(false);
+  const [project,setProject]=useState<any>(()=>readProject());
+  const [graph,setGraph]=useState<any>(()=>vnlGraphFromProject(readProject()));
+  const [selectedId,setSelectedId]=useState<string|null>(null);
+  const [fromPort,setFromPort]=useState('');
+  const [toPort,setToPort]=useState('');
+  const [execution,setExecution]=useState<any>(null);
+  const [runtimeError,setRuntimeError]=useState('');
+  const validation=useMemo(()=>validateGraph(graph),[graph]);
+  const selected=graph.nodes.find((n:any)=>n.id===selectedId)||null;
+  const outputOptions=graph.nodes.flatMap((node:any)=>Object.keys(VNL_BLOCK_CATALOG[node.type]?.outputs||{}).map(port=>({value:portValue(node.id,port),label:`${node.id} · ${node.type}.${port}`})));
+  const inputOptions=graph.nodes.flatMap((node:any)=>Object.keys(VNL_BLOCK_CATALOG[node.type]?.inputs||{}).map(port=>({value:portValue(node.id,port),label:`${node.id} · ${node.type}.${port}`})));
+
+  const refresh=()=>{const p=readProject();setProject(p);setGraph(vnlGraphFromProject(p));setExecution(null);setRuntimeError('');setSelectedId(null);};
+  const addBlock=(type:string)=>{const node=createVnlNode(type,{position:{x:80+graph.nodes.length*24,y:100+graph.nodes.length*18}});setGraph((old:any)=>({...clone(old),nodes:[...old.nodes,node]}));setSelectedId(node.id);};
+  const removeBlock=(id:string)=>{setGraph((old:any)=>({...clone(old),nodes:old.nodes.filter((n:any)=>n.id!==id),edges:old.edges.filter((e:any)=>e.from.nodeId!==id&&e.to.nodeId!==id)}));if(selectedId===id)setSelectedId(null);};
+  const updateNode=(id:string,patch:any)=>setGraph((old:any)=>({...clone(old),nodes:old.nodes.map((n:any)=>n.id===id?{...n,...patch}:n)}));
+  const moveNode=(id:string,delta:number)=>setGraph((old:any)=>{const next=clone(old),i=next.nodes.findIndex((n:any)=>n.id===id),j=Math.max(0,Math.min(next.nodes.length-1,i+delta));if(i<0||i===j)return next;const [node]=next.nodes.splice(i,1);next.nodes.splice(j,0,node);return next;});
+  const connect=()=>{if(!fromPort||!toPort)return;const from=splitPort(fromPort),to=splitPort(toPort);try{const edge=createVnlEdge(from.nodeId,from.port,to.nodeId,to.port);setGraph((old:any)=>({...clone(old),edges:[...old.edges.filter((e:any)=>e.id!==edge.id),edge]}));setFromPort('');setToPort('');}catch(e:any){setRuntimeError(e?.message||String(e));}};
+  const removeEdge=(id:string)=>setGraph((old:any)=>({...clone(old),edges:old.edges.filter((e:any)=>e.id!==id)}));
+  const reset=()=>{const next=defaultVnlGraph({id:`vnl-${project.id||'project'}`});setGraph(next);setSelectedId(null);setExecution(null);setRuntimeError('');};
+  const addParallelBranch=()=>{const geometry=graph.nodes.find((n:any)=>n.type==='Geometry');if(!geometry){setRuntimeError('Adicione Geometry antes de criar um ramo.');return;}const suffix=Date.now().toString(36),solver=createVnlNode('Solver',{id:`S_${suffix}`,params:{analysisType:'linear',label:'Ramo paralelo'}}),result=createVnlNode('Result',{id:`R_${suffix}`}),plot=createVnlNode('Plot',{id:`P_${suffix}`,params:{metric:'displacementMagnitude',label:'Ramo paralelo'}});setGraph((old:any)=>({...clone(old),nodes:[...old.nodes,solver,result,plot],edges:[...old.edges,createVnlEdge(geometry.id,'model',solver.id,'model'),createVnlEdge(solver.id,'result',result.id,'result'),createVnlEdge(result.id,'result',plot.id,'result')]}));};
+  const save=()=>{try{const next=withVnlGraph(project,graph);localStorage.setItem(STORAGE_KEY,JSON.stringify(next));setProject(normalizeProject(next));setRuntimeError('');window.dispatchEvent(new CustomEvent('astrastruct:vnl-project-saved',{detail:{project:next}}));}catch(e:any){setRuntimeError(e?.message||String(e));}};
+  const run=()=>{try{setRuntimeError('');const next=withVnlGraph(project,graph);localStorage.setItem(STORAGE_KEY,JSON.stringify(next));setProject(normalizeProject(next));const out=executeVnlGraph(graph,next);setExecution(out);localStorage.setItem('astrastruct.vnl.lastExecution',JSON.stringify({graphId:out.graphId,results:out.results.map((r:any)=>({nodeId:r.nodeId,label:r.label,scenarioId:r.scenarioId,analysisType:r.analysisType,result:r.result})),plots:out.plots,artifacts:out.artifacts}));window.dispatchEvent(new CustomEvent('astrastruct:vnl-result',{detail:{result:out.primaryResult,execution:out}}));}catch(e:any){setRuntimeError(e?.message||String(e));setExecution(null);}};
+  const download=(artifact:any)=>{const blob=new Blob([artifact.content],{type:artifact.mimeType||'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=artifact.fileName||'astrastruct-vnl-result.json';a.click();URL.revokeObjectURL(url);};
+
+  if(!open)return <button className="vnl-v049-launcher" data-testid="vnl-v049-launcher" onClick={()=>{refresh();setOpen(true)}}>VNL <b>0.49</b></button>;
+  return <div className="vnl-v049-backdrop" data-testid="vnl-v049-workbench"><section className="vnl-v049-shell" role="dialog" aria-modal="true" aria-label="VNL 0.49 Workbench"><header><div><h2>VNL · Visual Nonlinear Language</h2><p>DAG tipado executável · v0.49.0-exp</p></div><button aria-label="Fechar VNL" onClick={()=>setOpen(false)}>×</button></header><div className="vnl-v049-toolbar"><button onClick={reset}>Pipeline padrão</button><button onClick={addParallelBranch}>+ Ramo de análise</button><button onClick={save} disabled={!validation.ok}>Salvar no projeto</button><button className="primary" data-testid="vnl-run" onClick={run} disabled={!validation.ok}>▶ Executar VNL</button><span className={validation.ok?'ok':'bad'}>{validation.ok?'Grafo válido':`${validation.errors.length} erro(s)`}</span></div><div className="vnl-v049-grid"><aside className="vnl-catalog"><h3>Blocos</h3>{VNL_BLOCKS.map((type:string)=><button key={type} onClick={()=>addBlock(type)}>+ {type}</button>)}</aside><main><div className="vnl-canvas-v049">{graph.nodes.map((node:any,index:number)=><article key={node.id} className={`vnl-card-v049 ${selectedId===node.id?'selected':''}`} onClick={()=>setSelectedId(node.id)}><div><small>{index+1}</small><b>{node.type}</b><code>{node.id}</code></div><div className="vnl-node-actions"><button title="Subir" onClick={e=>{e.stopPropagation();moveNode(node.id,-1)}}>↑</button><button title="Descer" onClick={e=>{e.stopPropagation();moveNode(node.id,1)}}>↓</button><button title="Remover" onClick={e=>{e.stopPropagation();removeBlock(node.id)}}>×</button></div></article>)}</div><section className="vnl-connector"><h3>Conexões tipadas</h3><div><select value={fromPort} onChange={e=>setFromPort(e.target.value)}><option value="">Saída…</option>{outputOptions.map((o:any)=><option key={o.value} value={o.value}>{o.label}</option>)}</select><span>→</span><select value={toPort} onChange={e=>setToPort(e.target.value)}><option value="">Entrada…</option>{inputOptions.map((o:any)=><option key={o.value} value={o.value}>{o.label}</option>)}</select><button onClick={connect}>Conectar</button></div><div className="vnl-edge-list">{graph.edges.map((edge:any)=><button key={edge.id} onClick={()=>removeEdge(edge.id)} title="Clique para remover">{edge.from.nodeId}.{edge.from.port} → {edge.to.nodeId}.{edge.to.port} ×</button>)}</div></section>{selected&&<section className="vnl-editor"><h3>{selected.type} <code>{selected.id}</code></h3><ParamEditor node={selected} project={project} onChange={params=>updateNode(selected.id,{params})}/></section>}<section className="vnl-validation"><h3>Validação</h3>{validation.ok?<p className="success">Sem erros estruturais.</p>:<ul>{validation.errors.map((issue:any,i:number)=><li key={`${issue.code}-${i}`}><b>{issue.code}</b> — {issue.message}</li>)}</ul>}{validation.warnings?.length>0&&<ul className="warnings">{validation.warnings.map((issue:any,i:number)=><li key={`${issue.code}-${i}`}>{issue.message}</li>)}</ul>}</section>{runtimeError&&<div className="vnl-runtime-error" role="alert">{runtimeError}</div>}{execution&&<section className="vnl-execution"><h3>Execução concluída</h3><div className="vnl-exec-metrics"><div><small>Solvers</small><b>{execution.results.length}</b></div><div><small>Plots</small><b>{execution.plots.length}</b></div><div><small>Artefatos</small><b>{execution.artifacts.length}</b></div><div><small>Resultado principal</small><b>{execution.primaryResult?.analysisType||'—'}</b></div></div>{execution.results.map((r:any)=><p key={r.nodeId}><code>{r.nodeId}</code> {r.label} · {r.analysisType} · {r.scenarioId||'cenário atual'}</p>)}{execution.artifacts.map((a:any)=><button key={a.nodeId} onClick={()=>download(a)}>Baixar {a.fileName}</button>)}</section>}</main></div></section></div>;
+}

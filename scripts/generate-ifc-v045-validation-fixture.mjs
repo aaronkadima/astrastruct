@@ -4,6 +4,7 @@ import {
   createIfcInteroperabilityModel,createIfcIdentityMap,assignIfcGlobalIds,compressIfcGuid,
   renderIfcStep,validateIfcStepEnvelope,parseIfcStructuralStep,validateIfcStructuralRoundTrip
 } from '../web/src/interop/index.js';
+import {PRODUCT_VERSION} from '../web/src/core/version.js';
 
 const output=resolve(process.argv[2]||'artifacts/ifc/astrastruct-v045-validation.ifc');
 const project={
@@ -44,7 +45,7 @@ const options={
   ownerMetadata:{
     person:{identification:'astrastruct-ci',familyName:'CI',givenName:'AstraStruct'},
     organization:{identification:'ASTRASTRUCT',name:'AstraStruct',description:'IFC4X3 external validation fixture'},
-    application:{version:'0.46.0',fullName:'AstraStruct',identifier:'ASTRASTRUCT'},
+    application:{version:PRODUCT_VERSION,fullName:'AstraStruct',identifier:'ASTRASTRUCT'},
     creationDate:1789347600
   },
   fileName:'astrastruct-v045-validation.ifc',timestamp:'2026-09-13T22:00:00-03:00'
@@ -56,4 +57,4 @@ if(!step.includes("Pset_MaterialSteel")||!step.includes("Pset_MaterialConcrete")
 if(roundTrip.nodes!==4||roundTrip.members!==2||roundTrip.materialAssociations!==2)throw new Error('IFC validation fixture: round-trip interno incompleto.');
 await mkdir(dirname(output),{recursive:true});
 await writeFile(output,step,'utf8');
-console.log(JSON.stringify({output,schema:envelope.schema,entities:envelope.entities,nodes:roundTrip.nodes,members:roundTrip.members,materialAssociations:roundTrip.materialAssociations,materialStrengthPsets:true},null,2));
+console.log(JSON.stringify({output,schema:envelope.schema,productVersion:PRODUCT_VERSION,entities:envelope.entities,nodes:roundTrip.nodes,members:roundTrip.members,materialAssociations:roundTrip.materialAssociations,materialStrengthPsets:true},null,2));

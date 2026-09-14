@@ -34,6 +34,9 @@ export {
   emitIfcStepLoadGroups,emitIfcStepLoadActions
 } from './ifcStepLoads.js';
 export {
+  IFC_STEP_LOAD_PARSE_CONTRACT,IFC_STEP_LOAD_PARSE_VERSION,extractIfcStructuralLoads
+} from './ifcStepLoadParse.js';
+export {
   IFC_STEP_OWNER_CONTRACT,IFC_STEP_OWNER_VERSION,validateIfcOwnerMetadata,emitIfcStepOwner
 } from './ifcStepOwner.js';
 export {

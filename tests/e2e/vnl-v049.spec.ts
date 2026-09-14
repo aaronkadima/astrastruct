@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('VNL v0.49 executes, branches, reuses Results and persists with the project', async ({ page }) => {
+test('VNL v0.49 executes, branches, guards invalid graphs, reuses Results and persists with the project', async ({ page }) => {
   await page.goto('./');
   const launcher = page.getByTestId('vnl-v049-launcher');
   await expect(launcher).toBeVisible();
@@ -13,6 +13,15 @@ test('VNL v0.49 executes, branches, reuses Results and persists with the project
 
   const run = page.getByTestId('vnl-run');
   await expect(run).toBeEnabled();
+
+  const resultCard = workbench.locator('.vnl-card-v049').filter({ hasText: 'Result' }).first();
+  await resultCard.getByTitle('Remover').click();
+  await expect(workbench).not.toContainText('Grafo válido');
+  await expect(run).toBeDisabled();
+  await workbench.getByRole('button', { name: 'Pipeline padrão' }).click();
+  await expect(workbench).toContainText('Grafo válido');
+  await expect(run).toBeEnabled();
+
   await run.click();
   await expect(workbench.locator('.vnl-execution')).toContainText('Execução concluída');
   await expect(workbench.locator('.vnl-execution')).toContainText('linear');

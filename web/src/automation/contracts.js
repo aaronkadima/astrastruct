@@ -1,0 +1,10 @@
+export const AUTOMATION_CONTRACT='engineering-automation/v1';
+export const AUTOMATION_VERSION='0.51.0-exp';
+export const AUTOMATION_STUDY_CONTRACT='project-automation-study/v1';
+export const AUTOMATION_STUDY_VERSION='0.51.0-exp';
+export const DIGITAL_ENGINEERING_RECORD_CONTRACT='digital-engineering-record/v1';
+export const DIGITAL_ENGINEERING_RECORD_VERSION='0.51.0-exp';
+export const ENGINEERING_ADVISOR_CONTRACT='engineering-advisor/v1';
+export const ENGINEERING_ADVISOR_VERSION='0.51.0-exp';
+export const AUTOMATION_STEP_TYPES=Object.freeze(['solve','advisor','reliability','optimization','snapshot']);
+export const AUTOMATION_PRESETS=Object.freeze(['analysis-review','analysis-reliability','analysis-optimization','digital-audit']);

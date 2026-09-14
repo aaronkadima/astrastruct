@@ -1,0 +1,7 @@
+import assert from'node:assert/strict';
+import{ENGINEERING_ADVISOR_CONTRACT,ENGINEERING_ADVISOR_VERSION,runEngineeringAdvisor}from'../web/src/automation/index.js';
+const base={id:'P',nodes:[{id:'N1'},{id:'N2'}],elements:[{id:'E1'}],supports:[],loads:[],elementLoads:[],materials:[{id:'concrete30',verified:false}],settings:{analysisType:'linear'},meta:{}};
+const advice=runEngineeringAdvisor(base);assert.equal(advice.contract,ENGINEERING_ADVISOR_CONTRACT);assert.equal(advice.version,ENGINEERING_ADVISOR_VERSION);assert.equal(advice.provider.kind,'deterministic');assert.equal(advice.provider.external,false);assert.ok(advice.items.some(x=>x.ruleId==='MODEL.SUPPORTS.EMPTY'&&x.severity==='warning'));assert.ok(advice.items.some(x=>x.ruleId==='MODEL.MATERIALS.UNVERIFIED'));assert.ok(advice.items.some(x=>x.ruleId==='ANALYSIS.RESULT.MISSING'));
+const withResult=runEngineeringAdvisor({...base,supports:[{nodeId:'N1'}],loads:[{id:'L1'}],materials:[{id:'M',verified:true}]},{result:{analysisType:'linear',displacements:[]}});assert.ok(withResult.items.some(x=>x.ruleId==='ANALYSIS.RESULT.AVAILABLE'&&x.severity==='ok'));
+const ifc=runEngineeringAdvisor({...base,meta:{importedFrom:{format:'IFC'},analysisReady:false}});assert.ok(ifc.items.some(x=>x.ruleId==='IFC.ANALYSIS.READY'&&x.severity==='blocker'));assert.ok(ifc.summary.blockers>=1);
+console.log('AstraStruct v0.51 engineering advisor smoke: deterministic, explainable and non-normative recommendations coherent.');

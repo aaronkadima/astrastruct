@@ -21,60 +21,42 @@ Nesta primeira etapa as variáveis são tratadas como **independentes**. Correla
 
 ## Monte Carlo
 
-`runMonteCarloReliability()` usa gerador pseudoaleatório reproduzível por seed, executa o solver real para cada amostra, avalia a função de estado limite `g` e retorna:
-
-- número de amostras e falhas;
-- probabilidade de falha `Pf`;
-- índice `beta = -Phi^-1(Pf)` quando `0 < Pf < 1`;
-- intervalo de Wilson de 95% para `Pf`;
-- média e desvio padrão da demanda;
-- proveniência das variáveis e do estado limite.
-
-A igualdade `g = 0` é classificada como falha. Amostras inválidas não são silenciosamente descartadas: erros do solver são propagados.
+`runMonteCarloReliability()` usa gerador pseudoaleatório reproduzível por seed, executa o solver real para cada amostra, avalia a função de estado limite `g` e retorna número de amostras/falhas, `Pf`, `beta`, intervalo de Wilson de 95%, média/desvio da demanda e proveniência. A igualdade `g = 0` é classificada como falha. Erros do solver não são descartados.
 
 ## MVFOSM
 
-`runMvfosmReliability()` implementa **Mean-Value First-Order Second-Moment (MVFOSM)** por diferenças finitas centrais no ponto médio. O método retorna média de `g`, desvio padrão de `g`, `beta`, `Pf` aproximada e sensibilidades normalizadas. Ele não é rotulado como FORM: a busca do design point no espaço normal ainda não faz parte deste incremento.
-
-## Seletores de resposta
-
-O estado limite e as constraints podem consultar respostas escalares reais:
-
-- deslocamento de nó;
-- deslocamento nodal máximo;
-- reação;
-- força de elemento;
-- força máxima de elemento;
-- tensão extrema nas estações de pós-processamento.
-
-O sentido padrão é `demand <= capacity`, com `g = capacity - demand`.
-
-## Otimização
-
-`optimizeProject()` inicia com `bounded-coordinate-search`, um pattern search determinístico com limites explícitos. Variáveis de projeto apontam para targets numéricos existentes. O objetivo pode ser soma de variáveis de projeto ou uma resposta estrutural. Constraints usam os mesmos seletores do módulo de confiabilidade e são avaliadas pelo solver real.
-
-O comparador privilegia factibilidade antes do objetivo; entre soluções inviáveis, reduz primeiro a violação normalizada. Isso evita esconder violações por penalidades arbitrárias.
-
-## Gate inicial v0.50
-
-O smoke determinístico usa uma barra axial linear para verificar:
-
-1. Monte Carlo com carga normal e seed reproduzível;
-2. `Pf` consistente com o problema analítico de referência;
-3. MVFOSM com `beta ≈ 2` no caso linear univariado;
-4. otimização da área com restrição de deslocamento, cuja solução analítica é aproximadamente `A = 0.005 m²`;
-5. manutenção da v0.49.0 como versão pública durante o desenvolvimento.
-
-## Próximas etapas antes do fechamento
-
-O gate de release v0.50 só poderá ser criado após ampliar a camada com, no mínimo, FORM/HL-RF ou equivalente validado, tratamento explícito de correlação, amostragem mais eficiente para eventos raros, múltiplos estados limite, integração React para configuração/revisão dos estudos, persistência controlada no projeto e regressão browser desktop/Android/tablet.
-
-Nenhuma promoção para `main` será feita sem solicitação explícita.
+`runMvfosmReliability()` implementa Mean-Value First-Order Second-Moment por diferenças finitas centrais no ponto médio. Retorna média e desvio de `g`, `beta`, `Pf` e sensibilidades. Não é rotulado como FORM.
 
 ## FORM / HL-RF e correlação normal
 
-O segundo incremento adiciona `runFormReliability()` com o algoritmo Hasofer-Lind-Rackwitz-Fiessler no espaço normal padrão independente. Quando uma `correlationMatrix` é fornecida, a transformação usa fatoração de Cholesky para mapear o vetor independente `u` em variáveis normais correlacionadas antes de aplicar os targets físicos ao projeto.
+`runFormReliability()` implementa Hasofer-Lind-Rackwitz-Fiessler no espaço normal padrão independente. Com `correlationMatrix`, usa Cholesky para mapear `u` em variáveis normais correlacionadas antes de aplicar os targets físicos. FORM e correlação são deliberadamente normal-only nesta etapa. Matrizes não quadradas, assimétricas, diagonal não unitária ou não positivas definidas são rejeitadas. Não há conversão silenciosa Nataf/Rosenblatt.
 
-Nesta etapa, correlação explícita e FORM são deliberadamente limitados a variáveis **normais** com desvio padrão positivo. O código rejeita matrizes não quadradas, assimétricas, com diagonal diferente de 1 ou que não sejam positivas definidas. Distribuições não normais não são convertidas silenciosamente por Nataf/Rosenblatt.
+O Monte Carlo aceita a mesma `correlationMatrix` sob essa regra. O smoke contém duas cargas normais com `rho=0.5` e referência analítica `beta=20/sqrt(300)`.
 
-O Monte Carlo também aceita a mesma `correlationMatrix` sob essa regra normal-only. O smoke inclui um caso analítico de duas cargas normais com `rho = 0.5`, para o qual `beta = 20/sqrt(300)`.
+## Confiabilidade de sistema
+
+`runSystemMonteCarloReliability()` avalia vários estados limite com **uma única chamada ao solver por amostra**. O modo `series` classifica falha do sistema quando qualquer componente falha; o modo `parallel` exige falha simultânea de todos. O resultado preserva `Pf`, `beta` e intervalo de Wilson por componente e pelo sistema. IDs de estados limite duplicados são rejeitados.
+
+## Importance sampling para eventos raros
+
+`runImportanceSamplingReliability()` usa uma proposta normal unitária deslocada para o design point FORM no espaço `u`. O estimador aplica a razão exata de verossimilhança entre a densidade normal padrão alvo e a proposta deslocada. Retorna `Pf`, `beta`, erro-padrão, coeficiente de variação, intervalo aproximado de 95%, ESS global e ESS das amostras de falha. Pode usar um `centerU` explícito; caso contrário exige FORM convergido.
+
+A implementação continua restrita a variáveis normais quando há transformação por correlação. O smoke de evento raro usa `beta=4` como referência analítica e verifica que a proposta centrada observa número suficiente de falhas sem confundir frequência bruta da proposta com `Pf` ponderada.
+
+## Seletores de resposta
+
+Estados limite e constraints podem consultar deslocamento de nó, deslocamento nodal máximo, reação, força de elemento, força máxima de elemento e tensão extrema nas estações. O sentido padrão é `demand <= capacity`, com `g = capacity - demand`.
+
+## Otimização
+
+`optimizeProject()` inicia com `bounded-coordinate-search`, pattern search determinístico com limites explícitos. Variáveis apontam para targets numéricos existentes; objetivo pode ser soma de variáveis ou resposta estrutural. Constraints reutilizam os seletores e são avaliadas pelo solver. Factibilidade tem prioridade sobre o objetivo.
+
+## Gate inicial v0.50
+
+Os smokes determinísticos verificam Monte Carlo reproduzível, MVFOSM `beta≈2`, FORM `beta≈2`, correlação normal `rho=0.5`, otimização analítica de área `A≈0.005 m²`, confiabilidade de sistema com eventos aninhados e importance sampling para `beta=4`.
+
+## Próximas etapas antes do fechamento
+
+Persistência controlada dos estudos, integração React para configuração/revisão, regression browser desktop/Android/tablet e um gate final dedicado ainda são obrigatórios. Não iniciar v0.51 antes disso.
+
+Nenhuma promoção para `main` será feita sem solicitação explícita.

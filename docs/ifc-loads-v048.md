@@ -1,116 +1,90 @@
-# AstraStruct v0.48 — casos, ações e combinações estruturais IFC
+# AstraStruct v0.48 — casos, ações, combinações e round-trip IFC
 
 ## Status
 
-A v0.48 está em desenvolvimento somente no branch `develop`. O produto permanece formalmente em **v0.47.0** até o gate final da v0.48. **Nenhuma promoção para `main`** faz parte deste incremento.
+A v0.48 permanece em desenvolvimento somente no branch `develop`. O produto formal continua em **v0.47.0** até o fechamento do gate final. **Nenhuma promoção para `main`** faz parte desta etapa.
 
-## Objetivo
+## Escopo e contratos
 
-Transportar casos de carga, ações estruturais e combinações do AstraStruct para IFC4X3 com três camadas explícitas: um mapping canônico auditável, a materialização física no STEP e um parser dedicado ao round-trip dessas entidades. O writer somente serializa entidades quando o mapping está READY; tipos de carga sem semântica inequívoca permanecem bloqueantes.
-
-Contratos experimentais:
+A v0.48 implementa o intercâmbio bidirecional do subconjunto de cargas estruturais já suportado pelo AstraStruct, sem converter entidades IFC desconhecidas por aproximação. Os contratos experimentais são:
 
 - `ifc-structural-loads/v1` — `0.48.0-exp`;
 - `ifc-step-loads/v1` — `0.48.0-exp`;
 - `ifc-step-load-parse/v1` — `0.48.0-exp`;
 - `ifc-step-writer/v1` — `0.48.0-exp`;
 - `ifc-exchange-state/v1` — `0.48.0-exp`;
-- schema alvo: `IFC4X3_ADD2`;
-- sistema de unidades aceito nesta etapa: `kN-m-MPa`.
+- `ifc-import-staging/v1` — `0.48.0-exp`.
+
+Schema alvo: `IFC4X3_ADD2`, no sistema nativo `kN-m-MPa`.
 
 ## Casos de carga
 
-Cada `project.loadCases[]` é mapeado para `IfcStructuralLoadCase` com:
+Cada caso nativo é serializado como `IfcStructuralLoadCase` com `PredefinedType = LOAD_CASE` e `Coefficient = 1.0`. O mapeamento de tipo é conservador:
 
-- `PredefinedType = LOAD_CASE`;
-- `Coefficient = 1.0`;
-- `ActionSource = NOTDEFINED`, porque o modelo nativo ainda não armazena a origem normativa/física da ação;
-- `ActionType` conforme o tipo nativo conhecido.
-
-Mapeamento inicial:
-
-| AstraStruct | IFC `IfcActionTypeEnum` |
+| AstraStruct | IFC |
 |---|---|
 | `permanent` | `PERMANENT_G` |
 | `variable` | `VARIABLE_Q` |
 | `extraordinary` | `EXTRAORDINARY_A` |
 | `user` ou desconhecido | `NOTDEFINED` |
 
-`USERDEFINED` não é usado por aproximação, pois a semântica IFC exige informação complementar de tipo definido pelo usuário. O contrato não inventa `ObjectType`.
+`ActionSource` permanece `NOTDEFINED` enquanto o modelo nativo não armazenar a origem da ação. `USERDEFINED` não é inventado sem informação complementar.
+
+Na importação, os casos recebem IDs nativos determinísticos (`IFC_LC_1`, `IFC_LC_2`, ...). O `Name` IFC permanece apenas como nome humano; ele não é reinterpretado como identificador interno.
 
 ## Ações nodais
 
-As cargas de `project.loads[]` são mapeadas para:
+As cargas nodais suportadas são:
 
 - `IfcStructuralPointAction`;
 - `IfcStructuralLoadSingleForce`;
 - `GlobalOrLocal = GLOBAL_COORDS`;
-- conexão ao `IfcStructuralPointConnection` de destino por `IfcRelConnectsStructuralActivity`;
-- associação ao caso por `IfcRelAssignsToGroup`.
+- `fx/fy/fz -> ForceX/ForceY/ForceZ`;
+- `mx/my/mz -> MomentX/MomentY/MomentZ`;
+- ação -> caso por `IfcRelAssignsToGroup`;
+- ação -> `IfcStructuralPointConnection` por `IfcRelConnectsStructuralActivity`.
 
-Componentes preservados:
+O uso de `GLOBAL_COORDS` corresponde à montagem do solver AstraStruct, que insere as cargas nodais diretamente no vetor global.
 
-- `fx -> ForceX`;
-- `fy -> ForceY`;
-- `fz -> ForceZ`;
-- `mx -> MomentX`;
-- `my -> MomentY`;
-- `mz -> MomentZ`.
-
-O uso de `GLOBAL_COORDS` foi confirmado contra a montagem do solver AstraStruct: as cargas nodais são inseridas diretamente no vetor global de forças.
+Na importação, uma ação pontual só é aceita se conservar exatamente essa semântica. Alvo não nodal, sistema diferente de `GLOBAL_COORDS`, tipo de AppliedLoad incompatível ou ação sem caso são bloqueantes.
 
 ## Cargas uniformes em barras
 
-Na v0.48, apenas cargas `kind = uniform` aplicadas a `frame2d` ou `frame3d` são aceitas.
-
-Mapeamento:
+O subconjunto v0.48 suporta `kind = uniform` em `frame2d` e `frame3d`:
 
 - `IfcStructuralLinearAction`;
-- `PredefinedType = CONST`;
 - `IfcStructuralLoadLinearForce`;
 - `GlobalOrLocal = LOCAL_COORDS`;
-- `ProjectedOrTrue = $/null` nesta fase, porque o AstraStruct não declara carga por comprimento projetado;
-- conexão ao `IfcStructuralCurveMember` por `IfcRelConnectsStructuralActivity`.
+- `PredefinedType = CONST`;
+- `qx/qy/qz -> LinearForceX/LinearForceY/LinearForceZ`;
+- `ProjectedOrTrue = $` porque o modelo nativo não declara carga por comprimento projetado.
 
-Componentes:
+O uso de `LOCAL_COORDS` é coerente com os solvers 2D/3D: os componentes são montados no sistema local antes da transformação global.
 
-- `qx -> LinearForceX`;
-- `qy -> LinearForceY`;
-- `qz -> LinearForceZ`;
-- momentos distribuídos inicialmente iguais a zero.
-
-O uso de `LOCAL_COORDS` foi confirmado no solver 2D/3D: `qx/qy/qz` são montados no sistema local do elemento e somente depois transformados para o sistema global.
-
-Cargas uniformes em `truss3d` são bloqueadas porque o próprio solver atual não as suporta.
+Na importação, momentos distribuídos diferentes de zero são bloqueados, pois ainda não existe equivalente nativo seguro. Carga uniforme em treliça também permanece bloqueada.
 
 ## Combinações
 
-Cada `project.loadCombinations[]` é mapeada como `IfcStructuralLoadGroup` com:
+Cada combinação é representada por `IfcStructuralLoadGroup` com `PredefinedType = LOAD_COMBINATION`. Cada caso participa por `IfcRelAssignsToGroupByFactor`.
 
-- `PredefinedType = LOAD_COMBINATION`;
-- `ActionType = NOTDEFINED`;
-- `ActionSource = NOTDEFINED`;
-- `Coefficient = 1.0`.
+Termos repetidos do mesmo caso são somados conforme `resolveScenario()`. Fatores não finitos ou referências a casos inexistentes são bloqueantes. Termos cuja soma é zero são omitidos com warning.
 
-Cada termo válido da combinação gera uma relação `IfcRelAssignsToGroupByFactor` entre um `IfcStructuralLoadCase` e a combinação. O fator permanece específico para o par caso-combinação.
+Na importação, as combinações recebem IDs determinísticos (`IFC_COMB_1`, ...), mantendo o nome original e os fatores. Combinação sem termo importável gera bloqueio.
 
-Termos repetidos do mesmo caso são somados, reproduzindo a semântica de `resolveScenario()` do solver. Termos cuja soma resulta em zero são omitidos com warning. Referências a casos inexistentes ou fatores não finitos são bloqueantes.
+## `LoadedBy`
 
-## `LoadedBy` do modelo de análise
+O `IfcStructuralAnalysisModel.LoadedBy` contém somente grupos de topo:
 
-O STEP v0.48 preenche `IfcStructuralAnalysisModel.LoadedBy` apenas com grupos de carga de topo, conforme a semântica IFC4X3:
+- com combinações: apenas os `IfcStructuralLoadGroup` de `LOAD_COMBINATION`;
+- sem combinações: os `IfcStructuralLoadCase`.
 
-- se existem combinações, `LoadedBy` referencia somente as instâncias `IfcStructuralLoadGroup` de `LOAD_COMBINATION`;
-- se não existem combinações, `LoadedBy` referencia os `IfcStructuralLoadCase`;
-- ações individuais não são inseridas em `IfcStructuralAnalysisModel.IsGroupedBy`.
+As ações individuais não são incluídas no `IsGroupedBy` do analysis model. A hierarquia é `LoadedBy -> caso/combinação -> ação`.
 
-A relação estrutural principal do analysis model continua agrupando somente nós/conexões e membros. As cargas são alcançadas pela hierarquia `LoadedBy -> load group/case -> action`.
+O parser `ifc-step-load-parse/v1` valida essa hierarquia. Se houver combinação e `LoadedBy` apontar para um objeto incompatível, o arquivo não fica READY para importação.
 
 ## Persistência de GlobalIds
 
-O estado `ifc-exchange-state/v1` foi ampliado com `loadGlobalIds`.
-
-As chaves persistentes incluem:
+`ifc-exchange-state/v1` inclui `loadGlobalIds`. As chaves estáveis são:
 
 - `load-case:<id>`;
 - `load-combination:<id>`;
@@ -119,88 +93,103 @@ As chaves persistentes incluem:
 - `rel-load-factor:<combinationId>:<caseId>`;
 - `rel-load-activity:<id>`.
 
-Ao reexportar o mesmo projeto, esses GlobalIds são reutilizados. O writer também verifica colisões entre identidades de projeto, analysis model, nós, membros, relações estruturais, associações de material, casos, combinações, ações e relações de carga.
+O writer verifica colisões entre GlobalIds do projeto, analysis model, nós, membros, relações estruturais, associações de material e todos os objetos de carga.
 
-## Parser STEP de cargas
+Na importação, o staging cria `project.ifcImport.exchangeStateSeed`. Esse `exchangeStateSeed` contém:
 
-`ifc-step-load-parse/v1` lê a hierarquia de cargas diretamente das referências STEP, sem reinterpretar `Name` como ID interno. O parser resolve:
+- GlobalIds de `IfcProject` e `IfcStructuralAnalysisModel`;
+- GlobalIds de nós, membros e `IfcRelConnectsStructuralMember` reconstruíveis;
+- `materialAssociationGlobalIds` por elemento nativo;
+- `loadGlobalIds` usando os novos IDs nativos determinísticos;
+- `declarationGlobalId` e `groupGlobalId` quando presentes;
+- `creationDate` do `IfcOwnerHistory`.
 
-- `IfcStructuralLoadCase` e seus `ActionType`, `ActionSource` e `Coefficient`;
-- `IfcStructuralLoadGroup` de `LOAD_COMBINATION`;
+A UI usa esse seed quando ainda não existe estado em `localStorage` e também o persiste no momento do commit da importação. Assim, importar e reexportar o mesmo IFC preserva as identidades globais sempre que o objeto possui equivalente nativo.
+
+## Parser STEP
+
+`ifc-step-load-parse/v1` resolve as entidades por referências STEP e GlobalIds, e não por nomes. Ele lê:
+
+- `IfcStructuralLoadCase`;
+- `IfcStructuralLoadGroup / LOAD_COMBINATION`;
 - `IfcStructuralPointAction` + `IfcStructuralLoadSingleForce`;
 - `IfcStructuralLinearAction` + `IfcStructuralLoadLinearForce`;
-- ação -> caso por `IfcRelAssignsToGroup`;
-- ação -> alvo estrutural por `IfcRelConnectsStructuralActivity`;
-- caso -> combinação por `IfcRelAssignsToGroupByFactor`;
-- grupos de topo por `IfcStructuralAnalysisModel.LoadedBy`.
+- `IfcRelAssignsToGroup`;
+- `IfcRelAssignsToGroupByFactor`;
+- `IfcRelConnectsStructuralActivity`;
+- `IfcStructuralAnalysisModel.LoadedBy`.
 
-A identidade primária do round-trip é o `GlobalId`. O nome IFC permanece descrição humana; a etapa de importação deverá criar IDs nativos determinísticos e conservar os GlobalIds originais no seed do estado de intercâmbio.
+São bloqueantes: ação sem caso, ação sem alvo, múltiplos casos/alvos para a mesma ação, combinação vazia, relação fatorada incompatível, AppliedLoad não suportado e hierarquia `LoadedBy` incoerente.
 
-O parser marca como bloqueantes ações sem caso, ações sem alvo, combinações sem termos válidos, relações fatoradas com tipo incorreto e hierarquias `LoadedBy` incompatíveis com a presença de combinações.
+## Import staging e `commitReady`
 
-## Caso implícito
+`ifc-import-staging/v1` `0.48.0-exp` reconstrói:
 
-O solver nativo interpreta cargas sem `caseId` como pertencentes ao primeiro caso de carga. O mapping v0.48 preserva exatamente essa regra, mas registra `IMPLICIT_FIRST_LOAD_CASE` como warning para tornar a decisão auditável.
+- `project.loadCases`;
+- `project.loads`;
+- `project.elementLoads` uniformes;
+- `project.loadCombinations`;
+- propriedades estruturais já suportadas pelas versões anteriores.
 
-## Cargas nulas
+O staging expõe quatro estados:
 
-Uma ação cujos componentes são todos zero é omitida e gera `ZERO_LOAD_OMITTED`. Ela não cria uma entidade IFC sem efeito físico.
+- `geometryReady`: não existem bloqueios de estrutura/topologia nem perda de conteúdo de carga;
+- `loadReady`: todas as cargas presentes no subconjunto lido podem ser reconstruídas sem perda;
+- `commitReady`: o projeto pode substituir com segurança o projeto aberto;
+- `analysisReady`: além do commit seguro, o modelo possui as propriedades mecânicas necessárias à análise.
 
-## Escopo adiado
+Uma carga IFC não suportada torna `commitReady = false`. Portanto, um arquivo com geometria válida mas cargas que seriam descartadas não pode substituir o projeto aberto silenciosamente.
 
-Os seguintes tipos permanecem bloqueantes/pending nesta versão:
+A ausência de `E`, `G/ν` ou propriedades geométricas pode manter `analysisReady = false` sem necessariamente bloquear o commit, desde que o conteúdo estrutural e as cargas tenham sido preservados. O usuário pode completar as propriedades depois.
 
-- carga pontual ao longo da barra (`point`);
+## UI de intercâmbio
+
+A pré-importação apresenta:
+
+- nós, elementos, materiais e seções;
+- quantidade de casos e combinações;
+- cargas nodais e de barra;
+- readiness de geometria, cargas, importação e análise;
+- issues bloqueantes.
+
+O botão de importação só é habilitado quando `commitReady` é verdadeiro. O projeto atual é salvo em backup antes da substituição. O estado IFC importado é persistido antes do reload para garantir reexportação com identidade estável.
+
+Na exportação, a UI também mostra o resumo de casos/ações e bloqueia arquivos que contenham tipos de carga ainda fora do contrato v0.48.
+
+## Tipos adiados
+
+Permanecem fora deste incremento:
+
+- `point` ao longo da barra;
 - `followerEnd`;
 - `surface` / `pressure`;
 - `selfWeight`;
 - `thermal`;
 - `prestress`;
-- assentamentos prescritos.
+- assentamentos prescritos;
+- momentos distribuídos lineares.
 
-Eles não serão convertidos por aproximação. Cada família será adicionada somente depois de a direção, sistema de coordenadas, localização e entidade IFC correspondente estarem definidos de forma inequívoca.
-
-## Relações IFC
-
-O contrato produz três grupos de relações:
-
-1. `IfcRelAssignsToGroup`: ação estrutural -> caso de carga;
-2. `IfcRelAssignsToGroupByFactor`: caso de carga -> combinação, com fator;
-3. `IfcRelConnectsStructuralActivity`: ação -> nó/membro estrutural de destino.
-
-A emissão STEP mantém exatamente essas relações e atribui `IfcOwnerHistory` e GlobalIds persistentes a todas elas.
-
-## Readiness
-
-`mapping.ready = true` somente quando não existem issues bloqueantes. Warnings documentam decisões compatíveis com a semântica nativa, como caso implícito ou omissão de uma carga nula.
-
-`validateIfcStepReadiness()` adiciona um segundo gate: todos os registros `IfcRoot` do mapping de cargas precisam possuir GlobalId válido, único e sem colisão com os demais objetos IFC antes da serialização.
-
-O parser possui seu próprio `ready`, que só fica verdadeiro quando cada ação pode ser associada inequivocamente a um caso e a um alvo estrutural e quando a hierarquia das combinações é consistente.
+Esses casos não são convertidos por aproximação.
 
 ## Validação externa
 
-O fixture de CI inclui G/Q, ações nodais, uma ação uniforme e uma combinação ULS. O IfcOpenShell valida:
+O fixture de CI contém G/Q, duas ações nodais, uma ação uniforme e ULS = 1,2G + 1,5Q. O IfcOpenShell valida:
 
 - sintaxe STEP;
 - schema IFC4X3 e regras EXPRESS;
-- população esperada de casos e ações;
+- população de casos e ações;
 - `GLOBAL_COORDS` para ações nodais;
-- `LOCAL_COORDS` e `CONST` para ação linear uniforme;
+- `LOCAL_COORDS` e `CONST` para ação uniforme;
 - fatores 1,2 e 1,5;
-- uma única conexão ação -> alvo;
-- `LoadedBy` apontando apenas para a combinação de topo.
+- uma única ligação ação -> alvo;
+- `LoadedBy` apontando exclusivamente para a combinação de topo.
 
 ## Testes
 
-`tests/ifc-load-mapping-v048-smoke.mjs` cobre o mapping canônico, casos, ações, relações, combinações, warnings e bloqueios conservadores.
+- `tests/ifc-load-mapping-v048-smoke.mjs`: mapping canônico e bloqueios;
+- `tests/ifc-step-loads-v048-smoke.mjs`: emissão STEP, `LoadedBy` e persistência de `loadGlobalIds`;
+- `tests/ifc-load-parse-v048-smoke.mjs`: parser de casos, ações, alvos, fatores e GlobalIds;
+- `tests/ifc-load-import-v048-smoke.mjs`: reconstrução nativa e reexportação preservando as identidades IFC de origem;
+- `tests/development-gate-v048-smoke.mjs`: gate frontal experimental.
 
-`tests/ifc-step-loads-v048-smoke.mjs` cobre emissão STEP, `LoadedBy`, persistência de `loadGlobalIds` e coexistência com as identidades estruturais.
-
-`tests/ifc-load-parse-v048-smoke.mjs` cobre o round-trip STEP de casos, ações, alvos, fatores, `LoadedBy` e GlobalIds persistentes.
-
-O gate experimental é `tests/development-gate-v048-smoke.mjs`.
-
-## Próxima etapa
-
-A saída do parser será conectada ao `createIfcImportStaging()` para reconstruir `loadCases`, `loads`, `elementLoads` e `loadCombinations` sem heurísticas silenciosas. O staging deverá bloquear substituição se existirem cargas IFC não suportadas e deverá preparar um seed de identidades para preservar os GlobalIds ao reexportar o projeto importado.
+O produto permanece em **0.47.0** até todos os gates finais da v0.48 ficarem verdes e o release gate substituir o development gate. `main` permanece intocada.

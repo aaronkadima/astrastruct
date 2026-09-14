@@ -1,3 +1,5 @@
+import {createIfcProjectContext,validateIfcProjectContext} from './ifcContext.js';
+
 export const IFC_INTEROP_CONTRACT='ifc-interoperability/v1';
 export const IFC_INTEROP_VERSION='0.45.0-exp';
 export const IFC_SCHEMA='IFC4X3_ADD2';
@@ -63,19 +65,19 @@ function connectionRecords(member){
 }
 
 export function createIfcInteroperabilityModel(project={},options={}){
-  const projectId=requireId('project',project.id),projectName=text(project.name)||projectId;
+  const projectId=requireId('project',project.id),projectName=text(project.name)||projectId,unitSystem=text(project.units)||'kN-m-MPa';
   const nodes=Array.isArray(project.nodes)?project.nodes:[],elements=Array.isArray(project.elements)?project.elements:[],materials=Array.isArray(project.materials)?project.materials:[],sections=Array.isArray(project.sections)?project.sections:[];
   const nodeSet=uniqueById(nodes,'node');uniqueById(elements,'element');uniqueById(materials,'material');uniqueById(sections,'section');
   const nodeRecords=nodes.map(n=>nodeRecord(project,n)),materialRecords=materials.map(materialRecord),sectionRecords=sections.map(sectionRecord),members=elements.map(e=>memberRecord(e,nodeSet));
   const materialKeys=new Set(materialRecords.map(x=>x.key)),sectionKeys=new Set(sectionRecords.map(x=>x.key));
   for(const m of members){if(m.materialRef&&!materialKeys.has(m.materialRef))throw new Error(`IFC interop: ${m.sourceId} referencia material inexistente ${m.materialRef}.`);if(m.sectionRef&&!sectionKeys.has(m.sectionRef))throw new Error(`IFC interop: ${m.sourceId} referencia seção inexistente ${m.sectionRef}.`)}
-  const relationships=members.flatMap(connectionRecords);
+  const relationships=members.flatMap(connectionRecords),context=createIfcProjectContext({unitSystem,...copy(options.context||{})});
   const model={
     contract:IFC_INTEROP_CONTRACT,version:IFC_INTEROP_VERSION,schema:IFC_SCHEMA,standard:IFC_STANDARD,
     exchange:{purpose:text(options.purpose)||'STRUCTURAL_ANALYSIS',serialization:'canonical-json',stepWriterReady:false,validationTarget:'buildingSMART IFC 4.3 validation service'},
-    project:{key:key('project',projectId),ifcClass:'IfcProject',sourceId:projectId,name:projectName,units:text(project.units)||'kN-m-MPa',schemaVersion:project.schemaVersion??null,productVersion:project.meta?.productVersion??null},
+    project:{key:key('project',projectId),ifcClass:'IfcProject',sourceId:projectId,name:projectName,units:unitSystem,unitsInContextRef:context.units.key,representationContextRefs:context.representationContexts.map(x=>x.key),schemaVersion:project.schemaVersion??null,productVersion:project.meta?.productVersion??null},
     analysisModel:{key:key('analysis',projectId),ifcClass:'IfcStructuralAnalysisModel',name:text(options.analysisModelName)||`${projectName} — Structural Analysis`,predefinedType:'LOADING_3D'},
-    nodes:nodeRecords,members,materials:materialRecords,sections:sectionRecords,relationships,
+    context,nodes:nodeRecords,members,materials:materialRecords,sections:sectionRecords,relationships,
     detailing:options.detailing?copy(options.detailing):null,analysis:options.analysis?copy(options.analysis):null,
     provenance:{generator:'AstraStruct',interopVersion:IFC_INTEROP_VERSION,sourceProjectId:projectId,...copy(options.provenance||{})},
     limitations:[
@@ -93,6 +95,9 @@ export function validateIfcInteroperabilityModel(model){
   if(model?.schema!==IFC_SCHEMA)throw new Error('IFC interop: schema incompatível.');
   if(model?.project?.ifcClass!=='IfcProject')throw new Error('IFC interop: IfcProject ausente.');
   if(model?.analysisModel?.ifcClass!=='IfcStructuralAnalysisModel')throw new Error('IFC interop: IfcStructuralAnalysisModel ausente.');
+  validateIfcProjectContext(model?.context);
+  if(model.project.unitsInContextRef!==model.context.units.key)throw new Error('IFC interop: referência UnitsInContext inválida.');
+  const contextKeys=new Set(model.context.representationContexts.map(x=>x.key));for(const ref of model.project.representationContextRefs||[])if(!contextKeys.has(ref))throw new Error(`IFC interop: RepresentationContext inválido ${ref}.`);
   const nodeKeys=new Set(),memberKeys=new Set();
   for(const n of model.nodes||[]){if(n.ifcClass!=='IfcStructuralPointConnection')throw new Error(`IFC interop: nó ${n.sourceId} com classe inválida.`);if(nodeKeys.has(n.key))throw new Error(`IFC interop: chave de nó duplicada ${n.key}.`);nodeKeys.add(n.key);for(const a of ['x','y','z'])if(!Number.isFinite(Number(n.placement?.[a])))throw new Error(`IFC interop: coordenada ${a} inválida em ${n.sourceId}.`)}
   for(const m of model.members||[]){if(!['IfcStructuralCurveMember','IfcStructuralSurfaceMember'].includes(m.ifcClass))throw new Error(`IFC interop: membro ${m.sourceId} com classe inválida.`);if(memberKeys.has(m.key))throw new Error(`IFC interop: chave de membro duplicada ${m.key}.`);memberKeys.add(m.key);if((m.nodeRefs||[]).length<2)throw new Error(`IFC interop: membro ${m.sourceId} sem conectividade suficiente.`);for(const ref of m.nodeRefs)if(!nodeKeys.has(ref))throw new Error(`IFC interop: referência de nó inválida ${ref}.`)}

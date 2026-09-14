@@ -7,3 +7,6 @@ export {
   IFC_GUID_ALPHABET,validateIfcGuid,compressIfcGuid,expandIfcGuid,newIfcGuid,
   createIfcIdentityMap,assignIfcGlobalIds,validateIfcGlobalIds
 } from './ifcGuid.js';
+export {
+  IFC_CONTEXT_CONTRACT,unitsForAstraStruct,createIfcProjectContext,validateIfcProjectContext,attachIfcProjectContext
+} from './ifcContext.js';

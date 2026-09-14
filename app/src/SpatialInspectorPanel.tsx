@@ -13,35 +13,37 @@ const elementNodeIds=(e:any)=>e?.type==='shell4'?(Array.isArray(e.nodeIds)&&e.no
 export function SpatialInspectorPanel({project,selection,onCommit}:{project:any;selection:Selection;onCommit:(p:any)=>void}){
   const activeCase=project.settings?.activeLoadCaseId||project.loadCases?.[0]?.id;
   const entity=useMemo(()=>selection?.kind==='node'?project.nodes.find((n:any)=>n.id===selection.id):selection?.kind==='element'?project.elements.find((e:any)=>e.id===selection.id):null,[project,selection]);
-  const [draft,setDraft]=useState<any>(null);
+  const entityKey=entity?`${selection?.kind||'none'}:${entity.id}:${activeCase||''}`:'';
+  const [draft,setDraft]=useState<any>(null),[draftKey,setDraftKey]=useState('');
+  const setEntityDraft=(value:any)=>{setDraft(value);setDraftKey(entityKey)};
 
   useEffect(()=>{
-    if(!entity){setDraft(null);return}
+    if(!entity){setDraft(null);setDraftKey('');return}
     if(selection?.kind==='node'){
       const support=project.supports.find((s:any)=>s.nodeId===entity.id)||{nodeId:entity.id,ux:false,uy:false,uz:false,rx:false,ry:false,rz:false};
       const load=project.loads.find((l:any)=>l.caseId===activeCase&&l.nodeId===entity.id)||{id:null,caseId:activeCase,nodeId:entity.id,fx:0,fy:0,fz:0,mx:0,my:0,mz:0};
       const nodalMass=(project.nodalMasses||[]).find((m:any)=>m.nodeId===entity.id)||{id:null,nodeId:entity.id,mx:0,my:0,mz:0,mrx:0,mry:0,mrz:0};
       const spring=(project.nodeSprings||[]).find((s:any)=>s.nodeId===entity.id)||{id:null,nodeId:entity.id,kx:0,ky:0,kz:0,krx:0,kry:0,krz:0};
       const settlement=(project.settlements||[]).find((s:any)=>s.caseId===activeCase&&s.nodeId===entity.id)||{id:null,caseId:activeCase,nodeId:entity.id,ux:0,uy:0,uz:0,rx:0,ry:0,rz:0};
-      setDraft({x:entity.x,y:entity.y,z:entity.z||0,support:clone(support),load:clone(load),nodalMass:clone(nodalMass),spring:clone({...spring,krz:spring.krz??spring.kr??0}),settlement:clone(settlement)});
+      setEntityDraft({x:entity.x,y:entity.y,z:entity.z||0,support:clone(support),load:clone(load),nodalMass:clone(nodalMass),spring:clone({...spring,krz:spring.krz??spring.kr??0}),settlement:clone(settlement)});
       return;
     }
     if(entity.type==='shell4'){
       const pressure=(project.elementLoads||[]).find((l:any)=>l.caseId===activeCase&&l.elementId===entity.id&&(l.kind==='surface'||l.kind==='pressure'))||{id:null,caseId:activeCase,elementId:entity.id,kind:'surface',pressure:0};
-      setDraft({label:entity.label||entity.id,materialId:entity.materialId||project.materials?.[0]?.id,nodeIds:elementNodeIds(entity),thickness:entity.thickness??entity.t??.18,shearCorrection:entity.shearCorrection??5/6,drillingFactor:entity.drillingFactor??1e-6,pressure:clone({...pressure,pressure:num(pressure.pressure??pressure.pz??pressure.qz)})});
+      setEntityDraft({label:entity.label||entity.id,materialId:entity.materialId||project.materials?.[0]?.id,nodeIds:elementNodeIds(entity),thickness:entity.thickness??entity.t??.18,shearCorrection:entity.shearCorrection??5/6,drillingFactor:entity.drillingFactor??1e-6,pressure:clone({...pressure,pressure:num(pressure.pressure??pressure.pz??pressure.qz)})});
       return;
     }
     const uniform=(project.elementLoads||[]).find((l:any)=>l.caseId===activeCase&&l.elementId===entity.id&&l.kind==='uniform')||{id:null,caseId:activeCase,elementId:entity.id,kind:'uniform',qx:0,qy:0,qz:0};
     const up=entity.orientation?.up||entity.localY||[0,0,0];
-    setDraft({
+    setEntityDraft({
       label:entity.label||entity.id,materialId:entity.materialId,sectionId:entity.sectionId,A:entity.A,Iy:entity.Iy,Iz:entity.Iz,J:entity.J,
       orientation:{x:num(up?.[0]),y:num(up?.[1]),z:num(up?.[2])},uniform:clone(uniform),
       releases:{rx1:false,ry1:false,rz1:false,rx2:false,ry2:false,rz2:false,...clone(entity.releases||{})},
       rotationalSprings:{rx1:null,ry1:null,rz1:null,rx2:null,ry2:null,rz2:null,...clone(entity.rotationalSprings||{})}
     });
-  },[entity?.id,selection?.kind,activeCase,project]);
+  },[entityKey,project]);
 
-  if(!entity||!draft)return <div className="empty-state">Selecione um nó ou elemento espacial no modelo.</div>;
+  if(!entity||!draft||draftKey!==entityKey)return <div className="empty-state">Selecione um nó ou elemento espacial no modelo.</div>;
 
   const applyNode=()=>{
     const p=clone(project),n=p.nodes.find((x:any)=>x.id===entity.id);n.x=num(draft.x);n.y=num(draft.y);n.z=num(draft.z);
@@ -49,7 +51,7 @@ export function SpatialInspectorPanel({project,selection,onCommit}:{project:any;
     p.loads=(p.loads||[]).filter((l:any)=>!(l.caseId===activeCase&&l.nodeId===entity.id));const load={...draft.load,id:draft.load.id||uid('L3D'),caseId:activeCase,nodeId:entity.id,fx:num(draft.load.fx),fy:num(draft.load.fy),fz:num(draft.load.fz),mx:num(draft.load.mx),my:num(draft.load.my),mz:num(draft.load.mz)};if(['fx','fy','fz','mx','my','mz'].some(k=>Math.abs(num(load[k]))>1e-12))p.loads.push(load);
     p.nodeSprings=(p.nodeSprings||[]).filter((x:any)=>x.nodeId!==entity.id);const krz=positive(draft.spring?.krz??draft.spring?.kr),spring={...draft.spring,id:draft.spring?.id||uid('SPR3D'),nodeId:entity.id,kx:positive(draft.spring?.kx),ky:positive(draft.spring?.ky),kz:positive(draft.spring?.kz),krx:positive(draft.spring?.krx),kry:positive(draft.spring?.kry),krz,kr:krz};if(['kx','ky','kz','krx','kry','krz'].some(k=>spring[k]>0))p.nodeSprings.push(spring);
     p.settlements=(p.settlements||[]).filter((x:any)=>!(x.caseId===activeCase&&x.nodeId===entity.id));const settlement={...draft.settlement,id:draft.settlement?.id||uid('SET3D'),caseId:activeCase,nodeId:entity.id};for(const k of DOFS)settlement[k]=s[k]?num(draft.settlement?.[k]):0;if(DOFS.some(k=>Math.abs(settlement[k])>1e-12))p.settlements.push(settlement);
-    p.nodalMasses=(p.nodalMasses||[]).filter((m:any)=>m.nodeId!==entity.id);const mass={...draft.nodalMass,id:draft.nodalMass?.id||uid('MASS3D'),nodeId:entity.id,mx:positive(draft.nodalMass?.mx),my:positive(draft.nodalMass?.my),mz:positive(draft.nodalMass?.mz),mrx:positive(draft.nodalMass?.mrx),mry:positive(draft.nodalMass?.mry),mrz:positive(draft.nodalMass?.mrz??draft.nodalMass?.mr)};if(['mx','my','mz','mrx','mry','mrz'].some(k=>mass[k]>0))p.nodalMasses.push(mass);
+    p.nodalMasses=(p.nodalMasses||[]).filter((m:any)=>m.nodeId!==entity.id);const mass={...draft.nodalMass,id:draft.nodalMass.id||uid('MASS3D'),nodeId:entity.id,mx:positive(draft.nodalMass?.mx),my:positive(draft.nodalMass?.my),mz:positive(draft.nodalMass?.mz),mrx:positive(draft.nodalMass?.mrx),mry:positive(draft.nodalMass?.mry),mrz:positive(draft.nodalMass?.mrz??draft.nodalMass?.mr)};if(['mx','my','mz','mrx','mry','mrz'].some(k=>mass[k]>0))p.nodalMasses.push(mass);
     onCommit(normalizeProject(p));
   };
 

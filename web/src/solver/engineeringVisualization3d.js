@@ -24,7 +24,7 @@ function nodeLevel(project,levels,node){
 function buildFloorSummaries(project,result){
   const levels=inferredLevels(project),dmap=new Map(displacementRows(result).map(d=>[String(d.nodeId),d])),nodes=project.nodes||[],out=[];
   for(const level of levels){const rows=nodes.filter(n=>nodeLevel(project,levels,n)===level.id).map(n=>({n,d:dmap.get(String(n.id))})).filter(x=>x.d);if(!rows.length){out.push({...level,nodeCount:0,uxMm:null,uyMm:null,uzMm:null,resultantMm:null});continue}
-    const avg=k=>1000*rows.reduce((s,x)=>s+(Number(x.d?.[k])||0),0)/rows.length,uxMm=avg('ux'),uyMm=avg('uy'),uzMm=avg('uz');out.push({...level,nodeCount:rows.length,uxMm,uyMm,uzMm,resultantMm:Math.hypot(uxMm,uyMm,uzMm)});
+    const avg=k=>rows.reduce((s,x)=>s+(Number(x.d?.[k])||0),0)/rows.length,uxMm=1000*avg('ux'),uyMm=1000*avg('uy'),uzMm=1000*avg('uz');out.push({...level,nodeCount:rows.length,uxMm,uyMm,uzMm,rxRad:avg('rx'),ryRad:avg('ry'),rzRad:avg('rz'),resultantMm:Math.hypot(uxMm,uyMm,uzMm)});
   }
   const story=[];for(let i=1;i<out.length;i++){const a=out[i-1],b=out[i],h=b.elevation-a.elevation;if(!(h>0)||a.uxMm==null||b.uxMm==null)continue;const dx=(b.uxMm-a.uxMm)/1000,dy=(b.uyMm-a.uyMm)/1000;story.push({levelId:b.id,levelLabel:b.label,fromLevelId:a.id,heightM:h,driftX:dx/h,driftY:dy/h,driftRatio:Math.hypot(dx,dy)/h,driftMm:1000*Math.hypot(dx,dy)});}
   return{levels:out,storyDrifts:story};

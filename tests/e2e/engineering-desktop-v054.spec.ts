@@ -9,6 +9,7 @@ test('v0.54 engineering desktop exposes ribbon, model tree, right rail and botto
   await expect(app).toHaveClass(/engineering-desktop/);
   await expect(app).toHaveAttribute('data-engineering-desktop-preview','true');
   await expect(page.getByTestId('engineering-ribbon')).toBeVisible();
+  await expect(page.getByTestId('engineering-ribbon-ifc')).toBeAttached();
   await expect(page.getByTestId('engineering-results-strip')).toBeVisible();
   const viewport=page.viewportSize();
   if((viewport?.width||1200)>900){
@@ -37,6 +38,7 @@ test('v0.54 3D result publishing exposes functional engineering result tabs',asy
   await page.goto(preview);
   await page.waitForFunction(()=>document.documentElement.dataset.astraReady==='true');
   await page.getByTestId('engineering-ribbon-analyze').click();
+  await expect(page.locator('.engineering-view-title')).toHaveText('Vista 3D');
   const strip=page.getByTestId('engineering-results-strip');
   await expect(strip.getByText('Pav. 1')).toBeVisible({timeout:20000});
   await strip.getByTestId('engineering-result-tab-reactions').click();
@@ -61,6 +63,11 @@ test('v0.54 Figma workstation controls are connected to real application state',
   const viewport=page.viewportSize();
   if((viewport?.width||1200)<=900)return;
   const explorer=page.getByTestId('engineering-model-explorer');
+  await expect(page.locator('.engineering-view-title')).toHaveText('Vista 2D');
+  await expect(explorer).toContainText('Estruturas Metálicas');
+  await expect(explorer).toContainText('Obras de Arte Especiais');
+  await expect(explorer).toContainText('Lab isolado');
+  await expect(explorer).toContainText('Inspeção remota');
   const search=explorer.getByLabel('Buscar no modelo');
   await search.fill('fundações');
   await expect(explorer.getByText(/Fundações/).first()).toBeVisible();
@@ -70,6 +77,9 @@ test('v0.54 Figma workstation controls are connected to real application state',
   await page.getByRole('button',{name:'Ajuda'}).click();
   await expect(page.getByText('Ajuda · AstraStruct')).toBeVisible();
   await page.getByRole('button',{name:'Fechar ajuda'}).click();
+  await page.getByTestId('engineering-ribbon-ifc').click();
+  await expect(page.getByTestId('ifc-exchange-panel')).toBeVisible();
+  await page.getByRole('button',{name:'Fechar intercâmbio IFC'}).click();
   const strip=page.getByTestId('engineering-results-strip');
   await strip.getByRole('button',{name:'Reações de apoio'}).click();
   await expect(strip).toHaveAttribute('data-result-tab','reactions');

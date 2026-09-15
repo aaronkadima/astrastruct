@@ -55,6 +55,11 @@
 /* Figma viewport title and sole 3D control surface. */
 .astra-app.engineering-desktop .workspace>.workspace-bar{display:flex!important;align-items:center!important}
 .astra-app.engineering-desktop .workspace-bar:before,.astra-app.engineering-desktop .workspace-bar:after{content:none!important}
-.engineering-view-title{font-size:11px;font-weight:600;color:#1a2b3c}
+.astra-app.engineering-desktop .workspace-bar>.engineering-view-title{font-size:11px!important;font-weight:600!important;color:#1a2b3c!important;opacity:1!important}
 .astra-app.engineering-desktop .workspace-bar>.engineering-view-close{margin-left:auto;border:0;background:transparent;color:#4a5568;font-size:13px}
 .astra-app.engineering-desktop .spatial3d-toolbar,.astra-app.engineering-desktop .spatial3d-options{display:none!important}
+.astra-app.engineering-desktop .eng-results-workbench,.astra-app.engineering-desktop .eng-result-table,.astra-app.engineering-desktop .eng-result-table table{color:#1a2b3c!important;opacity:1!important}
+.astra-app.engineering-desktop .eng-result-table th{background:#edf1f7!important;color:#2d3a4a!important;border-bottom-color:#c8d0dc!important;border-right-color:#dde3ea!important;font-weight:600!important;opacity:1!important;white-space:nowrap}
+.astra-app.engineering-desktop .eng-result-table td{background:#fff;color:#1a2b3c!important;border-color:#edf1f7!important;opacity:1!important;font-variant-numeric:tabular-nums}
+.astra-app.engineering-desktop .eng-result-table tbody tr:nth-child(even) td{background:#f9fafb}
+.astra-app.engineering-desktop .eng-result-table tbody tr{cursor:pointer}.astra-app.engineering-desktop .eng-result-table tbody tr.selected td{background:#d0e4f7!important}

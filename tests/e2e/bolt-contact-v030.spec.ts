@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 test('isolated Lab closes bolt-hole clearance, maps bearing stress and preserves equilibrium',async({page},testInfo)=>{
   test.skip(testInfo.project.name!=='desktop-chromium','nonlinear bolt contact laboratory workflow');
   await page.goto('./');
-  await page.getByTestId('model-lab-launch').click();
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('astrastruct:model-lab-open')));
   await page.getByRole('button',{name:'Lab isolado',exact:true}).click();
   const overlay=page.getByTestId('model-lab-overlay');await expect(overlay.locator('.astra-lab-note')).toContainText('folga radial');
   await page.getByTestId('open-bolt-contact-lab').click();const lab=page.getByTestId('bolt-contact-lab');await expect(lab).toBeVisible();

@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 test('isolated Lab solves rigid-plate bolt group and exports results',async({page},testInfo)=>{
   test.skip(testInfo.project.name!=='desktop-chromium','bolt-group laboratory workflow');
   await page.goto('./');
-  await page.getByTestId('model-lab-launch').click();
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('astrastruct:model-lab-open')));
   await page.getByRole('button',{name:'Lab isolado',exact:true}).click();
   const overlay=page.getByTestId('model-lab-overlay');
   await expect(overlay.locator('.astra-lab-note')).toContainText('Ligação chapa–parafuso');

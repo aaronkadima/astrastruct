@@ -63,3 +63,8 @@
 .astra-app.engineering-desktop .eng-result-table td{background:#fff;color:#1a2b3c!important;border-color:#edf1f7!important;opacity:1!important;font-variant-numeric:tabular-nums}
 .astra-app.engineering-desktop .eng-result-table tbody tr:nth-child(even) td{background:#f9fafb}
 .astra-app.engineering-desktop .eng-result-table tbody tr{cursor:pointer}.astra-app.engineering-desktop .eng-result-table tbody tr.selected td{background:#d0e4f7!important}
+
+/* Figma fixed-chrome consolidation: labs, SSI and IFC no longer add floating launchers. */
+.eng-tree-row.interactive{cursor:pointer}.eng-tree-row.interactive:focus-visible{outline:2px solid #1565c0;outline-offset:-1px;background:#e4eaf2}
+.astra-app.engineering-desktop .spatial3d-help{top:8px!important;right:auto!important;bottom:auto!important;left:8px!important;display:flex!important;align-items:center;gap:9px;padding:5px 8px!important;border:1px solid rgba(139,158,176,.55)!important;border-radius:4px!important;background:rgba(247,249,251,.78)!important;color:rgba(26,43,60,.82)!important;box-shadow:0 2px 7px rgba(25,57,82,.09)!important;backdrop-filter:blur(4px);font-size:9px!important;line-height:1.25;opacity:1!important}
+.astra-app.engineering-desktop .spatial3d-help span+span{padding-left:9px;border-left:1px solid rgba(139,158,176,.45)}

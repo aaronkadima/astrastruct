@@ -18,6 +18,7 @@ function installStyle(){if(document.getElementById('astra-model-lab-style'))retu
 
 type PlanNode={id:string,x:number,y:number};type PlanEdge={id:string,n1:string,n2:string};
 function renderModal(){
+  if(document.querySelector('[data-testid="model-lab-overlay"]'))return;
   const overlay=document.createElement('div');overlay.className='astra-lab-overlay';overlay.setAttribute('data-testid','model-lab-overlay');
   overlay.innerHTML=`<section class="astra-lab-modal"><header class="astra-lab-head"><div><h2>Lab & Modelos estruturais</h2><p>Exemplos 3D, ensaios isolados e lançamento rápido de edifícios.</p></div><button class="astra-lab-close" aria-label="Fechar Lab">×</button></header><div class="astra-lab-tabs"><button data-tab="examples" class="active">Modelos 3D</button><button data-tab="lab">Lab isolado</button><button data-tab="building">Lançar edifício</button></div><div class="astra-lab-body" data-lab-body></div></section>`;
   document.body.appendChild(overlay);const body=$('[data-lab-body]',overlay)!;let tab='examples';
@@ -45,7 +46,14 @@ function renderModal(){
   function render(){if(tab==='examples')renderExamples();else if(tab==='lab')renderLab();else renderBuilding()}render();
 }
 
-function install(){if(document.querySelector('[data-testid="model-lab-launch"]'))return;installStyle();const btn=document.createElement('button');btn.className='astra-lab-launch';btn.setAttribute('data-testid','model-lab-launch');btn.textContent='Lab & Modelos';btn.title='Abrir Lab de elementos, exemplos 3D e lançador de edifícios';btn.onclick=renderModal;document.body.appendChild(btn)}
+let installed=false;
+function install(){
+  document.querySelectorAll('.astra-lab-launch,[data-testid="model-lab-launch"]').forEach(node=>node.remove());
+  if(installed)return;
+  installed=true;
+  installStyle();
+  window.addEventListener('astrastruct:model-lab-open',renderModal);
+}
 
-const start=()=>{let tries=0;const timer=setInterval(()=>{tries++;if(document.querySelector('.astra-app')){clearInterval(timer);install()}else if(tries>120)clearInterval(timer)},100)};
+const start=()=>install();
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();

@@ -49,7 +49,7 @@ test('shell4 can be selected for Modal 3D and produces positive modes',async({pa
 
 test('Model Lab creates a shell4 from four nodes on the same level',async({page})=>{
   const launch={...project,id:'shell4-launch',name:'Shell launcher',elements:[],elementLoads:[],supports:[],levels:[{id:'L0',name:'Pavimento teste',elevation:0,index:0}],nodes:project.nodes.map(n=>({...n,levelId:'L0'}))};
-  await loadProject(page,launch);await page.getByTestId('model-lab-launch').click();const tab=page.getByTestId('shell4-lab-tab');await expect(tab).toBeVisible();await tab.click();await expect(page.getByTestId('create-shell4')).toBeVisible();await expect(page.getByTestId('shell4-quality-panel')).toBeVisible();await expect(page.getByTestId('shell4-convergence-controls')).toBeVisible();
+  await loadProject(page,launch);await page.evaluate(()=>window.dispatchEvent(new CustomEvent('astrastruct:model-lab-open')));const tab=page.getByTestId('shell4-lab-tab');await expect(tab).toBeVisible();await tab.click();await expect(page.getByTestId('create-shell4')).toBeVisible();await expect(page.getByTestId('shell4-quality-panel')).toBeVisible();await expect(page.getByTestId('shell4-convergence-controls')).toBeVisible();
   await Promise.all([page.waitForEvent('framenavigated'),page.getByTestId('create-shell4').click()]);
   await expect(page.getByTestId('spatial-canvas-3d')).toHaveAttribute('data-shell-count','1');
   await expect.poll(async()=>page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('astrastruct.project')||'{}'),e=(p.elements||[]).find((x:any)=>x.type==='shell4'),l=(p.elementLoads||[]).find((x:any)=>x.elementId===e?.id);return{nodes:e?.nodeIds?.length,unique:new Set(e?.nodeIds||[]).size,t:e?.thickness,p:l?.pressure,mode:p.settings?.analysisType}})).toEqual({nodes:4,unique:4,t:.18,p:-5,mode:'linear'});
@@ -58,7 +58,7 @@ test('Model Lab creates a shell4 from four nodes on the same level',async({page}
 test('Model Lab refines shell4 into a conforming 2x2 mesh and preserves pressure',async({page},testInfo)=>{
   test.skip(testInfo.project.name!=='desktop-chromium','shell4 refinement UI smoke');
   const launch={...project,id:'shell4-refine',name:'Shell refine',levels:[{id:'L0',name:'Pavimento teste',elevation:0,index:0}],nodes:project.nodes.map(n=>({...n,levelId:'L0'})),elements:project.elements.map(e=>({...e,levelId:'L0'}))};
-  await loadProject(page,launch);await page.getByTestId('model-lab-launch').click();await page.getByTestId('shell4-lab-tab').click();const controls=page.getByTestId('shell4-refinement-controls');await expect(controls).toBeVisible();
+  await loadProject(page,launch);await page.evaluate(()=>window.dispatchEvent(new CustomEvent('astrastruct:model-lab-open')));await page.getByTestId('shell4-lab-tab').click();const controls=page.getByTestId('shell4-refinement-controls');await expect(controls).toBeVisible();
   await controls.locator('[data-shell-refine-x]').fill('2');await controls.locator('[data-shell-refine-y]').fill('2');
   await Promise.all([page.waitForEvent('framenavigated'),page.getByTestId('refine-shell4-level').click()]);
   await expect(page.getByTestId('spatial-canvas-3d')).toHaveAttribute('data-shell-count','4');
@@ -68,7 +68,7 @@ test('Model Lab refines shell4 into a conforming 2x2 mesh and preserves pressure
 test('Model Lab runs and applies a shell4 mesh convergence study',async({page},testInfo)=>{
   test.skip(testInfo.project.name!=='desktop-chromium','shell4 convergence UI smoke');
   const launch={...project,id:'shell4-convergence-ui',name:'Shell convergence UI',levels:[{id:'L0',name:'Pavimento teste',elevation:0,index:0}],nodes:project.nodes.map(n=>({...n,levelId:'L0'})),elements:project.elements.map(e=>({...e,levelId:'L0'}))};
-  await loadProject(page,launch);await page.getByTestId('model-lab-launch').click();await page.getByTestId('shell4-lab-tab').click();const controls=page.getByTestId('shell4-convergence-controls');await expect(controls).toBeVisible();await controls.locator('[data-conv-max]').fill('2');await controls.locator('[data-conv-tol]').fill('0.1');await page.getByTestId('run-shell4-convergence').click();
+  await loadProject(page,launch);await page.evaluate(()=>window.dispatchEvent(new CustomEvent('astrastruct:model-lab-open')));await page.getByTestId('shell4-lab-tab').click();const controls=page.getByTestId('shell4-convergence-controls');await expect(controls).toBeVisible();await controls.locator('[data-conv-max]').fill('2');await controls.locator('[data-conv-tol]').fill('0.1');await page.getByTestId('run-shell4-convergence').click();
   await expect(controls).toContainText('1×1');await expect(controls).toContainText('2×2');const apply=page.getByTestId('apply-shell4-convergence');await expect(apply).toBeEnabled();
   await Promise.all([page.waitForEvent('framenavigated'),apply.click()]);await expect(page.getByTestId('spatial-canvas-3d')).toHaveAttribute('data-shell-count','4');
   await expect.poll(async()=>page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('astrastruct.project')||'{}');return{shells:(p.elements||[]).filter((e:any)=>e.type==='shell4').length,steps:p.meta?.lastShellConvergenceReport?.steps?.length,sampling:p.meta?.lastShellConvergenceReport?.responseSampling}})).toEqual({shells:4,steps:2,sampling:'gauss-2x2'});
@@ -79,7 +79,7 @@ test('Model Lab auto-fills a closed quadrilateral bay with shell4',async({page},
   const frame=(id:string,n1:string,n2:string)=>({id,type:'frame3d',n1,n2,materialId:'C',sectionId:'SEC',A:.15,Iy:.004,Iz:.004,J:.002});
   const nodes=[{id:'N1',x:0,y:0,z:0,levelId:'L0'},{id:'N2',x:5,y:0,z:0,levelId:'L0'},{id:'N3',x:4,y:3,z:0,levelId:'L0'},{id:'N4',x:.5,y:3,z:0,levelId:'L0'}];
   const launch={...project,id:'shell4-auto',name:'Auto shell',levels:[{id:'L0',name:'Pavimento teste',elevation:0,index:0}],nodes,elements:[frame('E1','N1','N2'),frame('E2','N2','N3'),frame('E3','N3','N4'),frame('E4','N4','N1')],sections:[{id:'SEC',name:'Seção E2E',A:.15,Iy:.004,Iz:.004,J:.002,I:.004}],supports:[],elementLoads:[]};
-  await loadProject(page,launch);await page.getByTestId('model-lab-launch').click();await page.getByTestId('shell4-lab-tab').click();const auto=page.getByTestId('auto-shell4-panels');await expect(auto).toBeVisible();await expect(auto).toContainText('1 vão');
+  await loadProject(page,launch);await page.evaluate(()=>window.dispatchEvent(new CustomEvent('astrastruct:model-lab-open')));await page.getByTestId('shell4-lab-tab').click();const auto=page.getByTestId('auto-shell4-panels');await expect(auto).toBeVisible();await expect(auto).toContainText('1 vão');
   await Promise.all([page.waitForEvent('framenavigated'),auto.click()]);await expect(page.getByTestId('spatial-canvas-3d')).toHaveAttribute('data-shell-count','1');
   await expect.poll(async()=>page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('astrastruct.project')||'{}');return{shells:(p.elements||[]).filter((e:any)=>e.type==='shell4').length,surface:(p.elementLoads||[]).filter((l:any)=>l.kind==='surface').length,created:p.meta?.lastShellMeshReport?.created,kind:p.meta?.lastShellMeshReport?.kind}})).toEqual({shells:1,surface:1,created:1,kind:'quadrilateral'});
 });

@@ -3,7 +3,7 @@ import {test,expect} from '@playwright/test';
 test('central Lab registry injects one stable explicit-hole card across rerenders',async({page},testInfo)=>{
   test.skip(testInfo.project.name!=='desktop-chromium','registry bridge regression');
   await page.goto('./');
-  await page.getByTestId('model-lab-launch').click();
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('astrastruct:model-lab-open')));
   const overlay=page.getByTestId('model-lab-overlay');
   await page.getByRole('button',{name:'Lab isolado',exact:true}).click();
   const registered=overlay.locator('[data-registered-isolated-lab="connection-plate-hole-contact"]');
@@ -16,7 +16,7 @@ test('central Lab registry injects one stable explicit-hole card across rerender
   await expect(page.getByTestId('open-hole-contact-lab')).toHaveCount(1);
 
   await overlay.getByLabel('Fechar Lab').click();
-  await page.getByTestId('model-lab-launch').click();
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('astrastruct:model-lab-open')));
   await page.getByRole('button',{name:'Lab isolado',exact:true}).click();
   await expect(page.locator('[data-registered-isolated-lab="connection-plate-hole-contact"]')).toHaveCount(1);
   await page.getByTestId('open-hole-contact-lab').click();

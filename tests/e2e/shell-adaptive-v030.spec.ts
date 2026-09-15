@@ -6,7 +6,7 @@ async function loadProject(page:any){await page.addInitScript((value:any)=>{if(!
 
 test('Model Lab estimates and applies recovery-based adaptive shell4 refinement',async({page},testInfo)=>{
   test.skip(testInfo.project.name!=='desktop-chromium','adaptive shell4 workflow smoke');
-  await loadProject(page);await page.getByTestId('model-lab-launch').click();await page.getByTestId('shell4-lab-tab').click();const controls=page.getByTestId('shell4-adaptive-controls');await expect(controls).toBeVisible();
+  await loadProject(page);await page.evaluate(()=>window.dispatchEvent(new CustomEvent('astrastruct:model-lab-open')));await page.getByTestId('shell4-lab-tab').click();const controls=page.getByTestId('shell4-adaptive-controls');await expect(controls).toBeVisible();
   await controls.locator('[data-adaptive-field]').selectOption('Mx');await controls.locator('[data-adaptive-tol]').fill('200');await controls.locator('[data-adaptive-fraction]').fill('100');
   await page.getByTestId('estimate-shell4-adaptive').click();await expect(controls).toContainText('1 hotspot');await expect(controls).toContainText('2×2: 1');const apply=page.getByTestId('apply-shell4-adaptive');await expect(apply).toBeEnabled();
   // Estimation is non-destructive.

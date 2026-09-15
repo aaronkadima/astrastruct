@@ -1,6 +1,9 @@
 import React,{useState}from'react';
 // @ts-ignore
 import{nbr6118Baseline,validateNBR6118Baseline}from'../../web/src/core/nbr6118Baseline.js';
+// @ts-ignore
+import{demoIsolatedBeamLab3D,demoIsolatedColumnLab3D,demoSpringLab3D}from'../../web/src/core/exampleModels.js';
+import{openIsolatedLab}from'./labRegistry';
 
 type Props={
   project:any;
@@ -88,10 +91,12 @@ const TreeIcon=({name}:{name:string})=><svg className={`eng-tree-icon ${name}`} 
   {name==='twin'&&<><rect x="1" y="4" width="6" height="8" rx=".6" fill="#b2dfdb" stroke="#00695c" strokeWidth="1.1"/><rect x="6" y="1" width="6" height="8" rx=".6" fill="#e0f2f1" stroke="#00695c" strokeWidth="1.1" strokeDasharray="2 1.2"/><path d="m3 7 6-2" stroke="#00695c" strokeDasharray="1.2 .8"/></>}
 </svg>;
 
-const TreeRow=({icon,label,count,child=false}:{icon?:string;label:string;count?:number;child?:boolean})=><div className={`eng-tree-row ${child?'child':''}`}>{icon&&<TreeIcon name={icon}/>}<span>{label}</span>{count!==undefined&&<small>({count})</small>}</div>;
+const TreeRow=({icon,label,count,child=false,onActivate,testId}:{icon?:string;label:string;count?:number;child?:boolean;onActivate?:()=>void;testId?:string})=>{
+  const activate=(event:React.MouseEvent|React.KeyboardEvent)=>{event.stopPropagation();onActivate?.()};
+  return <div className={`eng-tree-row ${child?'child':''} ${onActivate?'interactive':''}`} data-testid={testId} role={onActivate?'button':undefined} tabIndex={onActivate?0:undefined} onClick={onActivate?activate:undefined} onKeyDown={onActivate?e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();activate(e)}}:undefined}>{icon&&<TreeIcon name={icon}/>}<span>{label}</span>{count!==undefined&&<small>({count})</small>}</div>;
+};
 
-function Ribbon({project,result,activeScenario,onScenarioChange,onAnalyze,onOpenPanel}:Props){
-  const scenarios=[...(project.loadCases||[]),...(project.loadCombinations||[])];
+function Ribbon({onAnalyze,onOpenPanel}:Props){
   return <div className="eng-ribbon" data-testid="engineering-ribbon">
     <div className="eng-ribbon-group">
       <button onClick={()=>onOpenPanel('properties')}><RibbonIcon name="launch"/><span>Lançamento<small>Modelagem</small></span></button>
@@ -102,15 +107,7 @@ function Ribbon({project,result,activeScenario,onScenarioChange,onAnalyze,onOpen
       <button onClick={()=>window.dispatchEvent(new CustomEvent('astrastruct:foundation-dashboard-open',{detail:{source:'engineering-ribbon'}}))}><RibbonIcon name="foundation"/><span>Fundação<small>Sapatas / Estacas</small></span></button>
       <button onClick={()=>document.querySelector<HTMLElement>('[data-testid="spatial3d-display-mode"]')?.focus()}><RibbonIcon name="view"/><span>Visualização<small>Vistas / Filtros</small></span></button>
       <button onClick={()=>onOpenPanel('properties')}><RibbonIcon name="norm"/><span>NBR 6118<small>Parâmetros</small></span></button>
-      <button data-testid="engineering-ribbon-ifc" onClick={()=>document.querySelector<HTMLButtonElement>('.ifc-exchange-trigger')?.click()}><RibbonIcon name="ifc"/><span>IFC<small>Import / Export</small></span></button>
-    </div>
-    <div className="eng-ribbon-scenario">
-      <label>Combinação
-        <select aria-label="Combinação do ribbon" value={activeScenario||''} onChange={e=>onScenarioChange(e.target.value)}>
-          {scenarios.map((s:any)=><option key={s.id} value={s.id}>{s.name||s.id}</option>)}
-        </select>
-      </label>
-      <span className={result?'done':'idle'}>{result?'● Análise disponível':'○ Modelo não analisado'}</span>
+      <button data-testid="engineering-ribbon-ifc" onClick={()=>window.dispatchEvent(new CustomEvent('astrastruct:ifc-open',{detail:{source:'engineering-ribbon'}}))}><RibbonIcon name="ifc"/><span>IFC<small>Import / Export</small></span></button>
     </div>
   </div>;
 }
@@ -126,6 +123,8 @@ export function EngineeringModelExplorer({project,result,onCommit,onAnalyze,onOp
     settings:{...(project.settings||{}),normativeBaseline:nbr6118Baseline({...base,exposureClass})}
   },true);
   const patchSettings=(patch:any)=>onCommit({...project,settings:{...(project.settings||{}),...patch}},true);
+  const loadLabModel=(factory:()=>any)=>onCommit(factory(),true);
+  const openLab=(id:string)=>()=>openIsolatedLab(id);
   const visible=(label:string)=>!query.trim()||label.toLocaleLowerCase('pt-BR').includes(query.trim().toLocaleLowerCase('pt-BR'));
   return <div className="eng-model-explorer" data-testid="engineering-model-explorer">
     <div className="eng-side-tabs">
@@ -146,7 +145,7 @@ export function EngineeringModelExplorer({project,result,onCommit,onAnalyze,onOp
         </details>
         {visible('estruturas metálicas galpão mezanino reservatório')&&<details><summary><TreeRow icon="steel" label="Estruturas Metálicas"/></summary><TreeRow icon="shed" label="Galpão" child/><TreeRow icon="mezzanine" label="Mezanino" child/><TreeRow icon="tank" label="Reservatório" child/></details>}
         {visible('obras arte especiais pontes viadutos passarelas túneis pontilhões galerias muros arrimo')&&<details><summary><TreeRow icon="bridge" label="Obras de Arte Especiais"/></summary><TreeRow icon="bridge" label="Pontes" child/><TreeRow icon="viaduct" label="Viadutos" child/><TreeRow icon="walkway" label="Passarelas" child/><TreeRow icon="tunnel" label="Túneis" child/><TreeRow icon="bridge" label="Pontilhões" child/><TreeRow icon="culvert" label="Galerias" child/><TreeRow icon="wallret" label="Muros de arrimo" child/></details>}
-        {visible('lab isolado viga coluna elemento mola ancoragem parafusos chapa punção contato ligação dano chumbador')&&<details><summary><TreeRow icon="lab" label="Lab isolado"/></summary><TreeRow icon="isolatedbeam" label="Viga isolada" child/><TreeRow icon="isolatedcolumn" label="Coluna isolada" child/><TreeRow icon="spring" label="Elemento + mola" child/><TreeRow icon="anchor" label="Ancoragem (Pull-out)" child/><TreeRow icon="boltplate" label="Parafusos - Placa rígida" child/><TreeRow icon="bolt" label="Parafusos - furo circular" child/><TreeRow icon="slot" label="Parafusos - furo oblongo" child/><TreeRow icon="q4" label="Chapa - flexível Q4" child/><TreeRow icon="punch" label="Punção - Perímetro crítico" child/><TreeRow icon="plate" label="Chapa - furo explícito" child/><TreeRow icon="contact" label="Verificação numérica - contato" child/><TreeRow icon="slip" label="Ligação - Slip (bearing)" child/><TreeRow icon="tstub" label="Ligação - T-stub/Prying" child/><TreeRow icon="damage" label="Furo - dano/ovalização" child/><TreeRow icon="anchorconcrete" label="Chumbador - interação concreto" child/></details>}
+        {visible('lab isolado viga coluna elemento mola ancoragem parafusos chapa punção contato ligação dano chumbador')&&<details><summary><TreeRow icon="lab" label="Lab isolado"/></summary><TreeRow icon="isolatedbeam" label="Viga isolada" child testId="engineering-lab-isolated-beam" onActivate={()=>loadLabModel(demoIsolatedBeamLab3D)}/><TreeRow icon="isolatedcolumn" label="Coluna isolada" child testId="engineering-lab-isolated-column" onActivate={()=>loadLabModel(demoIsolatedColumnLab3D)}/><TreeRow icon="spring" label="Elemento + mola" child testId="engineering-lab-spring" onActivate={()=>loadLabModel(demoSpringLab3D)}/><TreeRow icon="anchor" label="Ancoragem (Pull-out)" child testId="engineering-lab-anchor-pullout" onActivate={openLab('anchor-pullout')}/><TreeRow icon="boltplate" label="Parafusos - Placa rígida" child testId="engineering-lab-bolt-group" onActivate={openLab('bolt-group')}/><TreeRow icon="bolt" label="Parafusos - furo circular" child testId="engineering-lab-bolt-contact" onActivate={openLab('bolt-contact')}/><TreeRow icon="slot" label="Parafusos - furo oblongo" child testId="engineering-lab-slot-contact" onActivate={openLab('slot-contact')}/><TreeRow icon="q4" label="Chapa - flexível Q4" child testId="engineering-lab-connection-plate-flex" onActivate={openLab('connection-plate-flex')}/><TreeRow icon="punch" label="Punção - Perímetro crítico" child testId="engineering-lab-punching-demand" onActivate={openLab('punching-demand')}/><TreeRow icon="plate" label="Chapa - furo explícito" child testId="engineering-lab-plate-hole-contact" onActivate={openLab('connection-plate-hole-contact')}/><TreeRow icon="contact" label="Verificação numérica - contato" child testId="engineering-lab-local-verification" onActivate={openLab('local-verification')}/><TreeRow icon="slip" label="Ligação - Slip (bearing)" child testId="engineering-lab-slip-bearing" onActivate={openLab('slip-bearing')}/><TreeRow icon="tstub" label="Ligação - T-stub/Prying" child testId="engineering-lab-tstub-prying" onActivate={openLab('tstub-prying')}/><TreeRow icon="damage" label="Furo - dano/ovalização" child testId="engineering-lab-hole-damage" onActivate={openLab('hole-damage')}/><TreeRow icon="anchorconcrete" label="Chumbador - interação concreto" child testId="engineering-lab-anchor-concrete" onActivate={openLab('anchor-concrete-interaction')}/></details>}
         {visible('inspeção remota detecção automática manifestações patológicas gêmeos digitais digital twins')&&<details><summary><TreeRow icon="inspection" label="Inspeção remota"/></summary><TreeRow icon="pathology" label="Detecção Automática de Manifestações Patológicas" child/><TreeRow icon="twin" label="Gêmeos Digitais (Digital Twins)" child/></details>}
       </div>
       <div className="eng-launch">

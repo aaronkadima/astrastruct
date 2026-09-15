@@ -3,7 +3,7 @@ import {test,expect} from '@playwright/test';
 test('P2 local verification Lab executes numerical sensitivity studies',async({page},testInfo)=>{
   test.skip(testInfo.project.name!=='desktop-chromium','local numerical verification workflow');
   await page.goto('./');
-  await page.getByTestId('model-lab-launch').click();
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('astrastruct:model-lab-open')));
   await page.getByRole('button',{name:'Lab isolado',exact:true}).click();
   await expect(page.getByTestId('open-local-verification-lab')).toBeVisible();
   await page.getByTestId('open-local-verification-lab').click();

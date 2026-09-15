@@ -1,4 +1,4 @@
-import React,{useMemo,useRef,useState} from 'react';
+import React,{useEffect,useMemo,useRef,useState} from 'react';
 // @ts-ignore
 import {inspectIfcExchangeReadiness,prepareIfcExchange,safeIfcFilename,createIfcImportStaging} from '../../web/src/interop/index.js';
 // @ts-ignore
@@ -20,6 +20,7 @@ export function IfcExchangeShell({children}:{children:React.ReactNode}){
   const inspection:any=useMemo(()=>{if(!project)return null;try{return inspectIfcExchangeReadiness(project)}catch(e:any){return{error:e?.message||String(e),ready:false,summary:null,mapping:{entries:[]},loadMapping:{issues:[]},loadSummary:null}}},[project]);
   const refresh=()=>{try{setProject(readProject());setMessage('');setPreview(null)}catch(e:any){setMessage(e?.message||String(e))}};
   const show=()=>{setOpen(true);refresh()};
+  useEffect(()=>{const openIfc=()=>show();window.addEventListener('astrastruct:ifc-open',openIfc);return()=>window.removeEventListener('astrastruct:ifc-open',openIfc)},[]);
   const change=(key:string,value:string)=>{const next={...owner,[key]:value};setOwner(next);localStorage.setItem(OWNER_KEY,JSON.stringify(next))};
   const canExport=!!project&&!busy&&!inspection?.error&&inspection?.ready&&personValid(owner)&&owner.organizationName.trim();
   const canImport=!!preview&&!busy&&!!preview.readiness?.commitReady;
@@ -41,7 +42,6 @@ export function IfcExchangeShell({children}:{children:React.ReactNode}){
   }catch(e:any){setMessage(e?.message||String(e));setBusy(false)}};
   return <>
     {children}
-    <button className="ifc-exchange-trigger" aria-label="Intercâmbio IFC" onClick={show}><span>IFC</span><small>4.3</small></button>
     {open&&<div className="ifc-exchange-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setOpen(false)}}>
       <section className="ifc-exchange-panel" role="dialog" aria-modal="true" aria-label="Intercâmbio IFC4X3" data-testid="ifc-exchange-panel">
         <header><div><strong>Intercâmbio IFC4X3</strong><span>v{PRODUCT_VERSION} · importação controlada · ISO 16739-1:2024</span></div><button aria-label="Fechar intercâmbio IFC" onClick={()=>setOpen(false)}>×</button></header>

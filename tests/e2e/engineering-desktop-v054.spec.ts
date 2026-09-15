@@ -10,6 +10,9 @@ test('v0.54 engineering desktop exposes ribbon, model tree, right rail and botto
   await expect(app).toHaveAttribute('data-engineering-desktop-preview','true');
   await expect(page.getByTestId('engineering-ribbon')).toBeVisible();
   await expect(page.getByTestId('engineering-ribbon-ifc')).toBeAttached();
+  await expect(page.locator('.eng-ribbon-scenario')).toHaveCount(0);
+  await expect(page.locator('.ifc-exchange-trigger')).toHaveCount(0);
+  await expect(page.getByTestId('model-lab-launch')).toHaveCount(0);
   await expect(page.getByTestId('engineering-results-strip')).toBeVisible();
   const viewport=page.viewportSize();
   if((viewport?.width||1200)>900){
@@ -39,6 +42,15 @@ test('v0.54 3D result publishing exposes functional engineering result tabs',asy
   await page.waitForFunction(()=>document.documentElement.dataset.astraReady==='true');
   await page.getByTestId('engineering-ribbon-analyze').click();
   await expect(page.locator('.engineering-view-title')).toHaveText('Vista 3D');
+  await expect(page.getByTestId('spatial3d-ssi-controls')).toHaveCount(0);
+  await expect(page.getByTestId('spatial3d-ssi-status')).toHaveCount(0);
+  const help=page.getByTestId('spatial3d-help');
+  await expect(help).toBeVisible();
+  await expect(help).not.toContainText('Canvas 3D');
+  const helpBox=await help.boundingBox(),canvasBox=await page.locator('.workspace>.viewport').boundingBox();
+  expect(helpBox).not.toBeNull();expect(canvasBox).not.toBeNull();
+  expect(helpBox!.y-canvasBox!.y).toBeGreaterThanOrEqual(0);
+  expect(helpBox!.y-canvasBox!.y).toBeLessThan(24);
   const strip=page.getByTestId('engineering-results-strip');
   await expect(strip.getByText('Pav. 1')).toBeVisible({timeout:20000});
   await strip.getByTestId('engineering-result-tab-reactions').click();
@@ -73,6 +85,11 @@ test('v0.54 Figma workstation controls are connected to real application state',
   await expect(explorer.getByText(/Fundações/).first()).toBeVisible();
   await expect(explorer.getByText(/Pavimentos/)).toHaveCount(0);
   await search.fill('');
+  await explorer.getByText('Lab isolado',{exact:true}).click();
+  await explorer.getByTestId('engineering-lab-anchor-pullout').click();
+  const lab=page.getByTestId('anchor-pullout-lab');
+  await expect(lab).toBeVisible();
+  await lab.getByRole('button',{name:'Fechar',exact:true}).click();
   await explorer.getByLabel('Buscar no modelo').press('Tab');
   await page.getByRole('button',{name:'Ajuda'}).click();
   await expect(page.getByText('Ajuda · AstraStruct')).toBeVisible();

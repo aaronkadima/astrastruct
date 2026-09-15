@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 
 test('P4 RuleEngine exposes versioned AISC EN ACI and ABNT checks',async({page},testInfo)=>{
   test.skip(testInfo.project.name!=='desktop-chromium','normative RuleEngine workflow');
-  await page.goto('./');await page.getByTestId('model-lab-launch').click();await page.getByRole('button',{name:'Lab isolado',exact:true}).click();
+  await page.goto('./');await page.evaluate(()=>window.dispatchEvent(new CustomEvent('astrastruct:model-lab-open')));await page.getByRole('button',{name:'Lab isolado',exact:true}).click();
   await expect(page.getByTestId('open-code-checks-lab')).toBeVisible();await page.getByTestId('open-code-checks-lab').click();
   const lab=page.getByTestId('code-checks-lab');await expect(lab).toBeVisible();
   await page.getByTestId('run-code-checks').click();

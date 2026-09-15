@@ -24,8 +24,8 @@ test('v0.54 engineering desktop exposes ribbon, model tree, right rail and botto
     expect(canvasBox!.height/workspaceBox!.height).toBeGreaterThan(.50);
     expect(Math.abs(resultsBox!.y-(canvasBox!.y+canvasBox!.height))).toBeLessThan(2);
     await expect(page.getByTestId('engineering-model-explorer').locator('input[value="NBR 6118:2014"]')).toBeVisible();
-    await expect(page.getByText(/Fundação visível/)).toBeVisible();
-    await expect(page.getByText(/Detalhamento condicionado à análise/)).toBeVisible();
+    await expect(page.getByTestId('engineering-right-rail').getByText(/Vista Lateral/)).toBeVisible();
+    await expect(page.getByTestId('engineering-right-rail').getByText(/Vista Inferior/)).toBeVisible();
   }else{
     await expect(page.getByTestId('engineering-model-explorer')).toHaveCount(1);
     await expect(page.getByTestId('engineering-right-rail')).toHaveCount(1);

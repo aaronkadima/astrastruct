@@ -112,6 +112,8 @@ test('v0.54 nonlinear 3D results animate the converged load path',async({page})=
   const canvas=page.getByTestId('spatial-canvas-3d'),animate=page.getByTestId('spatial3d-animate');
   await expect(canvas).toHaveAttribute('data-animation-mode','load-path');
   await expect(animate).toHaveText('Animar caminho de carga');
+  const animateBox=await animate.boundingBox(),resultsBox=await page.locator('.workspace>.results-panel').boundingBox();
+  expect(animateBox).not.toBeNull();expect(resultsBox).not.toBeNull();expect(animateBox!.y+animateBox!.height).toBeLessThanOrEqual(resultsBox!.y);
   await animate.click();
   await expect(canvas).toHaveAttribute('data-animation-playing','true');
   await expect.poll(async()=>Number(await canvas.getAttribute('data-load-path-lambda'))).toBeLessThan(.95);

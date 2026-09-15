@@ -20,7 +20,7 @@ test('v0.27 visualizes a 3D linear buckling mode in Canvas 3D',async({page})=>{
  await openStability(page);await expect(page.getByTestId('panel-buckling')).toBeVisible();await page.getByTestId('buckling-calculate').click();await expect(page.getByTestId('buckling-critical-factor')).toBeVisible();
  const factor=Number(await page.getByTestId('buckling-critical-factor').textContent());expect(factor).toBeGreaterThan(0);const canvas=page.getByTestId('spatial-canvas-3d');await expect(canvas).toHaveAttribute('data-shape-kind','buckling');await expect(page.getByTestId('spatial3d-shape-kind')).toContainText('Flambagem');
  await page.getByTestId('panel-buckling').getByLabel('Fechar').click();await expect(page.getByTestId('panel-buckling')).toBeHidden();
- await page.getByTestId('spatial3d-animate').click();await expect(page.getByTestId('spatial3d-animate')).toContainText('Parar');
+ const animate=page.getByTestId('engineering-view-animation');await expect(animate).toBeEnabled();await animate.click();await expect(animate).toContainText('Parar');
 });
 
 test('v0.29 transfers a 3D buckling mode into P-Delta as modal imperfection',async({page})=>{

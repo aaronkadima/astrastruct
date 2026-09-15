@@ -67,6 +67,33 @@ export function resolveShapeField3D(result,bucklingView,modeIndex=0){
   return{kind:'model',label:'Modelo',map:new Map(),mode:null};
 }
 export function maxFieldMagnitude3D(field){let m=0;for(const v of field?.values?.()||[])m=Math.max(m,norm3(v));return m}
+
+/**
+ * Builds a displacement field for an arbitrary point along a nonlinear load path
+ * by interpolating between the REAL converged equilibrium states stored per step
+ * in `nonlinear.history` (see corotational3d.js), rather than scaling the final
+ * displacement by a scalar factor. Scaling the final state is exact for linear
+ * problems but not for a geometrically nonlinear path, where the intermediate
+ * shape at load factor lambda is not final*lambda. Interpolating linearly BETWEEN
+ * two adjacent stored equilibrium states is a much smaller, standard approximation
+ * (equivalent to how any step-based FE post-processor animates a load-deflection
+ * history), and becomes exact in the limit of more steps.
+ *
+ * @param history Array of {lambda, displacements:[{nodeId,ux,uy,uz,...}]}, as
+ *   produced by solveFrameCorotational3D with stepDisplacementsAvailable=true.
+ *   Must be ordered by ascending lambda, lambda in (0,1], last entry lambda===1.
+ * @param lambda Target load factor in [0,1]. lambda=0 returns the undeformed
+ *   state (all zeros) even though history has no explicit zero-lambda entry.
+ */
+export function interpolateHistoryField3D(history=[],lambda=1){
+  const steps=(history||[]).filter(h=>Array.isArray(h?.displacements));
+  if(!steps.length)return new Map();
+  const t=clamp(Number(lambda)||0,0,1),zero=steps[0].displacements.map(d=>({nodeId:d.nodeId,ux:0,uy:0,uz:0})),points=[{lambda:0,displacements:zero},...steps];
+  let lo=points[0],hi=points[points.length-1];
+  for(let i=0;i<points.length-1;i++){if(t>=points[i].lambda&&t<=points[i+1].lambda){lo=points[i];hi=points[i+1];break}}
+  const span=hi.lambda-lo.lambda,f=span>EPS?(t-lo.lambda)/span:0,hiById=new Map(hi.displacements.map(d=>[d.nodeId,d]));
+  return new Map(lo.displacements.map(d=>{const h=hiById.get(d.nodeId)||d;return[d.nodeId,v3(d.ux+(h.ux-d.ux)*f,d.uy+(h.uy-d.uy)*f,d.uz+(h.uz-d.uz)*f)]}));
+}
 export function displacedPoint3D(node,field,scale=1,phase=1){const p=nodePoint(node),d=field?.get?.(node.id)||[0,0,0];return add3(p,scale3(d,scale*phase))}
 export function elementResultScalar3D(result,elementId,kind='none'){
   if(kind==='none')return 0;const f=(result?.elementForces||[]).find(x=>x.elementId===elementId);if(!f)return 0;

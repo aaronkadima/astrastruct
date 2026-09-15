@@ -103,3 +103,19 @@ test('v0.54 Figma workstation controls are connected to real application state',
   await strip.getByRole('button',{name:'Deslocamentos em nós'}).click();
   await expect(strip).toHaveAttribute('data-result-tab','nodes');
 });
+
+test('v0.54 nonlinear 3D results animate the converged load path',async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('astrastruct.project',JSON.stringify({id:'v054-load-path',name:'Caminho de carga 3D',nodes:[{id:'N0',x:0,y:0,z:0},{id:'N1',x:4,y:0,z:0}],elements:[{id:'E1',type:'frame3d',n1:'N0',n2:'N1',materialId:'S',sectionId:'SEC',orientation:{up:[0,1,0]}}],materials:[{id:'S',type:'steel',E:200e6,nu:.3,density:78.5}],sections:[{id:'SEC',family:'i',A:.02,Iy:7e-5,Iz:8e-5,J:2e-5,I:8e-5}],supports:[{nodeId:'N0',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],loads:[{id:'TIP',caseId:'LC1',nodeId:'N1',fy:-40}],elementLoads:[],nodeSprings:[],settlements:[],loadCases:[{id:'LC1',name:'Carga espacial'}],loadCombinations:[],settings:{analysisType:'corotational',analysisScenarioId:'LC1',activeLoadCaseId:'LC1',nonlinearSteps:6,nonlinearMaxIterations:40,nonlinearTolerance:2e-8}})));
+  await page.goto(preview);
+  await page.waitForFunction(()=>document.documentElement.dataset.astraReady==='true');
+  await page.getByTestId('engineering-ribbon-analyze').click();
+  const canvas=page.getByTestId('spatial-canvas-3d'),animate=page.getByTestId('spatial3d-animate');
+  await expect(canvas).toHaveAttribute('data-animation-mode','load-path');
+  await expect(animate).toHaveText('Animar caminho de carga');
+  await animate.click();
+  await expect(canvas).toHaveAttribute('data-animation-playing','true');
+  await expect.poll(async()=>Number(await canvas.getAttribute('data-load-path-lambda'))).toBeLessThan(.95);
+  await animate.click();
+  await expect(canvas).toHaveAttribute('data-animation-playing','false');
+  await expect(canvas).toHaveAttribute('data-load-path-lambda','1.000');
+});

@@ -23,7 +23,7 @@ test('v0.54 engineering desktop exposes ribbon, model tree, right rail and botto
     expect(canvasBox!.height).toBeGreaterThan(resultsBox!.height);
     expect(canvasBox!.height/workspaceBox!.height).toBeGreaterThan(.50);
     expect(Math.abs(resultsBox!.y-(canvasBox!.y+canvasBox!.height))).toBeLessThan(2);
-    await expect(page.getByText('NBR 6118:2023').first()).toBeVisible();
+    await expect(page.getByDisplayValue('NBR 6118:2014')).toBeVisible();
     await expect(page.getByText(/Fundação visível/)).toBeVisible();
     await expect(page.getByText(/Detalhamento condicionado à análise/)).toBeVisible();
   }else{
@@ -70,6 +70,7 @@ test('v0.54 Figma workstation controls are connected to real application state',
   await page.getByRole('button',{name:'Ajuda'}).click();
   await expect(page.getByText('Ajuda · AstraStruct')).toBeVisible();
   await page.getByRole('button',{name:'Fechar ajuda'}).click();
+  await page.getByTestId('engineering-ribbon-analyze').click();
   const strip=page.getByTestId('engineering-results-strip');
   await strip.getByRole('button',{name:'Reações de apoio'}).click();
   await expect(strip.getByText('Fx [kN]')).toBeVisible();

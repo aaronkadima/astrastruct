@@ -85,3 +85,27 @@
 .engineering-view-combination select{width:92px}
 .engineering-view-scale select{width:58px}
 @container (max-width:560px){.engineering-view-combination>span,.engineering-view-scale>span{display:inline!important}}
+
+/* Result-shape selector and settings keep the Figma toolbar complete while the
+   settings action remains anchored to the canvas corner. */
+.engineering-canvas-chrome{position:relative}
+.engineering-view-tools{padding-right:40px}
+.engineering-view-tools [data-view-action="settings"]{position:absolute;top:2px;right:8px;z-index:3;width:24px;height:22px;background:#f7f9fb}
+
+/* The side legend reads the exact active map range exposed by the 3D canvas. */
+.eng-legend{display:grid;grid-template-rows:24px 32px minmax(0,1fr) auto;padding:0!important}
+.eng-legend>select{height:23px;margin:5px 6px 4px;width:calc(100% - 12px);padding:1px 4px;border:1px solid #c8d0dc;border-radius:3px;background:#fff;color:#374151;font-size:9px}
+.eng-legend-scale{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 18px;gap:5px;padding:5px 8px 6px}
+.eng-legend-ticks{min-height:0;display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;color:#526272;font-size:8px;font-variant-numeric:tabular-nums;line-height:1}
+.eng-legend-scale.inactive .eng-legend-ticks{justify-content:center;color:#9aa5b0}
+.eng-legend .eng-gradient{width:18px;height:100%;min-height:0;margin:0;border:1px solid rgba(70,85,98,.35);border-radius:2px}
+.eng-legend>small{display:grid;gap:2px;padding:5px 7px 6px;border-top:1px solid #dde3ea;color:#6b7280;font-size:8px;line-height:1.2}
+.eng-legend>small b{overflow:hidden;color:#374151;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.eng-legend>small span{display:block}
+
+/* The Figma footer is the last application row on every viewport. The legacy
+   mobile dock was the empty strip that remained below it. */
+.astra-app.engineering-desktop .mobile-dock{display:none!important}
+.engineering-footer{display:flex!important;overflow-x:auto;overflow-y:hidden;white-space:nowrap;scrollbar-width:none}
+.engineering-footer::-webkit-scrollbar{display:none}
+@media(max-width:900px){.astra-app.engineering-desktop{grid-template-rows:44px 58px minmax(0,1fr) 22px!important}.engineering-footer{display:flex!important}}

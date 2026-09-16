@@ -242,6 +242,32 @@ function FoundationDiagram({project}:{project:any}){
   </svg>;
 }
 
+type ResultLegendState={field:string;min:number;max:number;unit:string;kind:'none'|'sequential'|'diverging'};
+const RESULT_FIELD_LABELS:Record<string,string>={none:'Sem mapa de resultados',Ux:'Laje Ux',Uy:'Laje Uy',Uz:'Laje Uz',Umag:'Laje |u| total',Nx:'Laje Nx',Ny:'Laje Ny',Nxy:'Laje Nxy',Mx:'Laje Mx',My:'Laje My',Mxy:'Laje Mxy',Qx:'Laje Qx',Qy:'Laje Qy',N:'Barras N',V:'Barras V',M:'Barras M',T:'Barras T'};
+const legendNumber=(value:number)=>{const a=Math.abs(value);return a>=1000||(a>0&&a<.001)?value.toExponential(2):a>=100?value.toFixed(1):a>=1?value.toFixed(2):value.toFixed(3)};
+function ResultLegend({maxDisp,shells}:{maxDisp:number;shells:number}){
+  const[state,setState]=useState<ResultLegendState>({field:'none',min:0,max:0,unit:'',kind:'none'});
+  useEffect(()=>{
+    const read=()=>{const canvas=document.querySelector<HTMLElement>('[data-testid="spatial-canvas-3d"]'),field=canvas?.dataset.forceMode||'none',min=Number(canvas?.dataset.resultMapMin||0),max=Number(canvas?.dataset.resultMapMax||0),unit=canvas?.dataset.resultMapUnit||'',kind=(canvas?.dataset.resultMapKind||'none') as ResultLegendState['kind'];const next={field,min:Number.isFinite(min)?min:0,max:Number.isFinite(max)?max:0,unit,kind};setState(current=>current.field===next.field&&current.min===next.min&&current.max===next.max&&current.unit===next.unit&&current.kind===next.kind?current:next)};
+    read();const root=document.querySelector('.astra-app');if(!root)return;const observer=new MutationObserver(read);observer.observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['data-force-mode','data-result-map-min','data-result-map-max','data-result-map-unit','data-result-map-kind']});return()=>observer.disconnect();
+  },[]);
+  const active=state.field!=='none'&&state.kind!=='none',factor=state.unit==='m'?1000:1,unit=state.unit==='m'?'mm':state.unit,min=state.min*factor,max=state.max*factor,ticks=Array.from({length:9},(_,index)=>max-(max-min)*index/8),gradient=state.kind==='diverging'?'linear-gradient(to bottom,rgb(199,71,77) 0%,rgb(235,241,246) 50%,rgb(92,150,204) 100%)':'linear-gradient(to bottom,rgb(235,77,85) 0%,rgb(55,132,190) 100%)';
+  const changeField=(field:string)=>{const core=document.querySelector<HTMLSelectElement>('select[aria-label="Campo de esforço 3D"]');if(core){core.value=field;core.dispatchEvent(new Event('change',{bubbles:true}))}};
+  return <>
+    <select aria-label="Campo visual rápido" value={RESULT_FIELD_LABELS[state.field]?state.field:'none'} onChange={e=>changeField(e.target.value)}>
+      <option value="none">Deslocamento / deformada</option>
+      <optgroup label="Laje · deslocamentos"><option value="Ux">Laje Ux</option><option value="Uy">Laje Uy</option><option value="Uz">Laje Uz</option><option value="Umag">Laje |u| total</option></optgroup>
+      <optgroup label="Laje · esforços"><option value="Nx">Laje Nx</option><option value="Ny">Laje Ny</option><option value="Nxy">Laje Nxy</option><option value="Mx">Laje Mx</option><option value="My">Laje My</option><option value="Mxy">Laje Mxy</option><option value="Qx">Laje Qx</option><option value="Qy">Laje Qy</option></optgroup>
+      <optgroup label="Barras"><option value="N">Barras N</option><option value="V">Barras V</option><option value="M">Barras M</option><option value="T">Barras T</option></optgroup>
+    </select>
+    <div className={`eng-legend-scale ${active?'active':'inactive'}`} data-testid="engineering-result-legend" data-result-field={state.field} data-result-unit={unit}>
+      <div className="eng-legend-ticks" aria-label={active?`Escala de ${legendNumber(min)} a ${legendNumber(max)} ${unit}`:'Mapa de resultados inativo'}>{active?ticks.map((value,index)=><span key={index}>{legendNumber(value)}</span>):<span>—</span>}</div>
+      <div className="eng-gradient" style={{background:active?gradient:'linear-gradient(to bottom,#d8dee5,#eef1f4,#d8dee5)'}}/>
+    </div>
+    <small><b>{RESULT_FIELD_LABELS[state.field]||state.field}</b>{active?<><span>Unidade: {unit||'—'}</span><span>mín. {legendNumber(min)} · máx. {legendNumber(max)}</span></>:<span>u máx. {fmt(maxDisp,3)} mm · {shells} shell(s)</span>}</small>
+  </>;
+}
+
 export function EngineeringRightRail({project,result}:Pick<Props,'project'|'result'>){
   const vis=result?.engineeringVisualization;
   const maxDisp=vis?.displacement?.maxMagnitudeMm||0;
@@ -253,13 +279,7 @@ export function EngineeringRightRail({project,result}:Pick<Props,'project'|'resu
     <section><header>Vista Inferior - Fundação<button aria-label="Fechar vista inferior">×</button></header><div className="eng-foundation-tools"><button aria-label="Ampliar">＋</button><button aria-label="Rotacionar">↻</button><button aria-label="Reduzir">−</button><button aria-label="Vista inicial">⌂</button></div><FoundationDiagram project={project}/></section>
     <section className="eng-legend">
       <header>Legenda de resultados</header>
-      <select aria-label="Campo visual rápido" onChange={e=>{
-        const core=document.querySelector<HTMLSelectElement>('select[aria-label="Campo de esforço 3D"]');
-        if(core){core.value=e.target.value;core.dispatchEvent(new Event('change',{bubbles:true}));}
-      }}>
-        <option value="none">Deslocamento / deformada</option><option value="Ux">Laje Ux</option><option value="Uy">Laje Uy</option><option value="Uz">Laje Uz</option><option value="Umag">Laje |u| total</option><option value="Mx">Laje Mx</option><option value="My">Laje My</option><option value="Nx">Laje Nx</option><option value="N">Barras N</option><option value="M">Barras M</option>
-      </select>
-      <div className="eng-gradient"/><div className="eng-legend-values"><span>−máx.</span><span>0</span><span>+máx.</span></div><small>u máx. {fmt(maxDisp,3)} mm · {shells} shell(s)</small>
+      <ResultLegend maxDisp={maxDisp} shells={shells}/>
     </section>
     <section className="eng-detail">
       <header>Detalhamento</header><div className="eng-detail-sketch"><span>▦</span><span>▥</span></div>

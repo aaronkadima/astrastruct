@@ -14,6 +14,11 @@ test('v0.54 engineering desktop exposes ribbon, model tree, right rail and botto
   await expect(page.locator('.ifc-exchange-trigger')).toHaveCount(0);
   await expect(page.getByTestId('model-lab-launch')).toHaveCount(0);
   await expect(page.getByTestId('engineering-results-strip')).toBeVisible();
+  const open=page.locator('[data-eng-top="open"]'),save=page.locator('[data-eng-top="save"]');
+  await expect(open).toBeVisible();await expect(open).toContainText('Abrir');expect(await open.evaluate((element,saveElement)=>Boolean(element.compareDocumentPosition(saveElement as Node)&Node.DOCUMENT_POSITION_FOLLOWING),await save.elementHandle())).toBe(true);
+  const chooserPromise=page.waitForEvent('filechooser');await open.click();await chooserPromise;
+  const footer=page.locator('.engineering-footer');await expect(footer).toBeVisible();await expect(footer).toContainText('Projeto:');await expect(page.locator('.mobile-dock')).toBeHidden();
+  const footerBox=await footer.boundingBox(),appBox=await app.boundingBox();expect(footerBox).not.toBeNull();expect(appBox).not.toBeNull();expect(Math.abs(footerBox!.y+footerBox!.height-(appBox!.y+appBox!.height))).toBeLessThan(2);
   const viewport=page.viewportSize();
   if((viewport?.width||1200)>900){
     await expect(page.getByTestId('engineering-model-explorer')).toBeVisible();
@@ -88,6 +93,7 @@ test('v0.54 3D result publishing exposes functional engineering result tabs',asy
   await page.goto(preview);
   await page.waitForFunction(()=>document.documentElement.dataset.astraReady==='true');
   const canvas=page.getByTestId('spatial-canvas-3d'),viewTools=page.locator('.engineering-view-tools'),view3d=page.locator('.engineering-view-3d-controls');
+  const shapeMode=page.locator('.engineering-shape-mode');await expect(shapeMode).toBeDisabled();await expect(shapeMode).toHaveValue('reference');await expect(shapeMode.locator('option')).toHaveText(['Deformada','Original','Ambos']);
   await expect(page.locator('.engineering-view-combination>span')).toHaveText('Combinação:');
   await expect(page.locator('.engineering-view-scale>span')).toHaveText('Escala:');
   const firstRowMetrics=await page.evaluate(()=>{
@@ -110,11 +116,15 @@ test('v0.54 3D result publishing exposes functional engineering result tabs',asy
   await page.getByTestId('engineering-view-fit').click();await expect(canvas).toHaveAttribute('data-view','iso');
   await page.getByTestId('engineering-ribbon-analyze').click();
   await expect(page.locator('.engineering-view-title')).toHaveText('Vista 3D');
+  await expect(shapeMode).toBeEnabled();await expect(shapeMode).toHaveValue('both');
+  await shapeMode.selectOption('deformed');await expect(canvas).toHaveAttribute('data-show-deformed','true');await expect(canvas).toHaveAttribute('data-show-reference','false');await expect(canvas).toHaveAttribute('data-show-original','false');
+  await shapeMode.selectOption('reference');await expect(canvas).toHaveAttribute('data-show-deformed','false');await expect(canvas).toHaveAttribute('data-show-reference','true');await expect(canvas).toHaveAttribute('data-show-original','true');
+  await shapeMode.selectOption('both');await expect(canvas).toHaveAttribute('data-show-deformed','true');await expect(canvas).toHaveAttribute('data-show-reference','true');
   const animate=page.getByTestId('engineering-view-animation'),settings=page.getByTestId('engineering-view-settings'),coreAnimate=page.getByTestId('spatial3d-animate');
   await expect(canvas).toHaveAttribute('data-animation-mode','deformation');
   await expect(coreAnimate).toBeAttached();await expect(coreAnimate).toBeHidden();await expect(coreAnimate).toHaveAttribute('data-animate-mode','deformation');
   await expect(animate).toBeVisible();await expect(animate).toBeEnabled();await expect(animate).toHaveAttribute('data-animate-mode','deformation');await expect(settings).toBeVisible();
-  const toolsBox=await viewTools.boundingBox(),animateBox=await animate.boundingBox(),settingsBox=await settings.boundingBox();expect(toolsBox).not.toBeNull();expect(animateBox).not.toBeNull();expect(settingsBox).not.toBeNull();expect(animateBox!.x).toBeGreaterThanOrEqual(toolsBox!.x);expect(settingsBox!.x+settingsBox!.width).toBeLessThanOrEqual(toolsBox!.x+toolsBox!.width+1);
+  const toolsBox=await viewTools.boundingBox(),chromeBox=await page.locator('.engineering-canvas-chrome').boundingBox(),animateBox=await animate.boundingBox(),settingsBox=await settings.boundingBox();expect(toolsBox).not.toBeNull();expect(chromeBox).not.toBeNull();expect(animateBox).not.toBeNull();expect(settingsBox).not.toBeNull();expect(animateBox!.x).toBeGreaterThanOrEqual(toolsBox!.x);expect(settingsBox!.x+settingsBox!.width).toBeLessThanOrEqual(toolsBox!.x+toolsBox!.width+1);expect(chromeBox!.x+chromeBox!.width-(settingsBox!.x+settingsBox!.width)).toBeLessThanOrEqual(9);expect(Math.abs(settingsBox!.y-chromeBox!.y-2)).toBeLessThan(2);
   await settings.click();await expect(page.getByTestId('workspace-settings-dialog')).toBeVisible();await page.getByTestId('workspace-settings-dialog').getByRole('button',{name:'Concluir'}).click();
   await expect(page.getByTestId('spatial3d-ssi-controls')).toHaveCount(0);
   await expect(page.getByTestId('spatial3d-ssi-status')).toHaveCount(0);

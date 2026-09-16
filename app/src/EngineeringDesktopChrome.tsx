@@ -257,7 +257,7 @@ export function EngineeringRightRail({project,result}:Pick<Props,'project'|'resu
         const core=document.querySelector<HTMLSelectElement>('select[aria-label="Campo de esforço 3D"]');
         if(core){core.value=e.target.value;core.dispatchEvent(new Event('change',{bubbles:true}));}
       }}>
-        <option value="none">Deslocamento / deformada</option><option value="Mx">Laje Mx</option><option value="My">Laje My</option><option value="Nx">Laje Nx</option><option value="N">Barras N</option><option value="M">Barras M</option>
+        <option value="none">Deslocamento / deformada</option><option value="Ux">Laje Ux</option><option value="Uy">Laje Uy</option><option value="Uz">Laje Uz</option><option value="Umag">Laje |u| total</option><option value="Mx">Laje Mx</option><option value="My">Laje My</option><option value="Nx">Laje Nx</option><option value="N">Barras N</option><option value="M">Barras M</option>
       </select>
       <div className="eng-gradient"/><div className="eng-legend-values"><span>−máx.</span><span>0</span><span>+máx.</span></div><small>u máx. {fmt(maxDisp,3)} mm · {shells} shell(s)</small>
     </section>

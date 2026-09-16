@@ -49,7 +49,7 @@ export function createRegisteredElementComponent(element, context={}) {
 
 export function inferProjectDimension(project = {}) {
   const dimensions = new Set((project.elements || []).map(e => getElementDefinition(e.type)?.dimension).filter(Boolean));
-  if (!dimensions.size) return '2d';
+  if (!dimensions.size) return project.settings?.modelDimension === '3d' ? '3d' : '2d';
   if (dimensions.size > 1) return 'mixed-dimension';
   return [...dimensions][0];
 }

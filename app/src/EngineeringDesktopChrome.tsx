@@ -1,8 +1,10 @@
-import React,{useState}from'react';
+import React,{useEffect,useRef,useState}from'react';
 // @ts-ignore
 import{nbr6118Baseline,validateNBR6118Baseline}from'../../web/src/core/nbr6118Baseline.js';
 // @ts-ignore
-import{demoIsolatedBeamLab3D,demoIsolatedColumnLab3D,demoSpringLab3D}from'../../web/src/core/exampleModels.js';
+import{emptyProject,demoFrame,demoBeamUDL,demoTruss,demoMixed,demoSpatialFrame}from'../../web/src/core/model.js';
+// @ts-ignore
+import{demoFiveStoreyBuilding3D,demoSteelWarehouse3D,demoWaterTank3D,demoIsolatedBeamLab3D,demoIsolatedColumnLab3D,demoSpringLab3D}from'../../web/src/core/exampleModels.js';
 import{openIsolatedLab}from'./labRegistry';
 
 type Props={
@@ -96,10 +98,25 @@ const TreeRow=({icon,label,count,child=false,onActivate,testId}:{icon?:string;la
   return <div className={`eng-tree-row ${child?'child':''} ${onActivate?'interactive':''}`} data-testid={testId} role={onActivate?'button':undefined} tabIndex={onActivate?0:undefined} onClick={onActivate?activate:undefined} onKeyDown={onActivate?e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();activate(e)}}:undefined}>{icon&&<TreeIcon name={icon}/>}<span>{label}</span>{count!==undefined&&<small>({count})</small>}</div>;
 };
 
-function Ribbon({onAnalyze,onOpenPanel}:Props){
-  return <div className="eng-ribbon" data-testid="engineering-ribbon">
+function Ribbon({onAnalyze,onOpenPanel,onCommit}:Props){
+  const[modelingOpen,setModelingOpen]=useState(false);
+  const[modelSection,setModelSection]=useState<'2d'|'3d'|null>(null);
+  const triggerRef=useRef<HTMLButtonElement>(null),menuRef=useRef<HTMLDivElement>(null);
+  const closeModeling=()=>{setModelingOpen(false);setModelSection(null)};
+  useEffect(()=>{
+    if(!modelingOpen)return;
+    const outside=(event:PointerEvent)=>{const target=event.target as Node;if(!triggerRef.current?.contains(target)&&!menuRef.current?.contains(target))closeModeling()};
+    const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){closeModeling();triggerRef.current?.focus()}};
+    document.addEventListener('pointerdown',outside);document.addEventListener('keydown',escape);
+    return()=>{document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',escape)};
+  },[modelingOpen]);
+  const chooseProject=(factory:()=>any)=>{closeModeling();onCommit(factory(),true)};
+  const blankProject=(dimension:'2d'|'3d')=>{const p:any=emptyProject();p.name=`Novo modelo ${dimension.toUpperCase()}`;p.settings.modelDimension=dimension;p.meta.modelKind=dimension;return p};
+  const openBuilding=()=>{closeModeling();window.dispatchEvent(new CustomEvent('astrastruct:model-lab-open',{detail:{tab:'building',source:'engineering-ribbon'}}))};
+  const openProperties=()=>{closeModeling();onOpenPanel('properties')};
+  return <div className={`eng-ribbon ${modelingOpen?'menu-open':''}`} data-testid="engineering-ribbon">
     <div className="eng-ribbon-group">
-      <button onClick={()=>onOpenPanel('properties')}><RibbonIcon name="launch"/><span>Lançamento<small>Modelagem</small></span></button>
+      <button ref={triggerRef} data-testid="engineering-ribbon-modeling" className={modelingOpen?'active':''} aria-haspopup="menu" aria-expanded={modelingOpen} onClick={()=>{setModelingOpen(open=>!open);if(modelingOpen)setModelSection(null)}}><RibbonIcon name="launch"/><span>Lançamento<small>Modelagem</small></span></button>
       <button data-testid="engineering-ribbon-analyze" onClick={onAnalyze}><RibbonIcon name="analysis"/><span>Análise<small>Processar</small></span></button>
       <button onClick={()=>onOpenPanel('actions')}><RibbonIcon name="combinations"/><span>Combinações<small>ELU / ELS</small></span></button>
       <button className="active" onClick={()=>onOpenPanel('postprocess')}><RibbonIcon name="results"/><span>Resultados<small>Diagramas / Mapas</small></span></button>
@@ -109,6 +126,33 @@ function Ribbon({onAnalyze,onOpenPanel}:Props){
       <button onClick={()=>onOpenPanel('properties')}><RibbonIcon name="norm"/><span>NBR 6118<small>Parâmetros</small></span></button>
       <button data-testid="engineering-ribbon-ifc" onClick={()=>window.dispatchEvent(new CustomEvent('astrastruct:ifc-open',{detail:{source:'engineering-ribbon'}}))}><RibbonIcon name="ifc"/><span>IFC<small>Import / Export</small></span></button>
     </div>
+    {modelingOpen&&<div ref={menuRef} className="eng-modeling-menu" data-testid="engineering-modeling-menu" role="menu" aria-label="Lançamento e modelagem">
+      <header><strong>Lançamento / Modelagem</strong><small>Escolha como iniciar ou carregar o modelo</small></header>
+      <button className="eng-modeling-primary" data-testid="engineering-launch-building" role="menuitem" onClick={openBuilding}><span className="eng-modeling-icon building" aria-hidden="true">▦</span><span><b>Lançar novo Edifício</b><small>Lançador automático por malha ou planta</small></span></button>
+      <section className={modelSection==='2d'?'open':''}>
+        <button data-testid="engineering-modeling-2d" aria-expanded={modelSection==='2d'} onClick={()=>setModelSection(current=>current==='2d'?null:'2d')}><span className="eng-modeling-icon mode2d" aria-hidden="true">2D</span><span><b>Modelo 2D</b><small>Criar ou abrir um exemplo existente</small></span><i aria-hidden="true">›</i></button>
+        {modelSection==='2d'&&<div className="eng-modeling-submenu" data-testid="engineering-modeling-2d-options">
+          <button data-testid="engineering-new-2d" onClick={()=>chooseProject(()=>blankProject('2d'))}><b>Criar novo</b><small>Modelo 2D vazio</small></button>
+          <p>Exemplos de modelo 2D</p>
+          <button data-testid="engineering-example-2d-frame" onClick={()=>chooseProject(demoFrame)}><b>Pórtico 2D</b><small>Pórtico demonstrativo</small></button>
+          <button data-testid="engineering-example-2d-beam" onClick={()=>chooseProject(demoBeamUDL)}><b>Viga 2D</b><small>Viga biapoiada com carga distribuída</small></button>
+          <button onClick={()=>chooseProject(demoTruss)}><b>Treliça 2D</b><small>Treliça plana demonstrativa</small></button>
+          <button onClick={()=>chooseProject(demoMixed)}><b>Modelo misto 2D</b><small>Pórtico contraventado</small></button>
+        </div>}
+      </section>
+      <section className={modelSection==='3d'?'open':''}>
+        <button data-testid="engineering-modeling-3d" aria-expanded={modelSection==='3d'} onClick={()=>setModelSection(current=>current==='3d'?null:'3d')}><span className="eng-modeling-icon mode3d" aria-hidden="true">3D</span><span><b>Modelo 3D</b><small>Criar ou abrir um exemplo existente</small></span><i aria-hidden="true">›</i></button>
+        {modelSection==='3d'&&<div className="eng-modeling-submenu" data-testid="engineering-modeling-3d-options">
+          <button data-testid="engineering-new-3d" onClick={()=>chooseProject(()=>blankProject('3d'))}><b>Criar novo</b><small>Modelo 3D vazio</small></button>
+          <p>Exemplos de modelo 3D</p>
+          <button data-testid="engineering-example-3d-frame" onClick={()=>chooseProject(demoSpatialFrame)}><b>Pórtico espacial 3D</b><small>Barras em três dimensões</small></button>
+          <button onClick={()=>chooseProject(demoFiveStoreyBuilding3D)}><b>Edifício RC · 5 pavimentos</b><small>Estrutura espacial em concreto</small></button>
+          <button onClick={()=>chooseProject(demoSteelWarehouse3D)}><b>Galpão metálico</b><small>Pórticos, terças e duas águas</small></button>
+          <button onClick={()=>chooseProject(demoWaterTank3D)}><b>Reservatório elevado</b><small>Modelo global de barras</small></button>
+        </div>}
+      </section>
+      <button className="eng-modeling-primary" data-testid="engineering-properties-library" role="menuitem" onClick={openProperties}><span className="eng-modeling-icon library" aria-hidden="true">▤</span><span><b>Biblioteca de propriedades</b><small>Materiais e seções paramétricas</small></span></button>
+    </div>}
   </div>;
 }
 

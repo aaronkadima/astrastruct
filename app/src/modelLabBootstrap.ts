@@ -17,11 +17,12 @@ function installStyle(){if(document.getElementById('astra-model-lab-style'))retu
 `;document.head.appendChild(s)}
 
 type PlanNode={id:string,x:number,y:number};type PlanEdge={id:string,n1:string,n2:string};
-function renderModal(){
+function renderModal(event?:Event){
   if(document.querySelector('[data-testid="model-lab-overlay"]'))return;
+  const requested=String((event as CustomEvent)?.detail?.tab||'examples');
   const overlay=document.createElement('div');overlay.className='astra-lab-overlay';overlay.setAttribute('data-testid','model-lab-overlay');
   overlay.innerHTML=`<section class="astra-lab-modal"><header class="astra-lab-head"><div><h2>Lab & Modelos estruturais</h2><p>Exemplos 3D, ensaios isolados e lançamento rápido de edifícios.</p></div><button class="astra-lab-close" aria-label="Fechar Lab">×</button></header><div class="astra-lab-tabs"><button data-tab="examples" class="active">Modelos 3D</button><button data-tab="lab">Lab isolado</button><button data-tab="building">Lançar edifício</button></div><div class="astra-lab-body" data-lab-body></div></section>`;
-  document.body.appendChild(overlay);const body=$('[data-lab-body]',overlay)!;let tab='examples';
+  document.body.appendChild(overlay);const body=$('[data-lab-body]',overlay)!;let tab=['examples','lab','building'].includes(requested)?requested:'examples';
   const close=()=>overlay.remove();$('.astra-lab-close',overlay)?.addEventListener('click',close);overlay.addEventListener('mousedown',e=>{if(e.target===overlay)close()});
   const setTab=(next:string)=>{tab=next;overlay.querySelectorAll('[data-tab]').forEach((b:any)=>b.classList.toggle('active',b.dataset.tab===tab));render()};overlay.querySelectorAll('[data-tab]').forEach((b:any)=>b.addEventListener('click',()=>setTab(b.dataset.tab)));
 
@@ -43,7 +44,7 @@ function renderModal(){
     };
     const drawBuild=()=>mode==='grid'?drawGrid():drawSketch();drawBuild();
   }
-  function render(){if(tab==='examples')renderExamples();else if(tab==='lab')renderLab();else renderBuilding()}render();
+  function render(){if(tab==='examples')renderExamples();else if(tab==='lab')renderLab();else renderBuilding()}setTab(tab);
 }
 
 let installed=false;

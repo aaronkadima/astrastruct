@@ -126,7 +126,7 @@ function Ribbon({onAnalyze,onOpenPanel,onCommit}:Props){
       <button onClick={()=>onOpenPanel('properties')}><RibbonIcon name="norm"/><span>NBR 6118<small>Parâmetros</small></span></button>
       <button data-testid="engineering-ribbon-ifc" onClick={()=>window.dispatchEvent(new CustomEvent('astrastruct:ifc-open',{detail:{source:'engineering-ribbon'}}))}><RibbonIcon name="ifc"/><span>IFC<small>Import / Export</small></span></button>
     </div>
-    {modelingOpen&&<div ref={menuRef} className="eng-modeling-menu" data-testid="engineering-modeling-menu" role="menu" aria-label="Lançamento e modelagem">
+    {modelingOpen&&<div ref={menuRef} className="eng-ribbon-menu eng-modeling-menu" data-testid="engineering-modeling-menu" role="menu" aria-label="Lançamento e modelagem">
       <header><strong>Lançamento / Modelagem</strong><small>Escolha como iniciar ou carregar o modelo</small></header>
       <button className="eng-modeling-primary" data-testid="engineering-launch-building" role="menuitem" onClick={openBuilding}><span className="eng-modeling-icon building" aria-hidden="true">▦</span><span><b>Lançar novo Edifício</b><small>Lançador automático por malha ou planta</small></span></button>
       <section className={modelSection==='2d'?'open':''}>

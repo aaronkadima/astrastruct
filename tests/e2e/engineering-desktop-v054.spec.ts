@@ -45,6 +45,8 @@ test('v0.54 modeling ribbon creates 2D/3D models and opens launchers and propert
 
   await openMenu();
   const menu=page.getByTestId('engineering-modeling-menu');
+  const menuBox=await menu.boundingBox(),treeBox=await page.locator('.library-panel').boundingBox();
+  expect(menuBox).not.toBeNull();expect(treeBox).not.toBeNull();expect(Math.abs(menuBox!.width-treeBox!.width)).toBeLessThan(1);
   await expect(menu).toContainText('Lançar novo Edifício');
   await expect(menu).toContainText('Modelo 2D');
   await expect(menu).toContainText('Modelo 3D');
@@ -87,15 +89,23 @@ test('v0.54 3D result publishing exposes functional engineering result tabs',asy
   await page.waitForFunction(()=>document.documentElement.dataset.astraReady==='true');
   await page.getByTestId('engineering-ribbon-analyze').click();
   await expect(page.locator('.engineering-view-title')).toHaveText('Vista 3D');
+  const canvas=page.getByTestId('spatial-canvas-3d'),animate=page.getByTestId('engineering-view-animation'),coreAnimate=page.getByTestId('spatial3d-animate');
+  await expect(canvas).toHaveAttribute('data-animation-mode','deformation');
+  await expect(coreAnimate).toBeAttached();await expect(coreAnimate).toBeHidden();await expect(coreAnimate).toHaveAttribute('data-animate-mode','deformation');
+  await expect(animate).toBeVisible();await expect(animate).toBeEnabled();await expect(animate).toHaveAttribute('data-animate-mode','deformation');
   await expect(page.getByTestId('spatial3d-ssi-controls')).toHaveCount(0);
   await expect(page.getByTestId('spatial3d-ssi-status')).toHaveCount(0);
   const help=page.getByTestId('spatial3d-help');
   await expect(help).toBeVisible();
   await expect(help).not.toContainText('Canvas 3D');
-  const helpBox=await help.boundingBox(),canvasBox=await page.locator('.workspace>.viewport').boundingBox();
-  expect(helpBox).not.toBeNull();expect(canvasBox).not.toBeNull();
-  expect(helpBox!.y-canvasBox!.y).toBeGreaterThanOrEqual(0);
-  expect(helpBox!.y-canvasBox!.y).toBeLessThan(24);
+  const floating=page.getByTestId('spatial3d-result-controls');await expect(floating).toBeVisible();
+  const helpBox=await help.boundingBox(),floatingBox=await floating.boundingBox(),canvasBox=await page.locator('.workspace>.viewport').boundingBox();
+  expect(helpBox).not.toBeNull();expect(floatingBox).not.toBeNull();expect(canvasBox).not.toBeNull();
+  expect(helpBox!.y-canvasBox!.y).toBeGreaterThanOrEqual(0);expect(helpBox!.y-canvasBox!.y).toBeLessThan(24);
+  expect(Math.abs(floatingBox!.y-helpBox!.y)).toBeLessThan(2);expect(Math.abs(floatingBox!.height-helpBox!.height)).toBeLessThan(2);expect(floatingBox!.height).toBeLessThanOrEqual(26);
+  await animate.click();await expect(canvas).toHaveAttribute('data-animation-playing','true');await expect(animate.locator('b')).toHaveText('Parar');
+  await expect.poll(async()=>Number(await canvas.getAttribute('data-animation-phase'))).toBeLessThan(.95);
+  await animate.click();await expect(canvas).toHaveAttribute('data-animation-playing','false');await expect(canvas).toHaveAttribute('data-animation-phase','1.000');
   const strip=page.getByTestId('engineering-results-strip');
   await expect(strip.getByText('Pav. 1')).toBeVisible({timeout:20000});
   await strip.getByTestId('engineering-result-tab-reactions').click();

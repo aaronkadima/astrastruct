@@ -87,9 +87,19 @@ test('v0.54 3D result publishing exposes functional engineering result tabs',asy
   await page.addInitScript(()=>localStorage.setItem('astrastruct.project',JSON.stringify({id:'v054-e2e',name:'Edifício teste',levels:[{id:'L0',name:'Base',elevation:0},{id:'L1',name:'Pav. 1',elevation:3}],nodes:[{id:'N0',x:0,y:0,z:0,levelId:'L0'},{id:'N1',x:0,y:0,z:3,levelId:'L1'}],supports:[{nodeId:'N0',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],materials:[{id:'steel355',name:'Aço',type:'steel',E:200e6,nu:.3,density:78.5,fy:355}],sections:[{id:'s',name:'Seção',family:'steel3d',A:.012,Iy:.00018,Iz:.00022,J:.00003,I:.00022}],elements:[{id:'C1',type:'frame3d',n1:'N0',n2:'N1',materialId:'steel355',sectionId:'s',A:.012,Iy:.00018,Iz:.00022,J:.00003}],loads:[{id:'P',caseId:'LC1',nodeId:'N1',fx:5,fy:0,fz:-10}],loadCases:[{id:'LC1',name:'LC1'}],loadCombinations:[],detailing:{reinforcement:{contract:'rebar-schedule/v1',marks:[{id:'A1',location:'Pilar C1',grade:'CA-50',diameterMm:12.5,quantity:4,cutLengthMm:3200,totalLengthM:12.8,totalMassKg:12.63}]}},settings:{analysisType:'linear',analysisScenarioId:'LC1',activeLoadCaseId:'LC1'}})));
   await page.goto(preview);
   await page.waitForFunction(()=>document.documentElement.dataset.astraReady==='true');
+  const canvas=page.getByTestId('spatial-canvas-3d'),viewTools=page.locator('.engineering-view-tools');
+  await expect(page.getByTestId('spatial3d-toolbar')).toBeHidden();
+  await expect(viewTools.locator('[data-view-preset]')).toHaveCount(4);
+  await expect(viewTools.getByTestId('engineering-view-zoom-in')).toHaveCount(1);
+  await expect(viewTools.getByTestId('engineering-view-zoom-out')).toHaveCount(1);
+  for(const preset of ['xy','xz','yz','iso']){const control=page.getByTestId(`engineering-view-${preset}`);await control.click();await expect(canvas).toHaveAttribute('data-view',preset)}
+  const initialZoom=Number(await canvas.getAttribute('data-zoom'));await page.getByTestId('engineering-view-zoom-in').click();await expect.poll(async()=>Number(await canvas.getAttribute('data-zoom'))).toBeGreaterThan(initialZoom);
+  const projection=page.getByTestId('engineering-view-projection');await projection.click();await expect(canvas).toHaveAttribute('data-projection','orthographic');await expect(projection).toHaveText('Orto.');await projection.click();await expect(canvas).toHaveAttribute('data-projection','perspective');await expect(projection).toHaveText('Persp.');
+  const rotation=page.getByTestId('engineering-view-auto-rotate'),yaw0=Number(await canvas.getAttribute('data-camera-yaw'));await rotation.click();await expect(canvas).toHaveAttribute('data-auto-rotation','true');await expect(rotation).toHaveAttribute('aria-pressed','true');await expect.poll(async()=>Number(await canvas.getAttribute('data-camera-yaw'))).toBeGreaterThan(yaw0+.01);await rotation.click();await expect(canvas).toHaveAttribute('data-auto-rotation','false');await expect(rotation).toHaveAttribute('aria-pressed','false');
+  await page.getByTestId('engineering-view-fit').click();await expect(canvas).toHaveAttribute('data-view','iso');
   await page.getByTestId('engineering-ribbon-analyze').click();
   await expect(page.locator('.engineering-view-title')).toHaveText('Vista 3D');
-  const canvas=page.getByTestId('spatial-canvas-3d'),animate=page.getByTestId('engineering-view-animation'),coreAnimate=page.getByTestId('spatial3d-animate');
+  const animate=page.getByTestId('engineering-view-animation'),coreAnimate=page.getByTestId('spatial3d-animate');
   await expect(canvas).toHaveAttribute('data-animation-mode','deformation');
   await expect(coreAnimate).toBeAttached();await expect(coreAnimate).toBeHidden();await expect(coreAnimate).toHaveAttribute('data-animate-mode','deformation');
   await expect(animate).toBeVisible();await expect(animate).toBeEnabled();await expect(animate).toHaveAttribute('data-animate-mode','deformation');

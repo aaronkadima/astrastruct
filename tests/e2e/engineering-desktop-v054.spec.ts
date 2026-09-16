@@ -99,10 +99,12 @@ test('v0.54 3D result publishing exposes functional engineering result tabs',asy
   await page.getByTestId('engineering-view-fit').click();await expect(canvas).toHaveAttribute('data-view','iso');
   await page.getByTestId('engineering-ribbon-analyze').click();
   await expect(page.locator('.engineering-view-title')).toHaveText('Vista 3D');
-  const animate=page.getByTestId('engineering-view-animation'),coreAnimate=page.getByTestId('spatial3d-animate');
+  const animate=page.getByTestId('engineering-view-animation'),settings=page.getByTestId('engineering-view-settings'),coreAnimate=page.getByTestId('spatial3d-animate');
   await expect(canvas).toHaveAttribute('data-animation-mode','deformation');
   await expect(coreAnimate).toBeAttached();await expect(coreAnimate).toBeHidden();await expect(coreAnimate).toHaveAttribute('data-animate-mode','deformation');
-  await expect(animate).toBeVisible();await expect(animate).toBeEnabled();await expect(animate).toHaveAttribute('data-animate-mode','deformation');
+  await expect(animate).toBeVisible();await expect(animate).toBeEnabled();await expect(animate).toHaveAttribute('data-animate-mode','deformation');await expect(settings).toBeVisible();
+  const toolsBox=await viewTools.boundingBox(),animateBox=await animate.boundingBox(),settingsBox=await settings.boundingBox();expect(toolsBox).not.toBeNull();expect(animateBox).not.toBeNull();expect(settingsBox).not.toBeNull();expect(animateBox!.x).toBeGreaterThanOrEqual(toolsBox!.x);expect(settingsBox!.x+settingsBox!.width).toBeLessThanOrEqual(toolsBox!.x+toolsBox!.width+1);
+  await settings.click();await expect(page.getByTestId('workspace-settings-dialog')).toBeVisible();await page.getByTestId('workspace-settings-dialog').getByRole('button',{name:'Concluir'}).click();
   await expect(page.getByTestId('spatial3d-ssi-controls')).toHaveCount(0);
   await expect(page.getByTestId('spatial3d-ssi-status')).toHaveCount(0);
   const help=page.getByTestId('spatial3d-help');

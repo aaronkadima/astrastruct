@@ -11,6 +11,7 @@ export type ShellField='Nx'|'Ny'|'Nxy'|'Mx'|'My'|'Mxy'|'Qx'|'Qy'|'Ux'|'Uy'|'Uz'|
 export type ShellContourMode='gauss'|'nodal'|'center';
 export type ShellScaleMode='symmetric'|'range';
 export type ContourRange={min:number;max:number;maxAbs:number};
+export type ShellContourFrame={displacementMap?:Map<any,any>;displacementPhase?:number;referenceMaxAbs?:number};
 
 type P3=[number,number,number];
 const finite=(v:any,f=0)=>Number.isFinite(Number(v))?Number(v):f;
@@ -24,7 +25,7 @@ const readPath=(o:any,path:string[])=>path.reduce((v:any,k:string)=>v?.[k],o);
 export function shellCenterValue(response:any,field:ShellField){return finite(readPath(response,FIELD_PATH[field]||[]))}
 export const DISPLACEMENT_SHELL_FIELDS:ShellField[]=['Ux','Uy','Uz','Umag'];
 export function isDisplacementShellField(field:ShellField){return(DISPLACEMENT_SHELL_FIELDS as string[]).includes(field)}
-function displacementFieldValue(d:any,field:ShellField){if(!d)return 0;if(field==='Ux')return finite(d.ux);if(field==='Uy')return finite(d.uy);if(field==='Uz')return finite(d.uz);return Math.hypot(finite(d.ux),finite(d.uy),finite(d.uz))}
+function displacementFieldValue(d:any,field:ShellField,phase=1){if(!d)return 0;const ux=finite(Array.isArray(d)?d[0]:d.ux),uy=finite(Array.isArray(d)?d[1]:d.uy),uz=finite(Array.isArray(d)?d[2]:d.uz),p=finite(phase,1),value=field==='Ux'?ux*p:field==='Uy'?uy*p:field==='Uz'?uz*p:Math.hypot(ux,uy,uz)*Math.abs(p);return Math.abs(value)<1e-15?0:value}
 function bilinearCoefficientsFromCorners(q:number[]){return{a:(q[0]+q[1]+q[2]+q[3])/4,b:(-q[0]+q[1]+q[2]-q[3])/4,c:(-q[0]-q[1]+q[2]+q[3])/4,d:(q[0]-q[1]+q[2]-q[3])/4}}
 export function shellFieldUnit(field:ShellField){if(isDisplacementShellField(field))return'm';return field.startsWith('M')?'kN·m/m':'kN/m'}
 export function shellContourModeLabel(mode:ShellContourMode){return mode==='nodal'?'Nodal suavizado':mode==='gauss'?'Gauss 2×2':'Centro do elemento'}
@@ -37,12 +38,12 @@ function gaussCoefficients(response:any,field:ShellField){
 function bilinear(q:number[],xi:number,eta:number){const s=N(xi,eta);return s.reduce((a,v,i)=>a+v*finite(q[i]),0)}
 function range(values:number[]):ContourRange{if(!values.length)return{min:0,max:0,maxAbs:0};const min=Math.min(...values),max=Math.max(...values);return{min,max,maxAbs:Math.max(Math.abs(min),Math.abs(max))}}
 
-export function buildShellContourData(project:any,result:any,field:ShellField,mode:ShellContourMode,pointForNode:(n:any)=>P3=p3){
+export function buildShellContourData(project:any,result:any,field:ShellField,mode:ShellContourMode,pointForNode:(n:any)=>P3=p3,frame?:ShellContourFrame){
   const shells=(project?.elements||[]).filter((e:any)=>e.type==='shell4'),nodeMap=new Map((project?.nodes||[]).map((n:any)=>[String(n.id),n]));
   if(isDisplacementShellField(field)){
-    const dispMap=new Map((result?.displacements||[]).map((d:any)=>[String(d.nodeId),d])),byNode:any={},usedNodeIds=new Set<string>();
+    const dispMap=frame?.displacementMap?new Map([...frame.displacementMap].map(([id,d]:any)=>[String(id),d])):new Map((result?.displacements||[]).map((d:any)=>[String(d.nodeId),d])),phase=frame?.displacementPhase??1,byNode:any={},usedNodeIds=new Set<string>();
     for(const e of shells)for(const id of shellNodeIds(e))usedNodeIds.add(String(id));
-    for(const id of usedNodeIds)byNode[id]=displacementFieldValue(dispMap.get(id),field);
+    for(const id of usedNodeIds)byNode[id]=displacementFieldValue(dispMap.get(id),field,phase);
     const center:any={},gauss:any={},extrema:any[]=[],seen=new Set<string>();
     for(const e of shells){
       const ids=shellNodeIds(e),ns=ids.map((id:any)=>nodeMap.get(String(id))).filter(Boolean);if(ns.length!==4)continue;
@@ -66,12 +67,12 @@ export function shellContourValueAt(data:any,e:any,xi:number,eta:number){
 export function shellContourRatio(value:number,r:ContourRange,scale:ShellScaleMode){
   if(scale==='symmetric')return r.maxAbs>1e-12?Math.max(-1,Math.min(1,value/r.maxAbs)):0;const span=r.max-r.min;if(Math.abs(span)<1e-12)return 0;return Math.max(-1,Math.min(1,2*(value-r.min)/span-1))
 }
-export function buildShellContourScene(project:any,result:any,field:ShellField,mode:ShellContourMode,scale:ShellScaleMode,camera:any,size:{width:number;height:number},subdivisions=8,pointForNode:(n:any)=>P3=p3){
-  const data=buildShellContourData(project,result,field,mode,pointForNode),nodes=project?.nodes||[],nodeMap=new Map(nodes.map((n:any)=>[String(n.id),n])),shells=(project?.elements||[]).filter((e:any)=>e.type==='shell4'),n=Math.max(2,Math.min(16,Math.round(subdivisions))),items:any[]=[];
+export function buildShellContourScene(project:any,result:any,field:ShellField,mode:ShellContourMode,scale:ShellScaleMode,camera:any,size:{width:number;height:number},subdivisions=8,pointForNode:(n:any)=>P3=p3,frame?:ShellContourFrame){
+  const data=buildShellContourData(project,result,field,mode,pointForNode,frame),referenceMaxAbs=Math.max(0,finite(frame?.referenceMaxAbs,data.range.maxAbs)),colorIntensity=referenceMaxAbs>1e-12?Math.max(0,Math.min(1,data.range.maxAbs/referenceMaxAbs)):data.range.maxAbs>1e-12?1:0,nodes=project?.nodes||[],nodeMap=new Map(nodes.map((n:any)=>[String(n.id),n])),shells=(project?.elements||[]).filter((e:any)=>e.type==='shell4'),n=Math.max(2,Math.min(16,Math.round(subdivisions))),items:any[]=[];
   for(const e of shells){const ns=shellNodeIds(e).map((id:any)=>nodeMap.get(String(id)));if(ns.some((x:any)=>!x))continue;const corners=ns.map(pointForNode),pp=corners.map((c:P3)=>projectPoint3D(c,camera,size)),depth=pp.reduce((s:number,p:any)=>s+finite(p.depth),0)/4,cells:any[]=[];
-    for(let j=0;j<n;j++)for(let i=0;i<n;i++){const x0=-1+2*i/n,x1=-1+2*(i+1)/n,y0=-1+2*j/n,y1=-1+2*(j+1)/n,nat=[[x0,y0],[x1,y0],[x1,y1],[x0,y1]],points=nat.map(([xi,eta])=>projectPoint3D(naturalPointFromCorners(corners,xi,eta),camera,size));if(points.some((p:any)=>!p.visible))continue;const xm=(x0+x1)/2,ym=(y0+y1)/2,value=shellContourValueAt(data,e,xm,ym);cells.push({points,value,ratio:shellContourRatio(value,data.range,scale)})}
+    for(let j=0;j<n;j++)for(let i=0;i<n;i++){const x0=-1+2*i/n,x1=-1+2*(i+1)/n,y0=-1+2*j/n,y1=-1+2*(j+1)/n,nat=[[x0,y0],[x1,y0],[x1,y1],[x0,y1]],points=nat.map(([xi,eta])=>projectPoint3D(naturalPointFromCorners(corners,xi,eta),camera,size));if(points.some((p:any)=>!p.visible))continue;const xm=(x0+x1)/2,ym=(y0+y1)/2,value=shellContourValueAt(data,e,xm,ym),rawRatio=shellContourRatio(value,data.range,scale);cells.push({points,value,rawRatio,ratio:rawRatio*colorIntensity})}
     items.push({e,ns,pp,d:depth,cells})
   }
   items.sort((a,b)=>b.d-a.d);let min:any=null,max:any=null;for(const x of data.extrema||[]){if(!min||x.value<min.value)min=x;if(!max||x.value>max.value)max=x}
-  return{...data,items,min,max,scale}
+  return{...data,items,min,max,scale,colorIntensity,referenceMaxAbs}
 }

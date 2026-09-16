@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import {buildShellContourData,isDisplacementShellField,shellContourValueAt,shellFieldUnit} from '../app/src/spatialShellContours.ts';
+import {buildShellContourData,buildShellContourScene,isDisplacementShellField,shellContourValueAt,shellFieldUnit} from '../app/src/spatialShellContours.ts';
+import {fitCamera3D} from '../web/src/view/spatialView3d.js';
 
 const shell={id:'S1',type:'shell4',nodeIds:['N1','N2','N3','N4']};
 const project={
@@ -32,6 +33,17 @@ assert.ok(Math.abs(shellContourValueAt(ux,shell,1,1)-.02)<1e-12,'natural corner 
 const magnitude=buildShellContourData(project,result,'Umag','nodal');
 assert.equal(magnitude.range.min,0);
 assert.ok(Math.abs(magnitude.range.max-.03)<1e-12,'total displacement is the nodal vector magnitude');
+
+const animatedMap=new Map(result.displacements.map(d=>[d.nodeId,[d.ux,d.uy,d.uz]]));
+const halfFrame=buildShellContourData(project,result,'Ux','nodal',undefined,{displacementMap:animatedMap,displacementPhase:.5});
+assert.deepEqual(halfFrame.range,{min:0,max:.01,maxAbs:.01},'animation frame scales signed displacement components');
+const reverseFrame=buildShellContourData(project,result,'Ux','nodal',undefined,{displacementMap:animatedMap,displacementPhase:-.5});
+assert.deepEqual(reverseFrame.range,{min:-.01,max:0,maxAbs:.01},'signed mode-shape frames reverse component contours');
+const halfMagnitude=buildShellContourData(project,result,'Umag','nodal',undefined,{displacementMap:animatedMap,displacementPhase:-.5});
+assert.ok(Math.abs(halfMagnitude.range.max-.015)<1e-12,'magnitude contours follow frame amplitude without becoming negative');
+const halfScene=buildShellContourScene(project,result,'Umag','nodal','symmetric',fitCamera3D(project),{width:800,height:600},4,undefined,{displacementMap:animatedMap,displacementPhase:.5,referenceMaxAbs:.03});
+assert.ok(Math.abs(halfScene.colorIntensity-.5)<1e-12,'contour color intensity follows the instantaneous deformation amplitude');
+assert.ok(halfScene.items[0].cells.some(cell=>Math.abs(cell.rawRatio)>.1&&Math.abs(cell.ratio-cell.rawRatio*.5)<1e-12),'animated colors are compressed toward the neutral contour color');
 
 const translated=buildShellContourData(project,result,'Uz','center',node=>[node.x+10,node.y-2,node.z+5]);
 assert.deepEqual(translated.extrema[0].point,[12,-.5,5],'contour extrema follow transformed/deformed geometry');

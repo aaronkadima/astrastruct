@@ -80,10 +80,10 @@
 .engineering-view-tools-main,.engineering-view-tools-tail{flex:0 0 auto;min-width:max-content;overflow:visible}
 .engineering-view-tools select{min-width:max-content;font-size:10.5px;text-overflow:clip;white-space:nowrap}
 .engineering-view-tools label{font-size:10.5px;white-space:nowrap}
-.engineering-view-mode{width:142px}
-.engineering-shape-mode{width:88px}
-.engineering-view-combination select{width:92px}
-.engineering-view-scale select{width:58px}
+.engineering-view-mode{width:154px;min-width:154px!important}
+.engineering-shape-mode{width:96px;min-width:96px!important}
+.engineering-view-combination select{width:96px;min-width:96px!important}
+.engineering-view-scale select{width:62px;min-width:62px!important}
 @container (max-width:560px){.engineering-view-combination>span,.engineering-view-scale>span{display:inline!important}}
 
 /* Result-shape selector and settings keep the Figma toolbar complete while the
@@ -105,6 +105,7 @@
 
 /* The Figma footer is the last application row on every viewport. The legacy
    mobile dock was the empty strip that remained below it. */
+.astra-app.engineering-desktop{padding-bottom:0!important}
 .astra-app.engineering-desktop .mobile-dock{display:none!important}
 .engineering-footer{display:flex!important;overflow-x:auto;overflow-y:hidden;white-space:nowrap;scrollbar-width:none}
 .engineering-footer::-webkit-scrollbar{display:none}

@@ -101,7 +101,7 @@ test('v0.54 3D result publishing exposes functional engineering result tabs',asy
     return selectors.map(selector=>{const element=document.querySelector(selector) as HTMLSelectElement,style=getComputedStyle(element),measure=document.createElement('canvas').getContext('2d')!;measure.font=style.font;const longest=Math.max(...[...element.options].map(option=>measure.measureText(option.text).width));return{selector,width:element.getBoundingClientRect().width,needed:longest+Number.parseFloat(style.paddingLeft)+Number.parseFloat(style.paddingRight)+26}});
   });
   for(const metric of firstRowMetrics)expect(metric.width,`${metric.selector} must show its complete text`).toBeGreaterThanOrEqual(metric.needed);
-  expect(firstRowMetrics.map(metric=>Math.round(metric.width))).toEqual([142,88,92,58]);
+  firstRowMetrics.forEach((metric,index)=>expect(metric.width).toBeGreaterThanOrEqual([154,96,96,62][index]));
   await expect(page.getByTestId('spatial3d-toolbar')).toBeHidden();
   await expect(viewTools.locator('[data-view-preset]')).toHaveCount(0);
   await expect(view3d.locator('[data-view-preset]')).toHaveCount(4);

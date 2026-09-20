@@ -28,6 +28,7 @@ export function isDisplacementShellField(field:ShellField){return(DISPLACEMENT_S
 function displacementFieldValue(d:any,field:ShellField,phase=1){if(!d)return 0;const ux=finite(Array.isArray(d)?d[0]:d.ux),uy=finite(Array.isArray(d)?d[1]:d.uy),uz=finite(Array.isArray(d)?d[2]:d.uz),p=finite(phase,1),value=field==='Ux'?ux*p:field==='Uy'?uy*p:field==='Uz'?uz*p:Math.hypot(ux,uy,uz)*Math.abs(p);return Math.abs(value)<1e-15?0:value}
 function bilinearCoefficientsFromCorners(q:number[]){return{a:(q[0]+q[1]+q[2]+q[3])/4,b:(-q[0]+q[1]+q[2]-q[3])/4,c:(-q[0]-q[1]+q[2]+q[3])/4,d:(q[0]-q[1]+q[2]-q[3])/4}}
 export function shellFieldUnit(field:ShellField){if(isDisplacementShellField(field))return'm';return field.startsWith('M')?'kN·m/m':'kN/m'}
+export function shellFieldGroupLabel(field:ShellField){return isDisplacementShellField(field)?'Deslocamento':'Esforço'}
 export function shellContourModeLabel(mode:ShellContourMode){return mode==='nodal'?'Nodal suavizado':mode==='gauss'?'Gauss 2×2':'Centro do elemento'}
 
 function gaussCoefficients(response:any,field:ShellField){

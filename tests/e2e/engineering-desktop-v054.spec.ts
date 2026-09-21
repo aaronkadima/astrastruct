@@ -112,6 +112,8 @@ test('v0.54 modeling ribbon creates 2D/3D models and opens launchers and propert
   await page.locator('[data-g-slabs]').check();
   await expect(page.locator('[data-g-analysis]')).toHaveValue('linear');
   await page.locator('[data-g-diaphragm]').selectOption('rigid');
+  const actionsSection=page.getByText('Ações iniciais',{exact:true}).locator('..');
+  await actionsSection.locator('summary').click();
   await page.locator('[data-g-load-x]').fill('5');
   await page.locator('[data-g-foundation]').selectOption('pileCap');
   await expect(page.locator('[data-g-pile-count]')).toBeEnabled();

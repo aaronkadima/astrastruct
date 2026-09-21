@@ -18,7 +18,7 @@ test('v0.54 engineering desktop exposes ribbon, model tree, right rail and botto
   await expect(open).toBeVisible();await expect(open).toContainText('Abrir');expect(await open.evaluate((element,saveElement)=>Boolean(element.compareDocumentPosition(saveElement as Node)&Node.DOCUMENT_POSITION_FOLLOWING),await save.elementHandle())).toBe(true);
   const fileChooserPromise=page.waitForEvent('filechooser');await open.click();const fileChooser=await fileChooserPromise;expect(fileChooser.isMultiple()).toBe(false);
   await save.click();await expect(save).toHaveAttribute('data-saved','true');
-  const footer=page.locator('.engineering-footer');await expect(footer).toBeVisible();await expect(footer).toContainText('Engineering Desktop v0.54.0');await expect(footer).toContainText('Projeto:');await expect(footer).toContainText('Solver: aguardando análise');await expect(footer).not.toContainText('Tempo:');await expect(page.locator('.mobile-dock')).toBeHidden();
+  const footer=page.locator('.engineering-footer');await expect(footer).toBeVisible();await expect(footer).toContainText('Engineering Desktop v0.54.0');await expect(footer).toContainText('Projeto:');await expect(footer).toContainText('Solver: aguardando análise');await expect(footer).toContainText('Tempo solver: aguardando análise');await expect(page.locator('.mobile-dock')).toBeHidden();
   const footerBox=await footer.boundingBox(),appBox=await app.boundingBox();expect(footerBox).not.toBeNull();expect(appBox).not.toBeNull();expect(Math.abs(footerBox!.y+footerBox!.height-(appBox!.y+appBox!.height))).toBeLessThan(2);
   const viewport=page.viewportSize();
   if((viewport?.width||1200)>900){
@@ -156,6 +156,7 @@ test('v0.54 modeling ribbon creates 2D/3D models and opens launchers and propert
   await page.getByTestId('engineering-ribbon-analyze').click();
   await expect(page.locator('.error-banner')).toHaveCount(0);
   await expect(page.locator('.eng-footer-state')).toContainText('Análise concluída com sucesso.');
+  await expect(page.locator('[data-footer-time]')).toHaveText(/^Tempo solver: (?:\d+(?:\.\d+)? ms|\d+(?:\.\d+)? s)$/);
   await expect(page.getByTestId('engineering-ux-load-diagnostic')).toContainText('HX ativo no cenário');
   await expect(page.getByTestId('engineering-ux-load-diagnostic')).not.toContainText('|Ux|max = 0.0000 mm');
   await expect(page.getByTestId('engineering-result-tab-nodes')).toBeVisible();

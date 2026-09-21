@@ -28,4 +28,5 @@ run(process.execPath,['tests/auto-rebar-cage-orchestrator-smoke.mjs']);
 run(process.execPath,['tests/rebar-shape-drawing-smoke.mjs']);
 run(process.execPath,['tests/building-launcher-config-smoke.mjs']);
 run(process.execPath,['tests/building-launcher-analysis-smoke.mjs']);
+run(process.execPath,['tests/frame-diagram3d-smoke.mjs']);
 console.log(`AstraStruct check: TypeScript + ${files.length} módulos JS validados + gates funcionais v0.52, v0.53.0–v0.53.12 + fundações sólidas, dimensionamento RC e armaduras 3D/2D.`);

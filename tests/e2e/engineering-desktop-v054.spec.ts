@@ -86,6 +86,37 @@ test('v0.54 modeling ribbon creates 2D/3D models and opens launchers and propert
   await expect(page.getByTestId('model-lab-overlay')).toBeVisible();
   await expect(page.getByRole('button',{name:'Lançar edifício'})).toHaveClass(/active/);
   await expect(page.getByTestId('generate-grid-building')).toBeVisible();
+  await expect(page.getByText('Seções de pilares e vigas')).toBeVisible();
+  await expect(page.getByText('Fundação',{exact:true})).toBeVisible();
+  await expect(page.locator('[data-g-col-b]')).toHaveValue('40');
+  await expect(page.locator('[data-g-beam-y-h]')).toHaveValue('60');
+  await expect(page.locator('[data-g-analysis]')).toHaveValue('linear');
+  await page.locator('[data-g-foundation]').selectOption('pileCap');
+  await expect(page.locator('[data-g-pile-count]')).toBeEnabled();
+  await page.locator('[data-g-storeys]').fill('2');
+  await page.locator('[data-g-x]').fill('4');
+  await page.locator('[data-g-y]').fill('3');
+  await page.locator('[data-g-col-b]').fill('35');
+  await page.locator('[data-g-col-h]').fill('65');
+  await page.locator('[data-g-beam-b]').fill('25');
+  await page.locator('[data-g-beam-h]').fill('55');
+  await page.locator('[data-g-beam-y-b]').fill('30');
+  await page.locator('[data-g-beam-y-h]').fill('50');
+  await page.locator('[data-g-slab-t]').fill('18');
+  await page.locator('[data-g-pile-count]').selectOption('4');
+  await page.locator('[data-g-pile-d]').fill('45');
+  await page.locator('[data-g-pile-len]').fill('10');
+  await page.locator('[data-g-pile-spacing]').fill('1.35');
+  await page.locator('[data-g-analysis]').selectOption('pdelta');
+  await page.getByTestId('generate-grid-building').click();
+  await expect.poll(async()=>String((await storedProject()).meta?.launcherConfig?.foundation?.type)).toBe('pileCap');
+  await expect.poll(async()=>String((await storedProject()).settings?.analysisType)).toBe('pdelta');
+  const launched=await storedProject();
+  expect(launched.meta.launcherConfig.sections.column).toEqual({b:.35,h:.65});
+  expect(launched.meta.launcherConfig.sections.beamX).toEqual({b:.25,h:.55});
+  expect(launched.meta.launcherConfig.sections.beamY).toEqual({b:.30,h:.50});
+  expect(launched.foundationReview.items.length).toBe(launched.supports.length);
+  expect(launched.foundationReview.items.every((item:any)=>item.type==='pileCap'&&item.piles.length===4&&item.piles.every((pile:any)=>pile.diameter===.45&&pile.length===10))).toBe(true);
 });
 
 test('v0.54 3D result publishing exposes functional engineering result tabs',async({page})=>{

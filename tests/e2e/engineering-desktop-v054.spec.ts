@@ -18,20 +18,19 @@ test('v0.54 engineering desktop exposes ribbon, model tree, right rail and botto
   await expect(open).toBeVisible();await expect(open).toContainText('Abrir');expect(await open.evaluate((element,saveElement)=>Boolean(element.compareDocumentPosition(saveElement as Node)&Node.DOCUMENT_POSITION_FOLLOWING),await save.elementHandle())).toBe(true);
   const fileChooserPromise=page.waitForEvent('filechooser');await open.click();const fileChooser=await fileChooserPromise;expect(fileChooser.isMultiple()).toBe(false);
   await save.click();await expect(save).toHaveAttribute('data-saved','true');
-  const chooserPromise=page.waitForEvent('filechooser');await open.click();await chooserPromise;
   const footer=page.locator('.engineering-footer');await expect(footer).toBeVisible();await expect(footer).toContainText('Engineering Desktop v0.54.0');await expect(footer).toContainText('Projeto:');await expect(footer).toContainText('Solver: aguardando análise');await expect(footer).not.toContainText('Tempo:');await expect(page.locator('.mobile-dock')).toBeHidden();
-  const lateralSection=page.getByTestId('engineering-lateral-section'),foundationSection=page.getByTestId('engineering-foundation-section'),foundationSvg=foundationSection.locator('.eng-foundation-svg');
-  await expect(lateralSection.locator('.eng-lateral-svg')).toBeVisible();await expect(foundationSvg).toHaveAttribute('data-foundation-zoom','1.00');await expect(foundationSvg).toHaveAttribute('data-foundation-rotation','0');
-  await page.getByTestId('engineering-foundation-zoom-in').click();await expect(foundationSvg).toHaveAttribute('data-foundation-zoom','1.10');
-  await page.getByTestId('engineering-foundation-rotate').click();await expect(foundationSvg).toHaveAttribute('data-foundation-rotation','15');
-  await page.getByTestId('engineering-foundation-reset').click();await expect(foundationSvg).toHaveAttribute('data-foundation-zoom','1.00');await expect(foundationSvg).toHaveAttribute('data-foundation-rotation','0');
-  await lateralSection.getByRole('button',{name:'Recolher vista lateral'}).click();await expect(lateralSection.locator('.eng-lateral-svg')).toHaveCount(0);await lateralSection.getByRole('button',{name:'Reabrir vista lateral'}).click();await expect(lateralSection.locator('.eng-lateral-svg')).toBeVisible();
-  await foundationSection.getByRole('button',{name:'Recolher vista inferior'}).click();await expect(foundationSection.locator('.eng-foundation-svg')).toHaveCount(0);await foundationSection.getByRole('button',{name:'Reabrir vista inferior'}).click();await expect(foundationSection.locator('.eng-foundation-svg')).toBeVisible();
   const footerBox=await footer.boundingBox(),appBox=await app.boundingBox();expect(footerBox).not.toBeNull();expect(appBox).not.toBeNull();expect(Math.abs(footerBox!.y+footerBox!.height-(appBox!.y+appBox!.height))).toBeLessThan(2);
   const viewport=page.viewportSize();
   if((viewport?.width||1200)>900){
     await expect(page.getByTestId('engineering-model-explorer')).toBeVisible();
     await expect(page.getByTestId('engineering-right-rail')).toBeVisible();
+    const lateralSection=page.getByTestId('engineering-lateral-section'),foundationSection=page.getByTestId('engineering-foundation-section'),foundationSvg=foundationSection.locator('.eng-foundation-svg');
+    await expect(lateralSection.locator('.eng-lateral-svg')).toBeVisible();await expect(foundationSvg).toHaveAttribute('data-foundation-zoom','1.00');await expect(foundationSvg).toHaveAttribute('data-foundation-rotation','0');
+    await page.getByTestId('engineering-foundation-zoom-in').click();await expect(foundationSvg).toHaveAttribute('data-foundation-zoom','1.10');
+    await page.getByTestId('engineering-foundation-rotate').click();await expect(foundationSvg).toHaveAttribute('data-foundation-rotation','15');
+    await page.getByTestId('engineering-foundation-reset').click();await expect(foundationSvg).toHaveAttribute('data-foundation-zoom','1.00');await expect(foundationSvg).toHaveAttribute('data-foundation-rotation','0');
+    await lateralSection.getByRole('button',{name:'Recolher vista lateral'}).click();await expect(lateralSection.locator('.eng-lateral-svg')).toHaveCount(0);await lateralSection.getByRole('button',{name:'Reabrir vista lateral'}).click();await expect(lateralSection.locator('.eng-lateral-svg')).toBeVisible();
+    await foundationSection.getByRole('button',{name:'Recolher vista inferior'}).click();await expect(foundationSection.locator('.eng-foundation-svg')).toHaveCount(0);await foundationSection.getByRole('button',{name:'Reabrir vista inferior'}).click();await expect(foundationSection.locator('.eng-foundation-svg')).toBeVisible();
     const canvasBox=await page.locator('.workspace>.viewport').boundingBox();
     const resultsBox=await page.locator('.workspace>.results-panel').boundingBox();
     const workspaceBox=await page.locator('.workspace').boundingBox();

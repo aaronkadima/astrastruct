@@ -11,7 +11,7 @@ const hasMaterialNonlinearity=(project:any)=>(project.elements||[]).some((e:any)
 const settlementMismatch=(project:any)=>{const supports=new Map((project.supports||[]).map((s:any)=>[s.nodeId,s])),keys=['ux','uy','uz','rx','ry','rz'];return(project.settlements||[]).some((st:any)=>{const s:any=supports.get(st.nodeId);if(!s)return true;return keys.some(k=>Math.abs(num(st[k]))>1e-12&&!s[k])})};
 
 function spatialIssues(project:any,mode:SpatialMode){
-  const issues:string[]=[],elements=project.elements||[],frameOnly=elements.length>0&&elements.every((e:any)=>e.type==='frame3d'),spatialLinearModal=elements.length>0&&elements.every((e:any)=>['frame3d','truss3d','shell4'].includes(e.type));
+  const issues:string[]=[],elements=project.elements||[],frameOnly=elements.length>0&&elements.every((e:any)=>e.type==='frame3d'),spatialLinearModal=elements.length>0&&elements.every((e:any)=>['frame3d','truss3d','shell4'].includes(e.type)),hasRigidDiaphragm=(project.diaphragms||[]).some((d:any)=>d&&d.enabled!==false&&d.rigid!==false);
   if(!elements.length)issues.push('O modelo não possui elementos.');
   if(mode==='linear'&&!spatialLinearModal&&elements.length)issues.push('Linear 3D aceita frame3d, truss3d e shell4.');
   if(mode==='modal'){
@@ -19,6 +19,7 @@ function spatialIssues(project:any,mode:SpatialMode){
     if((project.settlements||[]).length)issues.push('Modal 3D ainda não admite recalques/deslocamentos impostos.');
     if(hasNonzeroPrescribed(project))issues.push('Modal 3D requer apoios homogêneos, com deslocamentos prescritos nulos.');
     if(hasMaterialNonlinearity(project))issues.push('Modal 3D é linear-elástico; desative plasticidade/rótulas de fibras.');
+    if(hasRigidDiaphragm)issues.push('Modal 3D atual ainda não reduz massa/rigidez pelo diafragma rígido; use análise linear/P-Delta para este vínculo ou remova o MPC antes da análise modal.');
     for(const e of elements){const m=(project.materials||[]).find((x:any)=>x.id===e.materialId);if(!(num(m?.density)>0))issues.push(`${e.id}: material deve possuir density > 0 kN/m³.`)}
   }
   if(mode==='pdelta'){

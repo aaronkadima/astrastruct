@@ -20,8 +20,18 @@ const configuredGrid=createGridBuilding3D({
   slabThickness:.18,concreteFck:40,concreteE:34e6,analysisType:'linear',baseSupport:'fixed',
   foundation:{type:'pileCap',B:1.8,L:2,h:.8,pileCount:4,pileDiameter:.45,pileLength:10,pileSpacing:1.35,qDesign:250}
 });
-mustSolve(configuredGrid,'configured launcher grid');
+const configuredResult=mustSolve(configuredGrid,'configured launcher grid');
+assert.ok(Math.max(...configuredResult.displacements.map(d=>Math.abs(Number(d.ux)||0)))<1e-10,'gravity-only configured grid should keep Ux approximately zero');
 const requestedPDeltaWithSlabs=createGridBuilding3D({storeys:2,analysisType:'pdelta',includeSlabs:true});assert.equal(requestedPDeltaWithSlabs.settings.analysisType,'linear');mustSolve(requestedPDeltaWithSlabs,'pdelta request with shell fallback');
+const lateralRigid=createGridBuilding3D({xSpans:[4,4],ySpans:[4],storeys:3,includeSlabs:true,diaphragmMode:'rigid',floorLoadXPerNode:5});
+assert.equal(lateralRigid.settings.analysisScenarioId,'SERV_X');assert.equal(lateralRigid.diaphragms.length,3);
+const lateralRigidResult=mustSolve(lateralRigid,'rigid-diaphragm lateral X launcher grid');
+assert.ok(Math.max(...lateralRigidResult.displacements.map(d=>Math.abs(Number(d.ux)||0)))>1e-8,'lateral X case must produce nonzero Ux');
+assert.equal(lateralRigidResult.diaphragms?.active,true);
+const elasticBase=createGridBuilding3D({xSpans:[4],ySpans:[4],storeys:1,includeSlabs:false,floorLoadXPerNode:3,baseSupport:'elastic',baseSpring:{kx:120000,ky:120000,kz:300000,krx:0,kry:0,krz:0}});
+const elasticResult=mustSolve(elasticBase,'elastic-base lateral X launcher grid');
+assert.ok(elasticResult.springForces.length===elasticBase.nodeSprings.length);
+assert.ok(Math.max(...elasticResult.displacements.map(d=>Math.abs(Number(d.ux)||0)))>1e-8);
 const frameOnlyPDelta=createGridBuilding3D({storeys:2,analysisType:'pdelta',includeSlabs:false});assert.equal(frameOnlyPDelta.settings.analysisType,'pdelta');mustSolve(frameOnlyPDelta,'frame-only pdelta launcher grid');
 
 const plan=createPlanBuilding3D({

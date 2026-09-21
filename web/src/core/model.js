@@ -40,7 +40,7 @@ export function sectionDepth(section) {
 export function emptyProject() {
   return {
     id: uid('project'), name: 'Novo projeto', version: 13, schemaVersion: PROJECT_SCHEMA_VERSION, units: 'kN-m-MPa',
-    nodes: [], elements: [], materials: clone(MATERIALS), sections: clone(SECTIONS), supports: [],
+    nodes: [], elements: [], materials: clone(MATERIALS), sections: clone(SECTIONS), supports: [], diaphragms: [],
     loads: [], elementLoads: [], settlements: [], nodeSprings: [], nodalMasses: [],
     loadCases: [{ id: 'LC1', name: 'Caso 1', type: 'user' }],
     loadCombinations: [{ id: 'COMB1', name: 'Combinação customizada 1', type: 'custom', terms: [{ caseId: 'LC1', factor: 1.0 }] }],
@@ -69,6 +69,7 @@ export function normalizeProject(input) {
   p.materials = Array.isArray(p.materials) && p.materials.length ? p.materials : clone(MATERIALS);
   p.sections = Array.isArray(p.sections) && p.sections.length ? p.sections : clone(SECTIONS);
   p.supports = Array.isArray(p.supports) ? p.supports : [];
+  p.diaphragms = Array.isArray(p.diaphragms) ? p.diaphragms : [];
   p.loads = Array.isArray(p.loads) ? p.loads : [];
   p.elementLoads = Array.isArray(p.elementLoads) ? p.elementLoads : [];
   p.settlements = Array.isArray(p.settlements) ? p.settlements : [];

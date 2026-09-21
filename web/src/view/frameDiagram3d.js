@@ -55,8 +55,9 @@ function trussDisplacement(d1,d2,xi,axes){
   return{u,v,w,rx:0,global,ux:global[0],uy:global[1],uz:global[2],umag:norm(global)};
 }
 function referencePoint(axes,xi){return add(axes.a,scale(sub(axes.b,axes.a),xi))}
-function frameStations(project,e,force,n){
-  const axes=axesFromResult(project,e,force);if(!axes)return null;const L=axes.length,mat=material(project,e),sec=section(project,e),E=Number(mat.E)||0,nu=Number(mat.nu),G=Number(mat.G)||(E>0&&Number.isFinite(nu)?E/(2*(1+nu)):0),A=prop(e,sec,'A'),Iy=prop(e,sec,'Iy',e.I??sec.I),Iz=prop(e,sec,'Iz',e.I??sec.I),J=prop(e,sec,'J'),loads=sumUniform(force),local=force?.elementLocalDisplacements||force?.localDisplacements||Array(12).fill(0),stations=[];
+function nodalLocalDofs(dmap,e,axes){const a=dmap.get(String(e.n1))||{},b=dmap.get(String(e.n2))||{},vec=d=>[Number(d.ux)||0,Number(d.uy)||0,Number(d.uz)||0],rot=d=>[Number(d.rx)||0,Number(d.ry)||0,Number(d.rz)||0],local=v=>[dot(v,axes.ex),dot(v,axes.ey),dot(v,axes.ez)],ta=local(vec(a)),ra=local(rot(a)),tb=local(vec(b)),rb=local(rot(b));return[...ta,...ra,...tb,...rb]}
+function frameStations(project,e,force,n,dmap){
+  const axes=axesFromResult(project,e,force);if(!axes)return null;const L=axes.length,mat=material(project,e),sec=section(project,e),E=Number(mat.E)||0,nu=Number(mat.nu),G=Number(mat.G)||(E>0&&Number.isFinite(nu)?E/(2*(1+nu)):0),A=prop(e,sec,'A'),Iy=prop(e,sec,'Iy',e.I??sec.I),Iz=prop(e,sec,'Iz',e.I??sec.I),J=prop(e,sec,'J'),loads=sumUniform(force),candidate=force?.localDisplacementsTotal||force?.elementLocalDisplacements||force?.localDisplacements,local=Array.isArray(candidate)&&candidate.length>=12?candidate:nodalLocalDofs(dmap,e,axes),stations=[];
   const N1=Number(force?.N1)||0,Vy1=Number(force?.Vy1)||0,Vz1=Number(force?.Vz1)||0,T1=Number(force?.T1)||0,T2=Number(force?.T2)||0,My1=Number(force?.My1)||0,Mz1=Number(force?.Mz1)||0;
   for(let i=0;i<n;i++){const xi=i/(n-1),x=xi*L,N=-N1-loads.qx*x,Vy=Vy1+loads.qy*x,Vz=Vz1+loads.qz*x,T=lerp(-T1,T2,xi),My=-My1-Vz1*x-loads.qz*x*x/2,Mz=-Mz1+Vy1*x+loads.qy*x*x/2,d=frameDisplacement(local,L,xi,axes),point=referencePoint(axes,xi),epsX=E>0&&A>0?N/(E*A):null,kappaY=E>0&&Iy>0?My/(E*Iy):null,kappaZ=E>0&&Iz>0?Mz/(E*Iz):null,twistRate=G>0&&J>0?T/(G*J):null;stations.push({xi,x,point,deformedPoint:add(point,d.global),...d,N,Vy,Vz,T,My,Mz,epsX,kappaY,kappaZ,twistRate})}
   return{elementId:e.id,type:e.type,axes,properties:{E,G,A,Iy,Iz,J},loads,stations};
@@ -68,7 +69,7 @@ function trussStations(project,e,force,n,dmap){
 }
 export function buildFrameDiagram3D(project={},result={},samples=31){
   const n=Math.max(2,Math.min(201,Math.round(Number(samples)||31))),forces=new Map((result?.elementForces||[]).map(f=>[String(f.elementId),f])),dmap=new Map(displacementRows(result).map(d=>[String(d.nodeId),d])),elements=[];
-  for(const e of project.elements||[]){if(!['frame3d','truss3d'].includes(e.type))continue;const force=forces.get(String(e.id));if(!force)continue;const row=e.type==='frame3d'?frameStations(project,e,force,n):trussStations(project,e,force,n,dmap);if(row)elements.push(row)}
+  for(const e of project.elements||[]){if(!['frame3d','truss3d'].includes(e.type))continue;const force=forces.get(String(e.id));if(!force)continue;const row=e.type==='frame3d'?frameStations(project,e,force,n,dmap):trussStations(project,e,force,n,dmap);if(row)elements.push(row)}
   return{contract:'frame-diagram-3d/v1',samples:n,elements};
 }
 export function frameDiagramFieldValue3D(station,field){

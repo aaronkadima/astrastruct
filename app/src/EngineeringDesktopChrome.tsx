@@ -269,12 +269,24 @@ function ResultLegend({maxDisp,shells}:{maxDisp:number;shells:number}){
   </>;
 }
 
+function scenarioNodalLoadMagnitude(project:any,axis:'fx'|'fy'|'fz'){
+  const cases=project?.loadCases||[],combos=project?.loadCombinations||[],id=project?.settings?.analysisScenarioId||cases[0]?.id,factors=new Map<string,number>();
+  const direct=cases.find((x:any)=>x.id===id),combo=combos.find((x:any)=>x.id===id);
+  if(direct)factors.set(String(direct.id),1);
+  else if(combo)for(const term of combo.terms||[])factors.set(String(term.caseId),(factors.get(String(term.caseId))||0)+(Number(term.factor)||0));
+  else if(cases[0])factors.set(String(cases[0].id),1);
+  const fallback=cases[0]?.id;
+  return(project?.loads||[]).reduce((sum:number,load:any)=>sum+Math.abs((Number(load?.[axis])||0)*(factors.get(String(load.caseId||fallback))||0)),0);
+}
+
 export function EngineeringRightRail({project,result}:Pick<Props,'project'|'result'>){
   const vis=result?.engineeringVisualization;
   const maxDisp=vis?.displacement?.maxMagnitudeMm||0;
   const shells=vis?.shells?.elementCount||0;
   const analysisReady=!!vis?.detailReadiness?.analysisComplete;
-  const foundationCount=vis?.foundation?.foundationCount||project.supports?.length||0;
+  const foundationCount=vis?.foundation?.foundationCount||project.supports?.length||project.nodeSprings?.length||0;
+  const displacements=result?.totalDisplacements||result?.displacements||[],maxUxMm=Math.max(0,...displacements.map((d:any)=>Math.abs(Number(d.ux)||0)))*1000,xAction=scenarioNodalLoadMagnitude(project,'fx'),uxExpectedZero=!!result&&xAction<1e-12&&maxUxMm<1e-6;
+  const launcher=project?.meta?.launcherConfig||{},baseKind=launcher?.boundary?.base||launcher?.baseSupport||'custom',baseLabel=baseKind==='elastic'?'Elástica / SSI':baseKind==='pinned'?'Articulada':baseKind==='fixed'?'Engastada':'Personalizada',dia=launcher?.diaphragmMode||((project?.diaphragms||[]).length?'rigid':'custom'),diaLabel=dia==='rigid'?'Rígido XY':dia==='semiRigid'?'Semi-rígido shell4':dia==='none'?'Sem diafragma':'Modelo existente';
   return <div className="eng-right-rail" data-testid="engineering-right-rail">
     <section><header>Vista Lateral - Deslocamento Global (Direção X)<button aria-label="Fechar vista lateral">×</button></header><LateralDiagram result={result}/></section>
     <section><header>Vista Inferior - Fundação<button aria-label="Fechar vista inferior">×</button></header><div className="eng-foundation-tools"><button aria-label="Ampliar">＋</button><button aria-label="Rotacionar">↻</button><button aria-label="Reduzir">−</button><button aria-label="Vista inicial">⌂</button></div><FoundationDiagram project={project}/></section>
@@ -288,7 +300,7 @@ export function EngineeringRightRail({project,result}:Pick<Props,'project'|'resu
       <small>{analysisReady?'Resultados físicos disponíveis para iniciar desenho e revisão de armaduras.':'O detalhamento permanece bloqueado até existir um resultado físico do solver.'}</small>
       <button disabled={!analysisReady} onClick={()=>window.dispatchEvent(new CustomEvent('astrastruct:engineering-review-open',{detail:{tab:'foundation',source:'engineering-right-rail'}}))}>Visualizar detalhamento ›</button>
     </section>
-    <section className="eng-status"><header>Status do projeto</header><div>✓ Baseline NBR 6118:2023 ativo</div><div>✓ Fundação visível ({foundationCount})</div><div className={analysisReady?'ok':'pending'}>{analysisReady?'✓':'○'} Detalhamento condicionado à análise</div><div className={result?'ok':'pending'}>{result?'✓':'○'} Deformada / tensões / deslocamentos</div></section>
+    <section className="eng-status"><header>Status do projeto</header><div>✓ Baseline NBR 6118:2023 ativo</div><div>Base: {baseLabel} · topo: livre</div><div>Diafragma: {diaLabel}</div><div>✓ Fundação visível ({foundationCount})</div><div className={analysisReady?'ok':'pending'}>{analysisReady?'✓':'○'} Detalhamento condicionado à análise</div><div className={result?'ok':'pending'}>{result?'✓':'○'} Deformada / tensões / deslocamentos</div>{uxExpectedZero&&<div data-testid="engineering-ux-zero-diagnostic" className="pending">○ Ux ≈ 0: cenário sem ação nodal HX; sob gravidade simétrica este resultado é esperado.</div>}{result&&xAction>1e-12&&<div data-testid="engineering-ux-load-diagnostic" className="ok">✓ HX ativo no cenário · Σ|Fx| = {fmt(xAction,2)} kN · |Ux|max = {fmt(maxUxMm,4)} mm</div>}</section>
   </div>;
 }
 

@@ -243,7 +243,7 @@ function FoundationDiagram({project}:{project:any}){
 }
 
 type ResultLegendState={field:string;min:number;max:number;unit:string;kind:'none'|'sequential'|'diverging';phase:number;intensity:number;live:boolean};
-const RESULT_FIELD_LABELS:Record<string,string>={none:'Sem mapa de resultados',Ux:'Laje Ux',Uy:'Laje Uy',Uz:'Laje Uz',Umag:'Laje |u| total',Nx:'Laje Nx',Ny:'Laje Ny',Nxy:'Laje Nxy',Mx:'Laje Mx',My:'Laje My',Mxy:'Laje Mxy',Qx:'Laje Qx',Qy:'Laje Qy',N:'Barras N',V:'Barras V',M:'Barras M',T:'Barras T'};
+const RESULT_FIELD_LABELS:Record<string,string>={none:'Sem mapa de resultados',Ux:'Laje Ux',Uy:'Laje Uy',Uz:'Laje Uz',Umag:'Laje |u| total',Nx:'Laje Nx',Ny:'Laje Ny',Nxy:'Laje Nxy',Mx:'Laje Mx',My:'Laje My',Mxy:'Laje Mxy',Qx:'Laje Qx',Qy:'Laje Qy',N:'Barras N',Vy:'Barras Vy',Vz:'Barras Vz',V:'Barras |V|',T:'Barras T',MyBar:'Barras My',MzBar:'Barras Mz',M:'Barras |M|',UxBar:'Barras Ux',UyBar:'Barras Uy',UzBar:'Barras Uz',UmagBar:'Barras |u|',epsX:'Barras εx',kappaY:'Barras κy',kappaZ:'Barras κz',twistRate:'Barras dθx/dx'};
 const legendNumber=(value:number)=>{const a=Math.abs(value);return a>=1000||(a>0&&a<.001)?value.toExponential(2):a>=100?value.toFixed(1):a>=1?value.toFixed(2):value.toFixed(3)};
 const legendBlend=(neutral:number[],target:number[],amount:number)=>`rgb(${neutral.map((value,index)=>Math.round(value+(target[index]-value)*amount)).join(',')})`;
 function ResultLegend({maxDisp,shells}:{maxDisp:number;shells:number}){
@@ -259,7 +259,9 @@ function ResultLegend({maxDisp,shells}:{maxDisp:number;shells:number}){
       <option value="none">Deslocamento / deformada</option>
       <optgroup label="Laje · deslocamentos"><option value="Ux">Laje Ux</option><option value="Uy">Laje Uy</option><option value="Uz">Laje Uz</option><option value="Umag">Laje |u| total</option></optgroup>
       <optgroup label="Laje · esforços"><option value="Nx">Laje Nx</option><option value="Ny">Laje Ny</option><option value="Nxy">Laje Nxy</option><option value="Mx">Laje Mx</option><option value="My">Laje My</option><option value="Mxy">Laje Mxy</option><option value="Qx">Laje Qx</option><option value="Qy">Laje Qy</option></optgroup>
-      <optgroup label="Barras"><option value="N">Barras N</option><option value="V">Barras V</option><option value="M">Barras M</option><option value="T">Barras T</option></optgroup>
+      <optgroup label="Barras · esforços"><option value="N">N</option><option value="Vy">Vy</option><option value="Vz">Vz</option><option value="V">|V|</option><option value="T">T</option><option value="MyBar">My</option><option value="MzBar">Mz</option><option value="M">|M|</option></optgroup>
+      <optgroup label="Barras · deslocamentos"><option value="UxBar">Ux</option><option value="UyBar">Uy</option><option value="UzBar">Uz</option><option value="UmagBar">|u| total</option></optgroup>
+      <optgroup label="Barras · deformações"><option value="epsX">εx</option><option value="kappaY">κy</option><option value="kappaZ">κz</option><option value="twistRate">dθx/dx</option></optgroup>
     </select>
     <div className={`eng-legend-scale ${active?'active':'inactive'} ${state.live?'live':''}`} data-testid="engineering-result-legend" data-result-field={state.field} data-result-unit={unit} data-result-phase={state.phase.toFixed(3)} data-result-intensity={intensity.toFixed(3)} data-result-live={state.live?'true':'false'}>
       <div className="eng-legend-ticks" aria-label={active?`Escala de ${legendNumber(min)} a ${legendNumber(max)} ${unit}`:'Mapa de resultados inativo'}>{active?ticks.map((value,index)=><span key={index}>{legendNumber(value)}</span>):<span>—</span>}</div>

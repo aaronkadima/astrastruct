@@ -21,6 +21,8 @@ const configuredGrid=createGridBuilding3D({
   foundation:{type:'pileCap',B:1.8,L:2,h:.8,pileCount:4,pileDiameter:.45,pileLength:10,pileSpacing:1.35,qDesign:250}
 });
 mustSolve(configuredGrid,'configured launcher grid');
+const requestedPDeltaWithSlabs=createGridBuilding3D({storeys:2,analysisType:'pdelta',includeSlabs:true});assert.equal(requestedPDeltaWithSlabs.settings.analysisType,'linear');mustSolve(requestedPDeltaWithSlabs,'pdelta request with shell fallback');
+const frameOnlyPDelta=createGridBuilding3D({storeys:2,analysisType:'pdelta',includeSlabs:false});assert.equal(frameOnlyPDelta.settings.analysisType,'pdelta');mustSolve(frameOnlyPDelta,'frame-only pdelta launcher grid');
 
 const plan=createPlanBuilding3D({
   planNodes:[{id:'A',x:0,y:0},{id:'B',x:5,y:0},{id:'C',x:5,y:4}],

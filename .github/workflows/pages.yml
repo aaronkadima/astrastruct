@@ -29,10 +29,10 @@ jobs:
           ref: frontend-release
           path: production
 
-      - name: Checkout development branch
+      - name: Checkout CI-validated development revision
         uses: actions/checkout@v4
         with:
-          ref: develop
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'develop' || github.event.workflow_run.head_sha }}
           path: development
 
       - uses: actions/setup-node@v4

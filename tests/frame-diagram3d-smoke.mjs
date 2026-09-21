@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {solveSpatial3D} from '../web/src/solver/spatial3d.js';
-import {buildFrameDiagram3D,frameDiagramFieldValue3D,frameDiagramRange3D,probeProjectedFrameDiagram3D,buildFrameDiagramEnvelope3D,frameDiagramEnvelopeRange3D} from '../web/src/view/frameDiagram3d.js';
+import {buildFrameDiagram3D,frameDiagramFieldValue3D,frameDiagramRange3D,probeProjectedFrameDiagram3D,probeProjectedFrameEnvelope3D,buildFrameDiagramEnvelope3D,frameDiagramEnvelopeRange3D} from '../web/src/view/frameDiagram3d.js';
 
 const close=(a,b,t=1e-9,m='value')=>assert.ok(Math.abs(a-b)<=t,`${m}: got ${a}, expected ${b}`);
 const E=200e6,nu=.3,A=.012,Iy=7e-5,Iz=9e-5,J=1.6e-5,L=3;
@@ -40,4 +40,13 @@ console.log('frame diagram 3D smoke: OK');
   assert.equal(env.contract,'frame-diagram-envelope-3d/v1');assert.equal(row.stations.length,9);
   const root=row.stations[0].fields.MzBar;close(root.min,P2*L,1e-8,'envelope root Mz min');close(root.max,P1*L,1e-8,'envelope root Mz max');assert.equal(root.minCombinationId,'C2');assert.equal(root.maxCombinationId,'C1');assert.equal(root.governingCombinationId,'C2');
   const range=frameDiagramEnvelopeRange3D(env,'MzBar');close(range.min,P2*L,1e-8,'envelope global min');close(range.max,P1*L,1e-8,'envelope global max');assert.equal(range.absPoint.combinationId,'C2');
+}
+
+{
+  const active={elements:[{elementId:'Eenv',stations:[{My:5},{My:7},{My:9}]}]},items=[{e:{id:'Eenv'},points:[
+    {xi:0,x:0,env:{min:-10,max:12,minCombinationId:'C1',maxCombinationId:'C2'},pBase:{x:20,y:40,visible:true},pMin:{x:20,y:55,visible:true},pMax:{x:20,y:20,visible:true}},
+    {xi:.5,x:1.5,env:{min:-8,max:15,minCombinationId:'C3',maxCombinationId:'C4'},pBase:{x:70,y:40,visible:true},pMin:{x:70,y:52,visible:true},pMax:{x:70,y:18,visible:true}},
+    {xi:1,x:3,env:{min:-6,max:10,minCombinationId:'C5',maxCombinationId:'C6'},pBase:{x:120,y:40,visible:true},pMin:{x:120,y:49,visible:true},pMax:{x:120,y:25,visible:true}}
+  ]}];
+  const probe=probeProjectedFrameEnvelope3D(items,73,19,8,active,'MyBar');assert.ok(probe);assert.equal(probe.elementId,'Eenv');assert.equal(probe.stationIndex,1);close(probe.xi,.5,1e-12,'envelope probe xi');close(probe.x,1.5,1e-12,'envelope probe x');close(probe.min,-8,1e-12,'envelope probe min');close(probe.max,15,1e-12,'envelope probe max');close(probe.activeValue,7,1e-12,'envelope probe active value');assert.equal(probe.minCombinationId,'C3');assert.equal(probe.maxCombinationId,'C4');
 }

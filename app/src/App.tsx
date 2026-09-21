@@ -3,6 +3,7 @@ import React, { useRef, useState } from 'react';
 import { emptyProject, normalizeProject, demoFrame, demoBeamUDL, demoTruss, demoMixed, demoSpatialFrame, demoLoadCases } from '../../web/src/core/model.js';
 // @ts-ignore
 import { solve } from '../../web/src/solver/index.js';
+import { publishAnalysisResult } from './analysisResultBridge';
 import { EngineeringPanels, type PanelKind } from './EngineeringPanels';
 import { AnalysisPanelV13 } from './AnalysisPanelV13';
 import { SpatialAnalysisPanel } from './SpatialAnalysisPanel';
@@ -43,10 +44,10 @@ function ResultsPanel({result}:{result:any}){
 
 export default function App(){
   const store=useProjectHistory(loadInitial());const project=store.project;const[result,setResult]=useState<any>(null);const[selection,setSelection]=useState<Selection>(null);const[tool,setTool]=useState<ModelTool>('select');const[drawer,setDrawer]=useState<Drawer>(null);const[panel,setPanel]=useState<PanelKind>(null);const[bucklingOpen,setBucklingOpen]=useState(false);const[bucklingView,setBucklingView]=useState<any>(null);const[error,setError]=useState('');const inputRef=useRef<HTMLInputElement|null>(null);
-  const commitProject=(next:any,record=true)=>{store.commit(normalizeProject(next),{record});setResult(null);setBucklingView(null)};
+  const commitProject=(next:any,record=true)=>{const normalized=normalizeProject(next);store.commit(normalized,{record});setResult(null);publishAnalysisResult(null,normalized);setBucklingView(null)};
   const useDemo=(factory:()=>any)=>{setError('');commitProject(factory());setSelection(null);setTool('select');setDrawer(null);setPanel(null);setBucklingOpen(false)};
   const scenarios=[...(project.loadCases||[]),...(project.loadCombinations||[])];const projectDimension=inferProjectDimension(project);const activeScenario=project.settings?.analysisScenarioId||project.loadCases?.[0]?.id;
-  const analyze=()=>{try{setError('');const r=solve(project,activeScenario);setResult(r);setDrawer('results')}catch(e:any){setError(e?.message||String(e))}};
+  const analyze=()=>{try{setError('');const r=solve(project,activeScenario);setResult(r);publishAnalysisResult(r,project);setDrawer('results')}catch(e:any){setResult(null);publishAnalysisResult(null,project);setError(e?.message||String(e))}};
   const changeScenario=(id:string)=>commitProject({...project,settings:{...(project.settings||{}),analysisScenarioId:id}},false);
   const exportJson=()=>{const blob=new Blob([JSON.stringify(project,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='astrastruct-project.json';a.click();URL.revokeObjectURL(url)};
   const importJson=(file:File)=>{const reader=new FileReader();reader.onload=()=>{try{commitProject(JSON.parse(String(reader.result)));setSelection(null);setError('')}catch{setError('Arquivo JSON inválido.')}};reader.readAsText(file)};

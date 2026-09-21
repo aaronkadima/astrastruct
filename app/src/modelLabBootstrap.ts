@@ -51,7 +51,7 @@ function renderModal(event?:Event){
           <label>Pé-direito padrão [m]<input data-launch-field data-${p}-h type="number" min="0.5" max="20" step="0.1" value="3"></label>
           <label>Alturas por pavimento [m]<input data-launch-field data-${p}-heights placeholder="opcional: 3.2, 3.0, 2.8"></label>
           ${grid}
-          <label>Modelo de análise<select data-launch-field data-${p}-analysis><option value="linear">Linear</option><option value="pdelta">P-Delta</option><option value="corotational">Co-rotacional 3D</option></select></label>
+          <label>Modelo de análise<select data-launch-field data-${p}-analysis><option value="linear">Linear</option><option value="pdelta">P-Delta</option><option value="corotational">Co-rotacional 3D</option></select><small data-${p}-analysis-note>Com lajes shell4 ativas, o lançamento usa análise Linear 3D.</small></label>
           <label>Vínculo na base<select data-launch-field data-${p}-support><option value="fixed">Engastado</option><option value="pinned">Articulado (rotações livres)</option></select></label>
         </div></details>
         <details class="astra-launch-section" open><summary>Material estrutural</summary><div class="astra-form-grid four">
@@ -100,11 +100,14 @@ function renderModal(event?:Event){
     };
     const bindForm=(prefix='g')=>{
       const sync=()=>{
-        const type=textValue(prefix,'foundation','footing'),none=type==='none',pile=type==='pileCap';
+        const type=textValue(prefix,'foundation','footing'),none=type==='none',pile=type==='pileCap',slabs=checkedValue(prefix,'slabs',false);
         host?.querySelectorAll('[data-foundation-block] input,[data-foundation-block] select').forEach(el=>Reflect.set(el,'disabled',none));
         host?.querySelectorAll('[data-foundation-pile] input,[data-foundation-pile] select').forEach(el=>Reflect.set(el,'disabled',!pile));
-        const summary=control(prefix,'summary'),storeys=numberValue(prefix,'storeys',0),cb=numberValue(prefix,'col-b',0),ch=numberValue(prefix,'col-h',0),bb=numberValue(prefix,'beam-b',0),bh=numberValue(prefix,'beam-h',0),foundation=type==='footing'?'Sapata':type==='pileCap'?'Bloco sobre estacas':'Sem sólido';
-        if(summary)summary.textContent=storeys+' pav. · Pilar '+cb+'×'+ch+' cm · Viga '+bb+'×'+bh+' cm · '+foundation;
+        const slabThickness=control(prefix,'slab-t');if(slabThickness)Reflect.set(slabThickness,'disabled',!slabs);
+        const analysis=control(prefix,'analysis') as HTMLSelectElement|null;if(analysis){for(const option of [...analysis.options])if(['pdelta','corotational'].includes(option.value))option.disabled=slabs;if(slabs&&['pdelta','corotational'].includes(analysis.value))analysis.value='linear'}
+        const note=control(prefix,'analysis-note');if(note)note.textContent=slabs?'Com lajes shell4 ativas, P-Delta e co-rotacional ficam indisponíveis; use Linear 3D ou desative as lajes.':'Sem lajes shell4, P-Delta e co-rotacional 3D ficam disponíveis para o pórtico de barras.';
+        const summary=control(prefix,'summary'),storeys=numberValue(prefix,'storeys',0),cb=numberValue(prefix,'col-b',0),ch=numberValue(prefix,'col-h',0),bb=numberValue(prefix,'beam-b',0),bh=numberValue(prefix,'beam-h',0),foundation=type==='footing'?'Sapata':type==='pileCap'?'Bloco sobre estacas':'Sem sólido',analysisLabel=analysis?.selectedOptions?.[0]?.textContent||'Linear';
+        if(summary)summary.textContent=storeys+' pav. · Pilar '+cb+'×'+ch+' cm · Viga '+bb+'×'+bh+' cm · '+foundation+' · '+analysisLabel;
       };
       host?.querySelectorAll('[data-launch-field]').forEach(el=>{el.addEventListener('input',sync);el.addEventListener('change',sync)});sync();
     };

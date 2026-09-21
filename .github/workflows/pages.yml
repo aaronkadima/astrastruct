@@ -4,6 +4,7 @@ on:
   workflow_run:
     workflows: ["AstraStruct CI"]
     types: [completed]
+    branches: [develop]
   workflow_dispatch:
 
 permissions:
@@ -12,7 +13,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: astrastruct-pages
+  group: ${{ (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') && 'astrastruct-pages' || format('astrastruct-pages-noop-{0}', github.run_id) }}
   cancel-in-progress: true
 
 jobs:
@@ -20,7 +21,7 @@ jobs:
     # Automatic Pages deployments are driven only by the development channel.
     # Production is immutable here and is sourced from frontend-release until
     # that branch is explicitly promoted.
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'develop')
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout frozen production release

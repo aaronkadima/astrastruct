@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {solveSpatial3D} from '../web/src/solver/spatial3d.js';
-import {buildFrameDiagram3D,frameDiagramFieldValue3D,frameDiagramRange3D} from '../web/src/view/frameDiagram3d.js';
+import {buildFrameDiagram3D,frameDiagramFieldValue3D,frameDiagramRange3D,probeProjectedFrameDiagram3D,buildFrameDiagramEnvelope3D,frameDiagramEnvelopeRange3D} from '../web/src/view/frameDiagram3d.js';
 
 const close=(a,b,t=1e-9,m='value')=>assert.ok(Math.abs(a-b)<=t,`${m}: got ${a}, expected ${b}`);
 const E=200e6,nu=.3,A=.012,Iy=7e-5,Iz=9e-5,J=1.6e-5,L=3;
@@ -24,3 +24,20 @@ const base={materials:[{id:'S',E,nu}],sections:[{id:'SEC',A,Iy,Iz,J,I:Iz}],nodes
   close(frameDiagramFieldValue3D(s[5],'epsX'),1e6*Q/(E*A),1e-9,'microstrain field');
 }
 console.log('frame diagram 3D smoke: OK');
+
+{
+  const items=[{e:{id:'Eprobe'},points:[
+    {xi:0,x:0,value:-10,pOffset:{x:10,y:20,visible:true},pBase:{x:10,y:40}},
+    {xi:.5,x:1.5,value:0,pOffset:{x:60,y:20,visible:true},pBase:{x:60,y:40}},
+    {xi:1,x:3,value:20,pOffset:{x:110,y:20,visible:true},pBase:{x:110,y:40}}
+  ]}];
+  const probe=probeProjectedFrameDiagram3D(items,85,22,6);assert.ok(probe);assert.equal(probe.elementId,'Eprobe');close(probe.xi,.75,1e-12,'probe xi');close(probe.x,2.25,1e-12,'probe x');close(probe.value,10,1e-12,'probe interpolated value');close(probe.baseScreen.x,85,1e-12,'probe baseline interpolation');
+  assert.equal(probeProjectedFrameDiagram3D(items,85,50,4),null);
+}
+{
+  const P1=10,P2=-18,make=P=>({...base,supports:[{nodeId:'A',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],loads:[{nodeId:'B',fy:P}]});
+  const p=make(P1),r1=solveSpatial3D(p),r2=solveSpatial3D(make(P2)),env=buildFrameDiagramEnvelope3D(p,[{combinationId:'C1',result:r1},{combinationId:'C2',result:r2}],9),row=env.elements[0];
+  assert.equal(env.contract,'frame-diagram-envelope-3d/v1');assert.equal(row.stations.length,9);
+  const root=row.stations[0].fields.MzBar;close(root.min,-P1*L,1e-8,'envelope root Mz min');close(root.max,-P2*L,1e-8,'envelope root Mz max');assert.equal(root.minCombinationId,'C1');assert.equal(root.maxCombinationId,'C2');assert.equal(root.governingCombinationId,'C2');
+  const range=frameDiagramEnvelopeRange3D(env,'MzBar');close(range.min,-P1*L,1e-8,'envelope global min');close(range.max,-P2*L,1e-8,'envelope global max');assert.equal(range.absPoint.combinationId,'C2');
+}

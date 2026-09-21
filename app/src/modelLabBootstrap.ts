@@ -52,8 +52,19 @@ function renderModal(event?:Event){
           <label>Alturas por pavimento [m]<input data-launch-field data-${p}-heights placeholder="opcional: 3.2, 3.0, 2.8"></label>
           ${grid}
           <label>Modelo de análise<select data-launch-field data-${p}-analysis><option value="linear">Linear</option><option value="pdelta">P-Delta</option><option value="corotational">Co-rotacional 3D</option></select><small data-${p}-analysis-note>Com lajes shell4 ativas, o lançamento usa análise Linear 3D.</small></label>
-          <label>Vínculo na base<select data-launch-field data-${p}-support><option value="fixed">Engastado</option><option value="pinned">Articulado (rotações livres)</option></select></label>
         </div></details>
+        <details class="astra-launch-section" open><summary>Condições de contorno e pavimentos</summary><div class="astra-form-grid four">
+          <label>Base dos pilares<select data-launch-field data-${p}-support><option value="fixed">Engastada · UX UY UZ RX RY RZ</option><option value="pinned">Articulada · UX UY UZ</option><option value="elastic">Elástica · molas 6 GDL</option></select><small data-${p}-support-note>Engastamento restringe os seis graus de liberdade na base.</small></label>
+          <label>Topo do edifício<select disabled><option>Livre · sem restrição global</option></select><small>O topo deve responder às ações laterais; não é travado artificialmente.</small></label>
+          <label>Diafragma de pavimento<select data-launch-field data-${p}-diaphragm><option value="semiRigid" ${options.slabs?'selected':''}>Semi-rígido · laje shell4</option><option value="rigid" ${options.slabs?'':'selected'}>Rígido XY · UX/UY/RZ compatíveis</option><option value="none">Nenhum vínculo de diafragma</option></select><small data-${p}-diaphragm-note>O diafragma não fixa o pavimento: ele compatibiliza o movimento em planta.</small></label>
+          <label>Referência global<select disabled><option>X/Y horizontais · Z vertical</option></select><small>Os apoios são definidos nos eixos globais do modelo.</small></label>
+          <label data-boundary-elastic>Kx [kN/m]<input data-launch-field data-${p}-spring-kx type="number" min="0" step="1000" value="0"></label>
+          <label data-boundary-elastic>Ky [kN/m]<input data-launch-field data-${p}-spring-ky type="number" min="0" step="1000" value="0"></label>
+          <label data-boundary-elastic>Kz [kN/m]<input data-launch-field data-${p}-spring-kz type="number" min="0" step="1000" value="0"></label>
+          <label data-boundary-elastic>Krx [kN·m/rad]<input data-launch-field data-${p}-spring-krx type="number" min="0" step="1000" value="0"></label>
+          <label data-boundary-elastic>Kry [kN·m/rad]<input data-launch-field data-${p}-spring-kry type="number" min="0" step="1000" value="0"></label>
+          <label data-boundary-elastic>Krz [kN·m/rad]<input data-launch-field data-${p}-spring-krz type="number" min="0" step="1000" value="0"></label>
+        </div><p class="astra-section-note">Base fixa e articulada seguem a convenção usual de programas de edifícios. Para base elástica, Kx/Ky/Kz devem ser informados pelo modelo geotécnico/SSI; qDesign da fundação não é convertido automaticamente em rigidez.</p></details>
         <details class="astra-launch-section" open><summary>Material estrutural</summary><div class="astra-form-grid four">
           <label>fck [MPa]<input data-launch-field data-${p}-fck type="number" min="1" max="150" step="1" value="30"></label>
           <label>E [GPa]<input data-launch-field data-${p}-E type="number" min="1" step="0.5" value="30"></label>
@@ -69,10 +80,10 @@ function renderModal(event?:Event){
         </div><p class="astra-section-note">A, Iy, Iz e J são recalculados a partir das dimensões informadas e usados no modelo 3D.</p></details>
         ${slabs}
         <details class="astra-launch-section"><summary>Ações iniciais</summary><div class="astra-form-grid three">
-          <label>Fz por nó/pavimento [kN]<input data-launch-field data-${p}-load-z type="number" step="1" value="${options.load}"></label>
-          <label>Fx por nó/pavimento [kN]<input data-launch-field data-${p}-load-x type="number" step="1" value="0"></label>
-          <label>Fy por nó/pavimento [kN]<input data-launch-field data-${p}-load-y type="number" step="1" value="0"></label>
-        </div><p class="astra-section-note">Estas ações são iniciais e nodais. Casos, combinações, cargas distribuídas e ações de vento podem ser refinados após o lançamento.</p></details>
+          <label>G · Fz por nó/pavimento [kN]<input data-launch-field data-${p}-load-z type="number" step="1" value="${options.load}"></label>
+          <label>HX · Fx por nó/pavimento [kN]<input data-launch-field data-${p}-load-x type="number" step="1" value="0"></label>
+          <label>HY · Fy por nó/pavimento [kN]<input data-launch-field data-${p}-load-y type="number" step="1" value="0"></label>
+        </div><p class="astra-section-note" data-${p}-load-note>G, HX e HY são separados em casos independentes. Com HX = 0, um edifício simétrico sob gravidade deve apresentar Ux ≈ 0. Vento normativo automático será tratado em módulo próprio.</p></details>
         <details class="astra-launch-section" open><summary>Fundação</summary><div class="astra-form-grid four">
           <label>Tipo<select data-launch-field data-${p}-foundation><option value="footing">Sapata isolada</option><option value="pileCap">Bloco sobre estacas</option><option value="none">Somente vínculo / sem sólido</option></select></label>
           <label data-foundation-block>B [m]<input data-launch-field data-${p}-foundation-b type="number" min="0.2" step="0.05" value="1.50"></label>
@@ -93,21 +104,27 @@ function renderModal(event?:Event){
         floorLoadPerNode:numberValue(prefix,'load-z',-18),floorLoadXPerNode:numberValue(prefix,'load-x',0),floorLoadYPerNode:numberValue(prefix,'load-y',0),
         columnWidth:numberValue(prefix,'col-b',40)/100,columnHeight:numberValue(prefix,'col-h',60)/100,
         concreteFck:numberValue(prefix,'fck',30),concreteE:numberValue(prefix,'E',30)*1e6,concreteNu:numberValue(prefix,'nu',.2),concreteDensity:numberValue(prefix,'density',25),
-        analysisType:textValue(prefix,'analysis','linear'),baseSupport:textValue(prefix,'support','fixed'),
+        analysisType:textValue(prefix,'analysis','linear'),baseSupport:textValue(prefix,'support','fixed'),diaphragmMode:textValue(prefix,'diaphragm',prefix==='g'?'semiRigid':'rigid'),
+        baseSpring:{kx:numberValue(prefix,'spring-kx',0),ky:numberValue(prefix,'spring-ky',0),kz:numberValue(prefix,'spring-kz',0),krx:numberValue(prefix,'spring-krx',0),kry:numberValue(prefix,'spring-kry',0),krz:numberValue(prefix,'spring-krz',0)},
         foundation:{type:foundationType,B:numberValue(prefix,'foundation-b',1.5),L:numberValue(prefix,'foundation-l',1.5),h:numberValue(prefix,'foundation-h',.5),qDesign:numberValue(prefix,'soil-q',250),pileCount:numberValue(prefix,'pile-count',4),pileDiameter:numberValue(prefix,'pile-d',40)/100,pileLength:numberValue(prefix,'pile-len',12),pileSpacing:numberValue(prefix,'pile-spacing',1.2)}
       };
       return directional?{...base,beamXWidth:numberValue(prefix,'beam-b',30)/100,beamXHeight:numberValue(prefix,'beam-h',60)/100,beamYWidth:numberValue(prefix,'beam-y-b',30)/100,beamYHeight:numberValue(prefix,'beam-y-h',60)/100}:{...base,beamWidth:numberValue(prefix,'beam-b',30)/100,beamHeight:numberValue(prefix,'beam-h',60)/100};
     };
     const bindForm=(prefix='g')=>{
       const sync=()=>{
-        const type=textValue(prefix,'foundation','footing'),none=type==='none',pile=type==='pileCap',slabs=checkedValue(prefix,'slabs',false);
+        const type=textValue(prefix,'foundation','footing'),none=type==='none',pile=type==='pileCap',slabToggle=control(prefix,'slabs') as HTMLInputElement|null,slabs=slabToggle?Boolean(slabToggle.checked):false,base=textValue(prefix,'support','fixed'),elastic=base==='elastic';
         host?.querySelectorAll('[data-foundation-block] input,[data-foundation-block] select').forEach(el=>Reflect.set(el,'disabled',none));
         host?.querySelectorAll('[data-foundation-pile] input,[data-foundation-pile] select').forEach(el=>Reflect.set(el,'disabled',!pile));
+        host?.querySelectorAll('[data-boundary-elastic] input').forEach(el=>Reflect.set(el,'disabled',!elastic));
         const slabThickness=control(prefix,'slab-t');if(slabThickness)Reflect.set(slabThickness,'disabled',!slabs);
         const analysis=control(prefix,'analysis') as HTMLSelectElement|null;if(analysis){for(const option of [...analysis.options])if(['pdelta','corotational'].includes(option.value))option.disabled=slabs;if(slabs&&['pdelta','corotational'].includes(analysis.value))analysis.value='linear'}
         const note=control(prefix,'analysis-note');if(note)note.textContent=slabs?'Com lajes shell4 ativas, P-Delta e co-rotacional ficam indisponíveis; use Linear 3D ou desative as lajes.':'Sem lajes shell4, P-Delta e co-rotacional 3D ficam disponíveis para o pórtico de barras.';
-        const summary=control(prefix,'summary'),storeys=numberValue(prefix,'storeys',0),cb=numberValue(prefix,'col-b',0),ch=numberValue(prefix,'col-h',0),bb=numberValue(prefix,'beam-b',0),bh=numberValue(prefix,'beam-h',0),foundation=type==='footing'?'Sapata':type==='pileCap'?'Bloco sobre estacas':'Sem sólido',analysisLabel=analysis?.selectedOptions?.[0]?.textContent||'Linear';
-        if(summary)summary.textContent=storeys+' pav. · Pilar '+cb+'×'+ch+' cm · Viga '+bb+'×'+bh+' cm · '+foundation+' · '+analysisLabel;
+        const supportNote=control(prefix,'support-note');if(supportNote)supportNote.textContent=elastic?'Base elástica: Kx, Ky e Kz devem ser positivos; rotações podem permanecer livres ou receber Kr.':base==='pinned'?'Base articulada: UX, UY e UZ impedidos; RX, RY e RZ livres.':'Base engastada: UX, UY, UZ, RX, RY e RZ impedidos.';
+        const diaphragm=control(prefix,'diaphragm') as HTMLSelectElement|null;if(diaphragm){const semi=[...diaphragm.options].find(o=>o.value==='semiRigid');if(semi)semi.disabled=!slabs;if(!slabs&&diaphragm.value==='semiRigid')diaphragm.value='rigid'}
+        const diaphragmNote=control(prefix,'diaphragm-note');if(diaphragmNote)diaphragmNote.textContent=diaphragm?.value==='rigid'?'Rígido XY: nós do pavimento compartilham UX, UY e RZ de corpo rígido; UZ/RX/RY continuam independentes.':diaphragm?.value==='semiRigid'?'Semi-rígido: a rigidez em planta vem dos elementos shell4 da laje.':'Sem MPC de pavimento; use somente quando a conectividade estrutural representar o comportamento desejado.';
+        const loadNote=control(prefix,'load-note'),fx=numberValue(prefix,'load-x',0),fy=numberValue(prefix,'load-y',0);if(loadNote)loadNote.textContent=Math.abs(fx)<1e-12&&Math.abs(fy)<1e-12?'Sem HX/HY: em modelo simétrico sob gravidade, Ux e Uy horizontais são esperados próximos de zero.':'Casos laterais serão criados separadamente e o cenário de visualização combinará G com as direções horizontais informadas.';
+        const summary=control(prefix,'summary'),storeys=numberValue(prefix,'storeys',0),cb=numberValue(prefix,'col-b',0),ch=numberValue(prefix,'col-h',0),bb=numberValue(prefix,'beam-b',0),bh=numberValue(prefix,'beam-h',0),foundation=type==='footing'?'Sapata':type==='pileCap'?'Bloco sobre estacas':'Sem sólido',analysisLabel=analysis?.selectedOptions?.[0]?.textContent||'Linear',baseLabel=base==='elastic'?'Base elástica':base==='pinned'?'Base articulada':'Base engastada',diaLabel=diaphragm?.selectedOptions?.[0]?.textContent||'Sem diafragma';
+        if(summary)summary.textContent=storeys+' pav. · Pilar '+cb+'×'+ch+' cm · Viga '+bb+'×'+bh+' cm · '+baseLabel+' · '+diaLabel+' · '+foundation+' · '+analysisLabel;
       };
       host?.querySelectorAll('[data-launch-field]').forEach(el=>{el.addEventListener('input',sync);el.addEventListener('change',sync)});sync();
     };

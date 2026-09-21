@@ -84,3 +84,24 @@ export function frameDiagramRange3D(scene,field){
   const values=[];let minPoint=null,maxPoint=null;for(const e of scene?.elements||[])for(const s of e.stations||[]){const value=frameDiagramFieldValue3D(s,field);if(!Number.isFinite(value))continue;values.push(value);if(!minPoint||value<minPoint.value)minPoint={elementId:e.elementId,station:s,value};if(!maxPoint||value>maxPoint.value)maxPoint={elementId:e.elementId,station:s,value}}
   if(!values.length)return{min:0,max:0,maxAbs:0,minPoint:null,maxPoint:null};const min=Math.min(...values),max=Math.max(...values);return{min,max,maxAbs:Math.max(Math.abs(min),Math.abs(max)),minPoint,maxPoint};
 }
+
+function segmentProjection(px,py,a,b){
+  const vx=(Number(b?.x)||0)-(Number(a?.x)||0),vy=(Number(b?.y)||0)-(Number(a?.y)||0),wx=px-(Number(a?.x)||0),wy=py-(Number(a?.y)||0),d=vx*vx+vy*vy,t=d>EPS?Math.max(0,Math.min(1,(wx*vx+wy*vy)/d)):0,x=(Number(a?.x)||0)+t*vx,y=(Number(a?.y)||0)+t*vy;
+  return{t,x,y,distance:Math.hypot(px-x,py-y)};
+}
+export function probeProjectedFrameDiagram3D(items=[],px=0,py=0,threshold=14){
+  let best=null;
+  for(const item of items||[]){const pts=(item?.points||[]).filter(p=>p?.pOffset?.visible!==false&&Number.isFinite(Number(p?.pOffset?.x))&&Number.isFinite(Number(p?.pOffset?.y)));for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i],q=segmentProjection(Number(px)||0,Number(py)||0,a.pOffset,b.pOffset);if(q.distance>threshold||best&&q.distance>=best.distance)continue;const t=q.t,interp=(k,f=0)=>lerp(Number(a?.[k])||f,Number(b?.[k])||f,t),baseX=lerp(Number(a?.pBase?.x)||0,Number(b?.pBase?.x)||0,t),baseY=lerp(Number(a?.pBase?.y)||0,Number(b?.pBase?.y)||0,t);best={elementId:String(item?.e?.id??item?.row?.elementId??''),segmentIndex:i-1,distance:q.distance,screen:{x:q.x,y:q.y},baseScreen:{x:baseX,y:baseY},xi:interp('xi'),x:interp('x'),value:interp('value'),stationA:a,stationB:b,t}}}
+  return best;
+}
+function emptyEnv(){return{min:null,max:null,absMax:null,minCombinationId:null,maxCombinationId:null,governingCombinationId:null}}
+function extendEnv(env,value,combinationId){const v=Number(value);if(!Number.isFinite(v))return;if(env.min==null||v<env.min){env.min=v;env.minCombinationId=combinationId}if(env.max==null||v>env.max){env.max=v;env.maxCombinationId=combinationId}if(env.absMax==null||Math.abs(v)>Math.abs(env.absMax)){env.absMax=v;env.governingCombinationId=combinationId}}
+export function buildFrameDiagramEnvelope3D(project={},solvedEntries=[],samples=31){
+  const n=Math.max(2,Math.min(201,Math.round(Number(samples)||31))),byElement=new Map(),scenarioIds=[];
+  for(let i=0;i<(solvedEntries||[]).length;i++){const entry=solvedEntries[i]||{},result=entry.result||entry,combinationId=String(entry.combinationId||entry.id||result?.scenario?.id||`scenario-${i+1}`);if(!Array.isArray(result?.elementForces))continue;scenarioIds.push(combinationId);const scene=buildFrameDiagram3D(project,result,n);for(const row of scene.elements||[]){let env=byElement.get(String(row.elementId));if(!env){env={elementId:String(row.elementId),type:row.type,axes:row.axes,stations:(row.stations||[]).map(s=>({xi:s.xi,x:s.x,point:s.point,fields:Object.fromEntries(FRAME_DIAGRAM_FIELDS.map(f=>[f,emptyEnv()]))}))};byElement.set(String(row.elementId),env)}(row.stations||[]).forEach((s,k)=>{const target=env.stations[k];if(!target)return;for(const field of FRAME_DIAGRAM_FIELDS)extendEnv(target.fields[field],frameDiagramFieldValue3D(s,field),combinationId)})}}
+  return{contract:'frame-diagram-envelope-3d/v1',samples:n,scenarioIds,elements:[...byElement.values()]};
+}
+export function frameDiagramEnvelopeRange3D(envelope,field){
+  let min=Infinity,max=-Infinity,absMax=0,minPoint=null,maxPoint=null,absPoint=null;for(const e of envelope?.elements||[])for(const s of e.stations||[]){const env=s?.fields?.[field];if(!env)continue;if(Number.isFinite(Number(env.min))&&Number(env.min)<min){min=Number(env.min);minPoint={elementId:e.elementId,station:s,value:min,combinationId:env.minCombinationId}}if(Number.isFinite(Number(env.max))&&Number(env.max)>max){max=Number(env.max);maxPoint={elementId:e.elementId,station:s,value:max,combinationId:env.maxCombinationId}}if(Number.isFinite(Number(env.absMax))&&Math.abs(Number(env.absMax))>absMax){absMax=Math.abs(Number(env.absMax));absPoint={elementId:e.elementId,station:s,value:Number(env.absMax),combinationId:env.governingCombinationId}}}
+  if(min===Infinity)min=0;if(max===-Infinity)max=0;return{min,max,maxAbs:absMax,minPoint,maxPoint,absPoint};
+}

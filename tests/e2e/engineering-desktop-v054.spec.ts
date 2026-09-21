@@ -19,7 +19,7 @@ test('v0.54 engineering desktop exposes ribbon, model tree, right rail and botto
   const fileChooserPromise=page.waitForEvent('filechooser');await open.click();const fileChooser=await fileChooserPromise;expect(fileChooser.isMultiple()).toBe(false);
   await save.click();await expect(save).toHaveAttribute('data-saved','true');
   const chooserPromise=page.waitForEvent('filechooser');await open.click();await chooserPromise;
-  const footer=page.locator('.engineering-footer');await expect(footer).toBeVisible();await expect(footer).toContainText('Projeto:');await expect(page.locator('.mobile-dock')).toBeHidden();
+  const footer=page.locator('.engineering-footer');await expect(footer).toBeVisible();await expect(footer).toContainText('Engineering Desktop v0.54.0');await expect(footer).toContainText('Projeto:');await expect(footer).toContainText('Solver: aguardando análise');await expect(footer).not.toContainText('Tempo:');await expect(page.locator('.mobile-dock')).toBeHidden();
   const footerBox=await footer.boundingBox(),appBox=await app.boundingBox();expect(footerBox).not.toBeNull();expect(appBox).not.toBeNull();expect(Math.abs(footerBox!.y+footerBox!.height-(appBox!.y+appBox!.height))).toBeLessThan(2);
   const viewport=page.viewportSize();
   if((viewport?.width||1200)>900){

@@ -17,7 +17,12 @@ test('v0.26.1/v0.30.2 renders spatial Canvas 3D with skeleton, transparent, true
   await page.getByTestId('spatial3d-projection').click();await expect(canvas).toHaveAttribute('data-projection','orthographic');
   await page.getByTestId('analyze-button').click();await expect(page.getByTestId('spatial3d-results')).toBeVisible();await expect(page.getByTestId('spatial3d-result-controls')).toBeVisible();await expect(page.getByTestId('spatial3d-shape-kind')).toContainText('Deformada');await expect(vector.locator('[data-scientific-deformed-sections="true"] polygon').first()).toBeVisible();
   const original=page.getByTestId('spatial3d-toggle-original').locator('input');await original.uncheck();await expect(canvas).toHaveAttribute('data-show-original','false');await original.check();await expect(canvas).toHaveAttribute('data-show-original','true');
-  await page.getByLabel('Campo de esforço 3D').selectOption('M');await expect(canvas).toHaveAttribute('data-force-mode','M');
+  await page.getByLabel('Campo de esforço 3D').selectOption('M');await expect(canvas).toHaveAttribute('data-force-mode','M');await expect(page.getByTestId('spatial3d-bar-diagram-status')).toContainText('|M|');await expect(vector.locator('[data-scientific-bar-diagrams="true"]')).toHaveCount(1);
+  await page.getByLabel('Campo de esforço 3D').selectOption('MzBar');await expect(canvas).toHaveAttribute('data-force-mode','MzBar');await expect(canvas).toHaveAttribute('data-bar-diagram-geometry','deformed');await expect(vector.locator('[data-scientific-deformed-bars="true"] polyline').first()).toBeVisible();await expect(vector.locator('[data-scientific-bar-diagrams="true"] line').first()).toBeVisible();
+  const diagramScale=page.getByTestId('spatial3d-diagram-scale');await diagramScale.fill('2');await expect(canvas).toHaveAttribute('data-bar-diagram-scale','2.00');
+  await page.getByTestId('spatial3d-diagram-geometry').selectOption('reference');await expect(canvas).toHaveAttribute('data-bar-diagram-geometry','reference');
+  await page.getByLabel('Campo de esforço 3D').selectOption('UyBar');await expect(page.getByTestId('spatial3d-bar-diagram-status')).toContainText('mm');
+  await page.getByLabel('Campo de esforço 3D').selectOption('epsX');await expect(page.getByTestId('spatial3d-bar-diagram-status')).toContainText('µε');
 });
 
 test('spatial Inspector edits Z, six support DOFs and 3D loads',async({page},testInfo)=>{

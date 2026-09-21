@@ -287,6 +287,7 @@ function scenarioNodalLoadMagnitude(project:any,axis:'fx'|'fy'|'fz'){
 }
 
 export function EngineeringRightRail({project,result}:Pick<Props,'project'|'result'>){
+  const[lateralOpen,setLateralOpen]=useState(true),[foundationOpen,setFoundationOpen]=useState(true),[foundationZoom,setFoundationZoom]=useState(1),[foundationRotation,setFoundationRotation]=useState(0);
   const vis=result?.engineeringVisualization;
   const maxDisp=vis?.displacement?.maxMagnitudeMm||0;
   const shells=vis?.shells?.elementCount||0;
@@ -294,9 +295,11 @@ export function EngineeringRightRail({project,result}:Pick<Props,'project'|'resu
   const foundationCount=vis?.foundation?.foundationCount||project.supports?.length||project.nodeSprings?.length||0;
   const displacements=result?.totalDisplacements||result?.displacements||[],maxUxMm=Math.max(0,...displacements.map((d:any)=>Math.abs(Number(d.ux)||0)))*1000,xAction=scenarioNodalLoadMagnitude(project,'fx'),uxExpectedZero=!!result&&xAction<1e-12&&maxUxMm<1e-6;
   const launcher=project?.meta?.launcherConfig||{},baseKind=launcher?.boundary?.base||launcher?.baseSupport||'custom',baseLabel=baseKind==='elastic'?'Elástica / SSI':baseKind==='pinned'?'Articulada':baseKind==='fixed'?'Engastada':'Personalizada',dia=launcher?.diaphragmMode||((project?.diaphragms||[]).length?'rigid':'custom'),diaLabel=dia==='rigid'?'Rígido XY':dia==='semiRigid'?'Semi-rígido shell4':dia==='none'?'Sem diafragma':'Modelo existente';
+  const zoomFoundation=(delta:number)=>setFoundationZoom(value=>Math.max(.6,Math.min(2,Math.round((value+delta)*10)/10)));
+  const resetFoundation=()=>{setFoundationZoom(1);setFoundationRotation(0)};
   return <div className="eng-right-rail" data-testid="engineering-right-rail">
-    <section><header>Vista Lateral - Deslocamento Global (Direção X)<button aria-label="Fechar vista lateral">×</button></header><LateralDiagram result={result}/></section>
-    <section><header>Vista Inferior - Fundação<button aria-label="Fechar vista inferior">×</button></header><div className="eng-foundation-tools"><button aria-label="Ampliar">＋</button><button aria-label="Rotacionar">↻</button><button aria-label="Reduzir">−</button><button aria-label="Vista inicial">⌂</button></div><FoundationDiagram project={project}/></section>
+    <section className={lateralOpen?'':'collapsed'} data-testid="engineering-lateral-section"><header>Vista Lateral - Deslocamento Global (Direção X)<button aria-label={lateralOpen?'Recolher vista lateral':'Reabrir vista lateral'} aria-expanded={lateralOpen} onClick={()=>setLateralOpen(open=>!open)}>{lateralOpen?'×':'+'}</button></header>{lateralOpen&&<LateralDiagram result={result}/>}</section>
+    <section className={foundationOpen?'':'collapsed'} data-testid="engineering-foundation-section"><header>Vista Inferior - Fundação<button aria-label={foundationOpen?'Recolher vista inferior':'Reabrir vista inferior'} aria-expanded={foundationOpen} onClick={()=>setFoundationOpen(open=>!open)}>{foundationOpen?'×':'+'}</button></header>{foundationOpen&&<><div className="eng-foundation-tools"><button data-testid="engineering-foundation-zoom-in" aria-label="Ampliar" onClick={()=>zoomFoundation(.1)}>＋</button><button data-testid="engineering-foundation-rotate" aria-label="Rotacionar" onClick={()=>setFoundationRotation(angle=>(angle+15)%360)}>↻</button><button data-testid="engineering-foundation-zoom-out" aria-label="Reduzir" onClick={()=>zoomFoundation(-.1)}>−</button><button data-testid="engineering-foundation-reset" aria-label="Vista inicial" onClick={resetFoundation}>⌂</button></div><FoundationDiagram project={project} zoom={foundationZoom} rotation={foundationRotation}/></>}</section>
     <section className="eng-legend">
       <header>Legenda de resultados</header>
       <ResultLegend maxDisp={maxDisp} shells={shells}/>

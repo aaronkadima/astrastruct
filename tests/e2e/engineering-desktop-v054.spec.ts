@@ -91,6 +91,13 @@ test('v0.54 modeling ribbon creates 2D/3D models and opens launchers and propert
   await expect(page.locator('[data-g-col-b]')).toHaveValue('40');
   await expect(page.locator('[data-g-beam-y-h]')).toHaveValue('60');
   await expect(page.locator('[data-g-analysis]')).toHaveValue('linear');
+  await expect(page.locator('[data-g-analysis] option[value="pdelta"]')).toBeDisabled();
+  await page.locator('[data-g-slabs]').uncheck();
+  await expect(page.locator('[data-g-analysis] option[value="pdelta"]')).toBeEnabled();
+  await page.locator('[data-g-analysis]').selectOption('pdelta');
+  await expect(page.locator('[data-g-analysis]')).toHaveValue('pdelta');
+  await page.locator('[data-g-slabs]').check();
+  await expect(page.locator('[data-g-analysis]')).toHaveValue('linear');
   await page.locator('[data-g-foundation]').selectOption('pileCap');
   await expect(page.locator('[data-g-pile-count]')).toBeEnabled();
   await page.locator('[data-g-storeys]').fill('2');
@@ -107,10 +114,9 @@ test('v0.54 modeling ribbon creates 2D/3D models and opens launchers and propert
   await page.locator('[data-g-pile-d]').fill('45');
   await page.locator('[data-g-pile-len]').fill('10');
   await page.locator('[data-g-pile-spacing]').fill('1.35');
-  await page.locator('[data-g-analysis]').selectOption('pdelta');
   await page.getByTestId('generate-grid-building').click();
   await expect.poll(async()=>String((await storedProject()).meta?.launcherConfig?.foundation?.type)).toBe('pileCap');
-  await expect.poll(async()=>String((await storedProject()).settings?.analysisType)).toBe('pdelta');
+  await expect.poll(async()=>String((await storedProject()).settings?.analysisType)).toBe('linear');
   const launched=await storedProject();
   expect(launched.meta.launcherConfig.sections.column).toEqual({b:.35,h:.65});
   expect(launched.meta.launcherConfig.sections.beamX).toEqual({b:.25,h:.55});

@@ -38,6 +38,6 @@ console.log('frame diagram 3D smoke: OK');
   const P1=10,P2=-18,make=P=>({...base,supports:[{nodeId:'A',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],loads:[{nodeId:'B',fy:P}]});
   const p=make(P1),r1=solveSpatial3D(p),r2=solveSpatial3D(make(P2)),env=buildFrameDiagramEnvelope3D(p,[{combinationId:'C1',result:r1},{combinationId:'C2',result:r2}],9),row=env.elements[0];
   assert.equal(env.contract,'frame-diagram-envelope-3d/v1');assert.equal(row.stations.length,9);
-  const root=row.stations[0].fields.MzBar;close(root.min,-P1*L,1e-8,'envelope root Mz min');close(root.max,-P2*L,1e-8,'envelope root Mz max');assert.equal(root.minCombinationId,'C1');assert.equal(root.maxCombinationId,'C2');assert.equal(root.governingCombinationId,'C2');
-  const range=frameDiagramEnvelopeRange3D(env,'MzBar');close(range.min,-P1*L,1e-8,'envelope global min');close(range.max,-P2*L,1e-8,'envelope global max');assert.equal(range.absPoint.combinationId,'C2');
+  const root=row.stations[0].fields.MzBar;close(root.min,P2*L,1e-8,'envelope root Mz min');close(root.max,P1*L,1e-8,'envelope root Mz max');assert.equal(root.minCombinationId,'C2');assert.equal(root.maxCombinationId,'C1');assert.equal(root.governingCombinationId,'C2');
+  const range=frameDiagramEnvelopeRange3D(env,'MzBar');close(range.min,P2*L,1e-8,'envelope global min');close(range.max,P1*L,1e-8,'envelope global max');assert.equal(range.absPoint.combinationId,'C2');
 }

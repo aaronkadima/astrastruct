@@ -1,8 +1,6 @@
 name: Deploy AstraStruct production and development
 
 on:
-  push:
-    branches: [main]
   workflow_run:
     workflows: ["AstraStruct CI"]
     types: [completed]
@@ -15,11 +13,11 @@ permissions:
 
 concurrency:
   group: astrastruct-pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   assemble-site:
-    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'develop')
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout production branch

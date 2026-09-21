@@ -240,7 +240,7 @@ test('v0.54 3D result publishing exposes functional engineering result tabs',asy
   if((viewport?.width||1200)>900){
     await expect(page.getByTestId('engineering-right-rail').getByText(/Detalhamento após análise/)).toBeVisible();
     const quick=page.getByLabel('Campo visual rápido');
-    await quick.selectOption('MzBar');await expect(canvas).toHaveAttribute('data-force-mode','MzBar');await expect(canvas).toHaveAttribute('data-bar-diagram-geometry','deformed');await expect(vector.locator('[data-scientific-bar-diagrams="true"]')).toHaveCount(1);await expect(page.getByTestId('spatial3d-bar-diagram-status')).toContainText('Mz');
+    await quick.selectOption('MyBar');await expect(canvas).toHaveAttribute('data-force-mode','MyBar');await expect(canvas).toHaveAttribute('data-bar-diagram-geometry','deformed');await expect(vector.locator('[data-scientific-bar-diagrams="true"]')).toHaveCount(1);await expect(page.getByTestId('spatial3d-bar-diagram-status')).toContainText('My');
     await quick.selectOption('UyBar');await expect(canvas).toHaveAttribute('data-result-map-unit','mm');
     await quick.selectOption('epsX');await expect(canvas).toHaveAttribute('data-result-map-unit','µε');await expect(canvas).toHaveAttribute('data-result-map-kind','diverging');
     await quick.selectOption('none');

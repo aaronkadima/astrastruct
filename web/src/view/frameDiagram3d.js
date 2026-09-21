@@ -85,6 +85,28 @@ export function frameDiagramRange3D(scene,field){
   if(!values.length)return{min:0,max:0,maxAbs:0,minPoint:null,maxPoint:null};const min=Math.min(...values),max=Math.max(...values);return{min,max,maxAbs:Math.max(Math.abs(min),Math.abs(max)),minPoint,maxPoint};
 }
 
+function nearestStationIndex(stations,xi){let best=0,d=Infinity;for(let i=0;i<(stations||[]).length;i++){const q=Math.abs((Number(stations[i]?.xi)||0)-xi);if(q<d){d=q;best=i}}return best}
+function pushUniqueLabel(out,label,tol=.012){if(out.some(x=>Math.abs((Number(x.xi)||0)-(Number(label.xi)||0))<=tol&&x.kind===label.kind))return;out.push(label)}
+export function frameDiagramLabels3D(scene,field,options={}){
+  const count=Math.max(0,Math.min(9,Math.round(Number(options.count??3)))),includeExtrema=options.includeExtrema!==false,includeZeros=options.includeZeros!==false,elements=[];
+  for(const row of scene?.elements||[]){const stations=row.stations||[];if(!stations.length)continue;const labels=[];
+    if(count>0){const n=Math.max(1,count);for(let i=0;i<n;i++){const xi=n===1?.5:i/(n-1),k=nearestStationIndex(stations,xi),s=stations[k],value=frameDiagramFieldValue3D(s,field);pushUniqueLabel(labels,{kind:'sample',stationIndex:k,xi:s.xi,x:s.x,value,station:s})}}
+    if(includeExtrema){let min=null,max=null;for(let k=0;k<stations.length;k++){const s=stations[k],value=frameDiagramFieldValue3D(s,field);if(!Number.isFinite(value))continue;if(!min||value<min.value)min={kind:'min',stationIndex:k,xi:s.xi,x:s.x,value,station:s};if(!max||value>max.value)max={kind:'max',stationIndex:k,xi:s.xi,x:s.x,value,station:s}}if(min)pushUniqueLabel(labels,min);if(max)pushUniqueLabel(labels,max)}
+    if(includeZeros){for(let k=1;k<stations.length;k++){const a=stations[k-1],b=stations[k],va=frameDiagramFieldValue3D(a,field),vb=frameDiagramFieldValue3D(b,field);if(!Number.isFinite(va)||!Number.isFinite(vb))continue;if(Math.abs(va)<EPS)pushUniqueLabel(labels,{kind:'zero',stationIndex:k-1,xi:a.xi,x:a.x,value:0,station:a});if(va*vb<0){const t=Math.abs(va)/(Math.abs(va)+Math.abs(vb)),xi=lerp(a.xi,b.xi,t),x=lerp(a.x,b.x,t);pushUniqueLabel(labels,{kind:'zero',stationIndex:k-1,segmentIndex:k-1,t,xi,x,value:0,stationA:a,stationB:b})}if(k===stations.length-1&&Math.abs(vb)<EPS)pushUniqueLabel(labels,{kind:'zero',stationIndex:k,xi:b.xi,x:b.x,value:0,station:b})}}
+    labels.sort((a,b)=>a.xi-b.xi);elements.push({elementId:row.elementId,type:row.type,labels});
+  }
+  return{contract:'frame-diagram-labels-3d/v1',field,count,includeExtrema,includeZeros,elements};
+}
+export function frameEnvelopeLabels3D(envelope,field,options={}){
+  const count=Math.max(0,Math.min(9,Math.round(Number(options.count??3)))),includeExtrema=options.includeExtrema!==false,elements=[];
+  for(const row of envelope?.elements||[]){const stations=row.stations||[];if(!stations.length)continue;const labels=[];
+    if(count>0){const n=Math.max(1,count);for(let i=0;i<n;i++){const xi=n===1?.5:i/(n-1),k=nearestStationIndex(stations,xi),s=stations[k],env=s?.fields?.[field]||{};pushUniqueLabel(labels,{kind:'sample',stationIndex:k,xi:s.xi,x:s.x,min:Number.isFinite(Number(env.min))?Number(env.min):null,max:Number.isFinite(Number(env.max))?Number(env.max):null,minCombinationId:env.minCombinationId||null,maxCombinationId:env.maxCombinationId||null,station:s})}}
+    if(includeExtrema){let lo=null,hi=null;for(let k=0;k<stations.length;k++){const s=stations[k],env=s?.fields?.[field]||{},a=Number(env.min),b=Number(env.max);if(Number.isFinite(a)&&(!lo||a<lo.min))lo={kind:'min',stationIndex:k,xi:s.xi,x:s.x,min:a,max:Number.isFinite(b)?b:null,minCombinationId:env.minCombinationId||null,maxCombinationId:env.maxCombinationId||null,station:s};if(Number.isFinite(b)&&(!hi||b>hi.max))hi={kind:'max',stationIndex:k,xi:s.xi,x:s.x,min:Number.isFinite(a)?a:null,max:b,minCombinationId:env.minCombinationId||null,maxCombinationId:env.maxCombinationId||null,station:s}}if(lo)pushUniqueLabel(labels,lo);if(hi)pushUniqueLabel(labels,hi)}
+    labels.sort((a,b)=>a.xi-b.xi);elements.push({elementId:row.elementId,type:row.type,labels});
+  }
+  return{contract:'frame-envelope-labels-3d/v1',field,count,includeExtrema,elements};
+}
+
 function segmentProjection(px,py,a,b){
   const vx=(Number(b?.x)||0)-(Number(a?.x)||0),vy=(Number(b?.y)||0)-(Number(a?.y)||0),wx=px-(Number(a?.x)||0),wy=py-(Number(a?.y)||0),d=vx*vx+vy*vy,t=d>EPS?Math.max(0,Math.min(1,(wx*vx+wy*vy)/d)):0,x=(Number(a?.x)||0)+t*vx,y=(Number(a?.y)||0)+t*vy;
   return{t,x,y,distance:Math.hypot(px-x,py-y)};

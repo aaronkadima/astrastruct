@@ -17,13 +17,16 @@ concurrency:
 
 jobs:
   assemble-site:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main'))
+    # Automatic Pages deployments are driven only by the development channel.
+    # Production is immutable here and is sourced from frontend-release until
+    # that branch is explicitly promoted.
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'develop')
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout production branch
+      - name: Checkout frozen production release
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: frontend-release
           path: production
 
       - name: Checkout development branch
@@ -36,7 +39,7 @@ jobs:
         with:
           node-version: 24
 
-      - name: Validate and build production
+      - name: Validate and build production release
         working-directory: production
         env:
           ASTRA_BASE_PATH: /astrastruct/
@@ -94,4 +97,4 @@ jobs:
         uses: actions/deploy-pages@v4
 
       - name: Confirm deployment channels
-        run: echo "Production=/astrastruct/ Development=/astrastruct/dev/"
+        run: echo "Production=frontend-release:/astrastruct/ Development=develop:/astrastruct/dev/"

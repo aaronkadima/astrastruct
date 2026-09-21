@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {solveSpatial3D} from '../web/src/solver/spatial3d.js';
-import {buildFrameDiagram3D,frameDiagramFieldValue3D,frameDiagramRange3D,probeProjectedFrameDiagram3D,probeProjectedFrameEnvelope3D,buildFrameDiagramEnvelope3D,frameDiagramEnvelopeRange3D} from '../web/src/view/frameDiagram3d.js';
+import {buildFrameDiagram3D,frameDiagramFieldValue3D,frameDiagramRange3D,probeProjectedFrameDiagram3D,probeProjectedFrameEnvelope3D,buildFrameDiagramEnvelope3D,frameDiagramEnvelopeRange3D,frameDiagramLabels3D,frameEnvelopeLabels3D} from '../web/src/view/frameDiagram3d.js';
 
 const close=(a,b,t=1e-9,m='value')=>assert.ok(Math.abs(a-b)<=t,`${m}: got ${a}, expected ${b}`);
 const E=200e6,nu=.3,A=.012,Iy=7e-5,Iz=9e-5,J=1.6e-5,L=3;
@@ -49,4 +49,21 @@ console.log('frame diagram 3D smoke: OK');
     {xi:1,x:3,env:{min:-6,max:10,minCombinationId:'C5',maxCombinationId:'C6'},pBase:{x:120,y:40,visible:true},pMin:{x:120,y:49,visible:true},pMax:{x:120,y:25,visible:true}}
   ]}];
   const probe=probeProjectedFrameEnvelope3D(items,73,19,8,active,'MyBar');assert.ok(probe);assert.equal(probe.elementId,'Eenv');assert.equal(probe.stationIndex,1);close(probe.xi,.5,1e-12,'envelope probe xi');close(probe.x,1.5,1e-12,'envelope probe x');close(probe.min,-8,1e-12,'envelope probe min');close(probe.max,15,1e-12,'envelope probe max');close(probe.activeValue,7,1e-12,'envelope probe active value');assert.equal(probe.minCombinationId,'C3');assert.equal(probe.maxCombinationId,'C4');
+}
+
+{
+  const scene={elements:[{elementId:'Elabels',type:'frame3d',stations:[
+    {xi:0,x:0,Mz:-10},{xi:.25,x:.75,Mz:-4},{xi:.5,x:1.5,Mz:2},{xi:.75,x:2.25,Mz:8},{xi:1,x:3,Mz:3}
+  ]}]};
+  const labels=frameDiagramLabels3D(scene,'MzBar',{count:3,includeExtrema:true,includeZeros:true}),row=labels.elements[0],zeros=row.labels.filter(x=>x.kind==='zero');
+  assert.equal(labels.contract,'frame-diagram-labels-3d/v1');assert.ok(row.labels.some(x=>x.kind==='min'&&x.value===-10));assert.ok(row.labels.some(x=>x.kind==='max'&&x.value===8));assert.equal(zeros.length,1);close(zeros[0].xi,.25+(.25*4/6),1e-12,'zero crossing xi');assert.ok(row.labels.filter(x=>x.kind==='sample').length>=2);
+}
+{
+  const env={elements:[{elementId:'Eenvlabels',type:'frame3d',stations:[
+    {xi:0,x:0,fields:{MzBar:{min:-9,max:12,minCombinationId:'C1',maxCombinationId:'C2'}}},
+    {xi:.5,x:1.5,fields:{MzBar:{min:-15,max:7,minCombinationId:'C3',maxCombinationId:'C4'}}},
+    {xi:1,x:3,fields:{MzBar:{min:-4,max:18,minCombinationId:'C5',maxCombinationId:'C6'}}}
+  ]}]};
+  const labels=frameEnvelopeLabels3D(env,'MzBar',{count:3,includeExtrema:true}),row=labels.elements[0];
+  assert.equal(labels.contract,'frame-envelope-labels-3d/v1');assert.ok(row.labels.some(x=>x.kind==='min'&&x.min===-15&&x.minCombinationId==='C3'));assert.ok(row.labels.some(x=>x.kind==='max'&&x.max===18&&x.maxCombinationId==='C6'));assert.ok(row.labels.filter(x=>x.kind==='sample').length>=2);
 }

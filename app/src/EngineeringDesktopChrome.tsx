@@ -194,7 +194,7 @@ export function EngineeringModelExplorer({project,result,onCommit,onAnalyze,onOp
       </div>
       <div className="eng-launch">
         <h4>Parâmetros de lançamento</h4>
-        <label>Norma:<input readOnly value="NBR 6118:2014"/></label>
+        <label>Norma:<input readOnly value="NBR 6118:2023"/></label>
         <label>Unidades<select value={project.settings?.units||'kN-m'} onChange={e=>patchSettings({units:e.target.value})}><option value="kN-m">kN, m, °C</option><option value="N-mm">N, mm, °C</option></select></label>
         <label>Malha de Lajes:<select value={String(project.settings?.grid||base.slabMeshM||.5)} onChange={e=>patchSettings({grid:Number(e.target.value)})}><option value="0.1">0,10 m</option><option value="0.25">0,25 m</option><option value="0.5">0,50 m</option><option value="1">1,00 m</option></select></label>
         <label>Tipo de Análise:<select value={project.settings?.analysisType||'linear'} onChange={e=>patchSettings({analysisType:e.target.value})}><option value="linear">Linear (1ª ordem)</option><option value="pdelta">P-Delta</option><option value="modal">Modal</option><option value="corotational">Não linear geométrica</option></select></label>

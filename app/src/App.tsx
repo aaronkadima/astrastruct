@@ -43,10 +43,17 @@ function ResultsPanel({result}:{result:any}){
 }
 
 function analysisProjectForRun(project:any){
-  const mode=String(project?.settings?.analysisType||'linear'),hasShell=(project?.elements||[]).some((e:any)=>e.type==='shell4'),fromLauncher=!!project?.meta?.launcherConfig;
-  if(!fromLauncher||!hasShell||!['pdelta','corotational'].includes(mode))return{project,notice:''};
-  const next=normalizeProject({...project,settings:{...(project.settings||{}),analysisType:'linear'},meta:{...(project.meta||{}),launcherConfig:{...(project.meta?.launcherConfig||{}),requestedAnalysisType:project.meta?.launcherConfig?.requestedAnalysisType||mode,analysisType:'linear',analysisFallback:'shell4-linear-only'}}});
-  return{project:next,notice:`Compatibilidade automática: ${mode==='pdelta'?'P-Delta':'co-rotacional'} 3D não admite shell4 nesta versão; o modelo do lançador foi ajustado para Linear 3D mantendo vigas, pilares, lajes, cargas e fundações.`};
+  const mode=String(project?.settings?.analysisType||'linear'),hasShell=(project?.elements||[]).some((e:any)=>e.type==='shell4'),fromLauncher=!!project?.meta?.launcherConfig,hasRigidDiaphragm=(project?.diaphragms||[]).some((d:any)=>d&&d.enabled!==false&&d.rigid!==false);
+  if(!fromLauncher)return{project,notice:''};
+  if(hasShell&&['pdelta','corotational'].includes(mode)){
+    const next=normalizeProject({...project,settings:{...(project.settings||{}),analysisType:'linear'},meta:{...(project.meta||{}),launcherConfig:{...(project.meta?.launcherConfig||{}),requestedAnalysisType:project.meta?.launcherConfig?.requestedAnalysisType||mode,analysisType:'linear',analysisFallback:'shell4-linear-only'}}});
+    return{project:next,notice:`Compatibilidade automática: ${mode==='pdelta'?'P-Delta':'co-rotacional'} 3D não admite shell4 nesta versão; o modelo do lançador foi ajustado para Linear 3D mantendo vigas, pilares, lajes, cargas e fundações.`};
+  }
+  if(mode==='corotational'&&hasRigidDiaphragm){
+    const next=normalizeProject({...project,diaphragms:[],meta:{...(project.meta||{}),launcherConfig:{...(project.meta?.launcherConfig||{}),requestedDiaphragmMode:project.meta?.launcherConfig?.requestedDiaphragmMode||'rigid',diaphragmMode:'none',diaphragmFallback:'corotational-no-rigid-diaphragm'}}});
+    return{project:next,notice:'Compatibilidade automática: o co-rotacional 3D atual ainda não aplica diafragma rígido MPC durante o Newton; o diafragma foi desativado para esta análise.'};
+  }
+  return{project,notice:''};
 }
 
 export default function App(){

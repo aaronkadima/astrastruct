@@ -58,10 +58,13 @@ function solveStructuralModel(sourceProject,resolvedProject,scenarioId) {
   return solveLinearModel(resolvedProject);
 }
 
+function hasRigidDiaphragm(project){return(project.diaphragms||[]).some(d=>d&&d.enabled!==false&&d.rigid!==false)}
+
 function solveRaw(project, scenarioId) {
   const analysisType=project.settings?.analysisType||'linear',dimension=inferProjectDimension(project),fiberHinges=activeFiberHinges(project),s=project.settings||{};
   if(dimension==='3d'&&!['linear','modal','pdelta','corotational'].includes(analysisType))throw new Error(`Análise ${analysisType} ainda não é suportada em 3D; use linear, modal, P-Delta ou o co-rotacional elástico experimental v0.30.`);
   if(analysisType==='modal'){
+    if(dimension==='3d'&&hasRigidDiaphragm(project))throw new Error('Modal 3D: diafragma rígido MPC ainda não é suportado pelo solver modal atual; remova o diafragma rígido ou use um modelo compatível.');
     if(fiberHinges.length)throw new Error('Dinâmica modal v0.25 é linear-elástica; desative as rótulas de fibras.');
     const result=dimension==='3d'?solveModal3D(project,{modes:s.modalModes,massFormulation:s.dynamicMassFormulation}):solveModal2D(project,{modes:s.modalModes,massFormulation:s.dynamicMassFormulation});
     const resolved=resolveScenario(project,scenarioId);return{...result,scenario:resolved.scenario,analysisType:'modal'};
@@ -76,6 +79,7 @@ function solveRaw(project, scenarioId) {
   }
   if(fiberHinges.length&&analysisType!=='corotational')throw new Error('Rótulas de fibras v0.16 exigem análise Geom. não linear (co-rotacional). Selecione esse modo antes de executar a análise.');
   if(analysisType==='corotational'){
+    if(dimension==='3d'&&hasRigidDiaphragm(project))throw new Error('Co-rotacional 3D: diafragma rígido MPC ainda não é suportado durante o Newton; remova o diafragma rígido ou use Linear/P-Delta 3D.');
     if(dimension==='3d'){
       if(fiberHinges.length)throw new Error('Co-rotacional 3D v0.30 é elástico; rótulas/plasticidade 3D ainda não são suportadas.');
       if(s.nonlinearControlMode&&s.nonlinearControlMode!=='load')throw new Error('Co-rotacional 3D v0.30 aceita somente controle incremental de carga nesta etapa.');

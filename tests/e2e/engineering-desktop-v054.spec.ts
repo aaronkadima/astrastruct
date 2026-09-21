@@ -176,7 +176,7 @@ test('v0.54 3D result publishing exposes functional engineering result tabs',asy
   await page.addInitScript(()=>localStorage.setItem('astrastruct.project',JSON.stringify({id:'v054-e2e',name:'Edifício teste',levels:[{id:'L0',name:'Base',elevation:0},{id:'L1',name:'Pav. 1',elevation:3}],nodes:[{id:'N0',x:0,y:0,z:0,levelId:'L0'},{id:'N1',x:0,y:0,z:3,levelId:'L1'}],supports:[{nodeId:'N0',ux:true,uy:true,uz:true,rx:true,ry:true,rz:true}],materials:[{id:'steel355',name:'Aço',type:'steel',E:200e6,nu:.3,density:78.5,fy:355}],sections:[{id:'s',name:'Seção',family:'steel3d',A:.012,Iy:.00018,Iz:.00022,J:.00003,I:.00022}],elements:[{id:'C1',type:'frame3d',n1:'N0',n2:'N1',materialId:'steel355',sectionId:'s',A:.012,Iy:.00018,Iz:.00022,J:.00003}],loads:[{id:'P',caseId:'LC1',nodeId:'N1',fx:5,fy:0,fz:-10}],loadCases:[{id:'LC1',name:'LC1'}],loadCombinations:[],detailing:{reinforcement:{contract:'rebar-schedule/v1',marks:[{id:'A1',location:'Pilar C1',grade:'CA-50',diameterMm:12.5,quantity:4,cutLengthMm:3200,totalLengthM:12.8,totalMassKg:12.63}]}},settings:{analysisType:'linear',analysisScenarioId:'LC1',activeLoadCaseId:'LC1'}})));
   await page.goto(preview);
   await page.waitForFunction(()=>document.documentElement.dataset.astraReady==='true');
-  const canvas=page.getByTestId('spatial-canvas-3d'),viewTools=page.locator('.engineering-view-tools'),view3d=page.locator('.engineering-view-3d-controls');
+  const canvas=page.getByTestId('spatial-canvas-3d'),vector=page.getByTestId('spatial3d-vector-scene'),viewTools=page.locator('.engineering-view-tools'),view3d=page.locator('.engineering-view-3d-controls');
   const shapeMode=page.locator('.engineering-shape-mode');await expect(shapeMode).toBeDisabled();await expect(shapeMode).toHaveValue('reference');await expect(shapeMode.locator('option')).toHaveText(['Deformada','Original','Ambos']);
   await expect(page.locator('.engineering-view-combination>span')).toHaveText('Combinação:');
   await expect(page.locator('.engineering-view-scale>span')).toHaveText('Escala:');
@@ -237,7 +237,14 @@ test('v0.54 3D result publishing exposes functional engineering result tabs',asy
   await expect(strip.getByTestId('engineering-rebar-table')).toBeVisible();
   await expect(strip.getByTestId('engineering-rebar-summary')).toContainText('1 marca(s)');
   const viewport=page.viewportSize();
-  if((viewport?.width||1200)>900)await expect(page.getByTestId('engineering-right-rail').getByText(/Detalhamento após análise/)).toBeVisible();
+  if((viewport?.width||1200)>900){
+    await expect(page.getByTestId('engineering-right-rail').getByText(/Detalhamento após análise/)).toBeVisible();
+    const quick=page.getByLabel('Campo visual rápido');
+    await quick.selectOption('MzBar');await expect(canvas).toHaveAttribute('data-force-mode','MzBar');await expect(canvas).toHaveAttribute('data-bar-diagram-geometry','deformed');await expect(vector.locator('[data-scientific-bar-diagrams="true"]')).toHaveCount(1);await expect(page.getByTestId('spatial3d-bar-diagram-status')).toContainText('Mz');
+    await quick.selectOption('UyBar');await expect(canvas).toHaveAttribute('data-result-map-unit','mm');
+    await quick.selectOption('epsX');await expect(canvas).toHaveAttribute('data-result-map-unit','µε');await expect(canvas).toHaveAttribute('data-result-map-kind','diverging');
+    await quick.selectOption('none');
+  }
   else await expect(page.getByTestId('engineering-right-rail').getByText(/Detalhamento após análise/)).toHaveCount(1);
 });
 

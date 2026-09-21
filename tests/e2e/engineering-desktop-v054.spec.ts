@@ -98,8 +98,17 @@ test('v0.54 modeling ribbon creates 2D/3D models and opens launchers and propert
   await expect(page.locator('[data-g-analysis] option[value="pdelta"]')).toBeDisabled();
   await page.locator('[data-g-slabs]').uncheck();
   await expect(page.locator('[data-g-analysis] option[value="pdelta"]')).toBeEnabled();
+  await page.locator('[data-g-analysis]').selectOption('corotational');
+  await expect(page.locator('[data-g-diaphragm]')).toHaveValue('none');
+  await expect(page.locator('[data-g-diaphragm] option[value="rigid"]')).toBeDisabled();
   await page.locator('[data-g-analysis]').selectOption('pdelta');
   await expect(page.locator('[data-g-analysis]')).toHaveValue('pdelta');
+  await expect(page.locator('[data-g-diaphragm] option[value="rigid"]')).toBeEnabled();
+  await page.locator('[data-g-support]').selectOption('elastic');
+  await expect(page.locator('[data-g-spring-kx]')).toBeEnabled();
+  await expect(page.locator('[data-g-spring-kz]')).toBeEnabled();
+  await page.locator('[data-g-support]').selectOption('fixed');
+  await expect(page.locator('[data-g-spring-kx]')).toBeDisabled();
   await page.locator('[data-g-slabs]').check();
   await expect(page.locator('[data-g-analysis]')).toHaveValue('linear');
   await page.locator('[data-g-diaphragm]').selectOption('rigid');

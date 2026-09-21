@@ -65,7 +65,6 @@ jobs:
   development-browser-regression:
     if: github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')
     needs: app-and-solver-tests
-    continue-on-error: ${{ github.ref == 'refs/heads/develop' }}
     timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:

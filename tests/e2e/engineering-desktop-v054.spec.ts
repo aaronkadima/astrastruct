@@ -129,6 +129,23 @@ test('v0.54 modeling ribbon creates 2D/3D models and opens launchers and propert
   await expect(page.getByTestId('engineering-result-tab-nodes')).toBeVisible();
   await page.getByTestId('engineering-result-tab-nodes').click();
   await expect(page.locator('[data-testid^="engineering-displacement-"]').first()).toBeVisible();
+
+  // Regression: projects saved by the previous launcher could retain P-Delta
+  // while shell4 slabs were active. They must self-repair on Analyze.
+  await page.evaluate(()=>{
+    const key='astrastruct.project',p=JSON.parse(localStorage.getItem(key)||'{}');
+    p.settings={...(p.settings||{}),analysisType:'pdelta'};
+    p.meta={...(p.meta||{}),launcherConfig:{...(p.meta?.launcherConfig||{}),analysisType:'pdelta'}};
+    localStorage.setItem(key,JSON.stringify(p));
+  });
+  await page.reload();
+  await page.waitForFunction(()=>document.documentElement.dataset.astraReady==='true');
+  await expect.poll(async()=>String((await storedProject()).settings?.analysisType)).toBe('pdelta');
+  await page.getByTestId('engineering-ribbon-analyze').click();
+  await expect(page.locator('.error-banner')).toHaveCount(0);
+  await expect(page.locator('.analysis-compatibility-note')).toContainText('foi ajustado para Linear 3D');
+  await expect(page.locator('.eng-footer-state')).toContainText('Análise concluída com sucesso.');
+  await expect.poll(async()=>String((await storedProject()).settings?.analysisType)).toBe('linear');
 });
 
 test('v0.54 3D result publishing exposes functional engineering result tabs',async({page})=>{

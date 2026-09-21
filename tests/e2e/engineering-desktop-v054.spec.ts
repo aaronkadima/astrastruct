@@ -117,6 +117,12 @@ test('v0.54 modeling ribbon creates 2D/3D models and opens launchers and propert
   expect(launched.meta.launcherConfig.sections.beamY).toEqual({b:.30,h:.50});
   expect(launched.foundationReview.items.length).toBe(launched.supports.length);
   expect(launched.foundationReview.items.every((item:any)=>item.type==='pileCap'&&item.piles.length===4&&item.piles.every((pile:any)=>pile.diameter===.45&&pile.length===10))).toBe(true);
+  await page.getByTestId('engineering-ribbon-analyze').click();
+  await expect(page.locator('.error-banner')).toHaveCount(0);
+  await expect(page.locator('.eng-footer-state')).toContainText('Análise concluída com sucesso.');
+  await expect(page.getByTestId('engineering-result-tab-nodes')).toBeVisible();
+  await page.getByTestId('engineering-result-tab-nodes').click();
+  await expect(page.locator('[data-testid^="engineering-displacement-"]').first()).toBeVisible();
 });
 
 test('v0.54 3D result publishing exposes functional engineering result tabs',async({page})=>{

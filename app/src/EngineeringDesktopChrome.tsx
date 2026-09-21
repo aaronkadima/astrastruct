@@ -228,17 +228,19 @@ function LateralDiagram({result}:{result:any}){
   </svg>;
 }
 
-function FoundationDiagram({project}:{project:any}){
+function FoundationDiagram({project,zoom=1,rotation=0}:{project:any;zoom?:number;rotation?:number}){
   const supports=(project.supports||[]).slice(0,12);
   const cols=Math.max(1,Math.ceil(Math.sqrt(Math.max(1,supports.length))));
-  return <svg viewBox="0 0 260 118" className="eng-foundation-svg" aria-label="Vista inferior das fundações">
-    <rect x="18" y="12" width="224" height="72" fill="#eef1f3" stroke="#9aa5ad"/>
-    {supports.map((s:any,i:number)=>{
-      const c=i%cols,r=Math.floor(i/cols);
-      const denominator=Math.max(1,cols-1),x=cols===1?130:42+c*(176/denominator),y=30+r*28;
-      return <g key={i}><rect x={x-10} y={y-7} width="20" height="14" fill="#aab0b4" stroke="#656e74"/><line x1={x-5} y1={y+7} x2={x-5} y2={y+31} stroke="#70787e" strokeWidth="3"/><line x1={x+5} y1={y+7} x2={x+5} y2={y+31} stroke="#70787e" strokeWidth="3"/></g>;
-    })}
-    <text x="20" y="108" fontSize="9" fill="#53616d">{supports.length} apoio(s) · fundação visível no workspace</text>
+  return <svg viewBox="0 0 260 118" className="eng-foundation-svg" aria-label="Vista inferior das fundações" data-foundation-zoom={zoom.toFixed(2)} data-foundation-rotation={String(rotation)}>
+    <g transform={`translate(130 48) scale(${zoom}) rotate(${rotation}) translate(-130 -48)`}>
+      <rect x="18" y="12" width="224" height="72" fill="#eef1f3" stroke="#9aa5ad"/>
+      {supports.map((s:any,i:number)=>{
+        const c=i%cols,r=Math.floor(i/cols);
+        const denominator=Math.max(1,cols-1),x=cols===1?130:42+c*(176/denominator),y=30+r*28;
+        return <g key={i}><rect x={x-10} y={y-7} width="20" height="14" fill="#aab0b4" stroke="#656e74"/><line x1={x-5} y1={y+7} x2={x-5} y2={y+31} stroke="#70787e" strokeWidth="3"/><line x1={x+5} y1={y+7} x2={x+5} y2={y+31} stroke="#70787e" strokeWidth="3"/></g>;
+      })}
+    </g>
+    <text x="20" y="108" fontSize="9" fill="#53616d">{supports.length} apoio(s) · zoom {zoom.toFixed(1)}× · rotação {rotation}°</text>
   </svg>;
 }
 

@@ -32,7 +32,7 @@ const elasticBase=createGridBuilding3D({xSpans:[4],ySpans:[4],storeys:1,includeS
 const elasticResult=mustSolve(elasticBase,'elastic-base lateral X launcher grid');
 assert.ok(elasticResult.springForces.length===elasticBase.nodeSprings.length);
 assert.ok(Math.max(...elasticResult.displacements.map(d=>Math.abs(Number(d.ux)||0)))>1e-8);
-const frameOnlyPDelta=createGridBuilding3D({storeys:2,analysisType:'pdelta',includeSlabs:false});assert.equal(frameOnlyPDelta.settings.analysisType,'pdelta');mustSolve(frameOnlyPDelta,'frame-only pdelta launcher grid');
+const frameOnlyPDelta=createGridBuilding3D({storeys:2,analysisType:'pdelta',includeSlabs:false,floorLoadXPerNode:2});assert.equal(frameOnlyPDelta.settings.analysisType,'pdelta');const frameOnlyPDeltaResult=mustSolve(frameOnlyPDelta,'frame-only pdelta launcher grid');assert.equal(frameOnlyPDeltaResult.diaphragms?.active,true);assert.equal(frameOnlyPDeltaResult.diaphragms?.count,2);assert.ok(Math.max(...frameOnlyPDeltaResult.displacements.map(d=>Math.abs(Number(d.ux)||0)))>1e-8);
 
 const plan=createPlanBuilding3D({
   planNodes:[{id:'A',x:0,y:0},{id:'B',x:5,y:0},{id:'C',x:5,y:4}],

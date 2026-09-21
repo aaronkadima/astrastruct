@@ -1,4 +1,5 @@
-import { zeros, solveConstrained, addSub } from './matrix.js';
+import { zeros, addSub } from './matrix.js';
+import { solveRigidDiaphragmSystem3D } from './diaphragm3d.js';
 import { spatialAxes, frame3DLocalStiffness } from './spatial3d.js';
 import { frame3DLocalGeometricStiffness } from './modalStability3d.js';
 import { condenseEndConnections3D, recoverEndConnections3D, endConnectionKinematicMap3D } from './endConnections3d.js';
@@ -123,7 +124,7 @@ export function solveFramePDelta3D(project,options={}){
       for(let k=0;k<6;k++) F[6*i+k] += Number(values[k]) || 0;
     }
 
-    const solved = solveConstrained(K,F,prescribed), u = solved.u;
+    const solved = solveRigidDiaphragmSystem3D(K,F,prescribed,project,nodes), u = solved.u;
     maxDelta = Math.max(...u.map((v,i) => Math.abs(v-uPrev[i])));
     const scale = Math.max(1,Math.max(...u.map(Math.abs)));
     const forces = cache.map(item => {
@@ -131,7 +132,7 @@ export function solveFramePDelta3D(project,options={}){
       return {elementId:item.e.id,type:'frame3d',N1:q[0],Vy1:q[1],Vz1:q[2],T1:q[3],My1:q[4],Mz1:q[5],N2:q[6],Vy2:q[7],Vz2:q[8],T2:q[9],My2:q[10],Mz2:q[11],localDisplacements:ul,elementLocalDisplacements,connectionRotations,localDisplacementsTotal:elementLocalDisplacements.map((v,i)=>v+u0Element[i]),localAxes:item.prepared.axes,properties:item.prepared.properties,loadSummary:item.prepared.loadSummary};
     });
     const newAxial = new Map(forces.map(f => [f.elementId,physicalAxial(f)]));
-    last = {iteration,K,F,u,R:solved.R,free:solved.free,forces,axial:newAxial};
+    last = {iteration,K,F,u,R:solved.R,free:solved.free,reducedDofs:solved.reducedDofs,diaphragms:solved.diaphragms,forces,axial:newAxial};
     if(iteration > 1 && maxDelta <= tolerance*scale){ converged = true; break; }
     if(u.some(v => !Number.isFinite(v) || Math.abs(v) > 1e3)) throw new Error('P-Delta 3D divergiu: deslocamentos não físicos indicam instabilidade ou modelo inadequado.');
     axial = newAxial; uPrev = [...u];
@@ -145,5 +146,5 @@ export function solveFramePDelta3D(project,options={}){
   const reactions = nodes.map((n,i) => ({nodeId:n.id,fx:last.R[6*i],fy:last.R[6*i+1],fz:last.R[6*i+2],mx:last.R[6*i+3],my:last.R[6*i+4],mz:last.R[6*i+5]}));
   const springForces = recoverSpatialSpringForces(project,displacements);
   const releaseCount=elements.reduce((s,e)=>s+Object.values(e.releases||{}).filter(Boolean).length,0),semiRigidConnectionCount=elements.reduce((s,e)=>s+Object.values(e.rotationalSprings||{}).filter(v=>v!==null&&v!==undefined&&Number(v)>0).length,0),springCount=(project.nodeSprings||[]).length;
-  return {type:'frame3d-pdelta',dimension:'3d',analysisType:'pdelta',solverVersion:'0.29.0',dofs:nd,activeDofs:last.free.length,displacements,initialDisplacements:imperfection?initialDisplacements:null,totalDisplacements:imperfection?totalDisplacements:null,reactions,springForces,elementForces:last.forces,pDelta:{converged:true,iterations:last.iteration,tolerance,maxDelta,axialForces:[...last.axial].map(([elementId,N]) => ({elementId,N})),releaseCount,semiRigidConnectionCount,springCount,imperfection:imperfection?{enabled:true,source:imperfection.source||'bucklingMode',mode:imperfection.mode||null,referenceScenarioId:imperfection.referenceScenarioId||null,amplitude:imperfection.maxTranslation,amplitudeMm:imperfection.maxTranslation*1000,criticalFactor:imperfection.criticalFactor||null}:null,formulation:'elastic-frame3d with released/semi-rigid end rotations + spatial nodal springs + projected consistent geometric stiffness in both bending planes + equivalent modal imperfection load',convention:'N>0 tension; compression negative'}};
+  return {type:'frame3d-pdelta',dimension:'3d',analysisType:'pdelta',solverVersion:'0.29.1',dofs:nd,reducedDofs:last.reducedDofs??nd,activeDofs:last.free.length,displacements,initialDisplacements:imperfection?initialDisplacements:null,totalDisplacements:imperfection?totalDisplacements:null,reactions,springForces,elementForces:last.forces,diaphragms:last.diaphragms,pDelta:{converged:true,iterations:last.iteration,tolerance,maxDelta,axialForces:[...last.axial].map(([elementId,N]) => ({elementId,N})),releaseCount,semiRigidConnectionCount,springCount,imperfection:imperfection?{enabled:true,source:imperfection.source||'bucklingMode',mode:imperfection.mode||null,referenceScenarioId:imperfection.referenceScenarioId||null,amplitude:imperfection.maxTranslation,amplitudeMm:imperfection.maxTranslation*1000,criticalFactor:imperfection.criticalFactor||null}:null,formulation:'elastic-frame3d with released/semi-rigid end rotations + spatial nodal springs + projected consistent geometric stiffness in both bending planes + equivalent modal imperfection load',convention:'N>0 tension; compression negative'}};
 }
